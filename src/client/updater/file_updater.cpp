@@ -443,6 +443,14 @@ void file_updater::update_files(
 }
 
 bool file_updater::is_outdated_file(const file_info &file) const {
+  // AlterBO3 (IKAAM): protect the custom launcher UI from being overwritten
+  // by the upstream update server. These files are part of our reskin, so we
+  // always treat them as up-to-date regardless of the remote hash.
+  if (file.name.find("data/launcher/") != std::string::npos ||
+      file.name.find("data\\launcher\\") != std::string::npos) {
+    return false;
+  }
+
 #ifndef NDEBUG
   if (file.name == UPDATE_HOST_BINARY && !utils::flags::has_flag("update")) {
     OutputDebugStringA("Skipping host binary update in debug build (use "
@@ -625,6 +633,14 @@ void file_updater::cleanup_data_directory(
 
   const auto existing_files = utils::io::list_files(base / "data", true);
   for (auto &file : existing_files) {
+    // AlterBO3 (IKAAM): never delete anything inside data/launcher — the
+    // custom UI (and any extra assets we add) must survive update cleanup.
+    const auto file_str = file.string();
+    if (file_str.find("data/launcher") != std::string::npos ||
+        file_str.find("data\\launcher") != std::string::npos) {
+      continue;
+    }
+
     const auto is_file = std::filesystem::is_regular_file(file);
     const auto is_folder = std::filesystem::is_directory(file);
 
