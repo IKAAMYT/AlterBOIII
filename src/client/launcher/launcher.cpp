@@ -1270,7 +1270,7 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window("EZZ BOIII", 1260, 680);
+  html_window window("AlterBO3 — IKAAM", 1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
