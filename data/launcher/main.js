@@ -3567,7 +3567,7 @@ function fetchReleases() {
   if (!versionOptions)
     return;
 
-  var url = 'https://api.github.com/repos/Ezz-lol/boiii-free/releases';
+  var url = 'https://api.github.com/repos/IKAAMYT/AlterBOIII/releases';
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.onreadystatechange = function() {
@@ -3584,7 +3584,7 @@ function fetchReleases() {
             var assets = rel.assets || [];
             var boiiiAsset = null;
             for (var j = 0; j < assets.length; j++) {
-              if (assets[j].name === 'boiii.exe') {
+              if (assets[j].name === 'alterbo3.exe' || assets[j].name === 'boiii.exe') {
                 boiiiAsset = assets[j];
                 break;
               }
@@ -3592,7 +3592,7 @@ function fetchReleases() {
             if (boiiiAsset) {
               _versionsData[tagName] = {
                 url : boiiiAsset.browser_download_url,
-                name : 'boiii-' + tagName + '.exe'
+                name : 'alterbo3-' + tagName + '.exe'
               };
               addVersionOption(tagName, tagName);
             }
