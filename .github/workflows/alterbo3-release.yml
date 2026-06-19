@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v1.0.0)'
+        description: "Release tag (ex: v1.0.0) — lettres, chiffres, . - _ uniquement, pas d'espace"
         required: false
         default: ''
 
@@ -19,8 +19,47 @@ permissions:
   contents: write
 
 jobs:
+  # ---------------------------------------------------------------
+  # 0. Valide le tag AVANT de compiler (evite 30 min de build pour rien)
+  # ---------------------------------------------------------------
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve & validate tag
+        id: resolve
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "Tag demande : '$TAG'"
+
+          if [ -z "$TAG" ]; then
+            echo "::error::Aucun tag fourni. Lance avec un tag (ex: v1.0.0)."
+            exit 1
+          fi
+          if printf '%s' "$TAG" | grep -qE '[[:space:]]'; then
+            echo "::error::Le tag '$TAG' contient un espace. GitHub refuse les espaces. Utilise par ex. v2.0.0"
+            exit 1
+          fi
+          if ! printf '%s' "$TAG" | grep -qE '^[A-Za-z0-9._/-]+$'; then
+            echo "::error::Le tag '$TAG' contient un caractere interdit. Autorise : A-Z a-z 0-9 . _ - /"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag valide : $TAG"
+
+  # ---------------------------------------------------------------
+  # 1. Build (Windows / ClangCL)
+  # ---------------------------------------------------------------
   build:
     name: Build AlterBO3 (Release)
+    needs: validate
     runs-on: windows-2022
     steps:
       - name: Check out files
@@ -57,9 +96,12 @@ jobs:
           name: AlterBO3
           path: AlterBO3.zip
 
+  # ---------------------------------------------------------------
+  # 2. Release GitHub
+  # ---------------------------------------------------------------
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [validate, build]
     if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
     runs-on: ubuntu-latest
     steps:
@@ -69,25 +111,15 @@ jobs:
           name: AlterBO3
           path: dist
 
-      - name: Resolve tag
-        id: tag
-        shell: bash
-        run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create / update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: AlterBO3 ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: AlterBO3 ${{ needs.validate.outputs.tag }}
           files: dist/AlterBO3.zip
           generate_release_notes: true
           body: |
             **AlterBO3** — reskin IKAAM du client BOIII (Black Ops III).
-            Thème MW jaune. Décompresse l'archive dans ton dossier Black Ops III et lance `alterbo3.exe`.
+            Theme MW jaune. Decompresse l'archive dans ton dossier Black Ops III et lance alterbo3.exe.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
