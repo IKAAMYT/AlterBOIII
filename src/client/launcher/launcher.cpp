@@ -2482,7 +2482,8 @@ bool run() {
       });
 
   // window.get_html_frame()->load_html(utils::nt::load_resource(MENU_MAIN));
-  // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if missing)
+  // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if
+  // missing)
   ensure_launcher_ui();
   window.get_html_frame()->load_url(utils::string::va(
       "file:///%ls", get_launcher_ui_file().wstring().c_str()));
@@ -2504,8 +2505,8 @@ std::filesystem::path get_launcher_ui_file() {
 // This NEVER overwrites existing files — it only fills in what's absent,
 // so it can't undo local edits (unlike the disabled auto-updater).
 void ensure_launcher_ui() {
-  static const char *base =
-      "https://raw.githubusercontent.com/IKAAMYT/AlterBOIII/main/data/launcher/";
+  static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
+                            "AlterBOIII/main/data/launcher/";
   static const char *files[] = {"main.html", "main.css", "main.js"};
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
