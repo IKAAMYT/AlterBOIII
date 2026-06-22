@@ -942,10 +942,16 @@ int main() {
         updater::update();
       }
 
+      // AlterBO3 (IKAAM): the auto-updater is disabled, so fetch the custom
+      // launcher UI here if it's missing (needs internet on first launch).
+      if (!is_server) {
+        launcher::ensure_launcher_ui();
+      }
+
       if (!utils::io::file_exists(
               launcher::get_launcher_ui_file().generic_wstring())) {
-        throw std::runtime_error("BOIII needs an active internet connection "
-                                 "for the first time you launch it.");
+        throw std::runtime_error("AlterBO3 a besoin d'une connexion internet "
+                                 "lors du tout premier lancement.");
       }
 
       if (!is_server) {
