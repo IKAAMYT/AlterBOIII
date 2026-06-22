@@ -87,6 +87,10 @@ jobs:
           mkdir -p package
           cp build/bin/x64/Release/boiii.exe package/alterbo3.exe
           cp -r data package/data
+          # Bundle aria2c.exe (for torrent downloads) into tools/
+          mkdir -p package/tools
+          curl -L -o aria2.zip "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip"
+          7z e aria2.zip -opackage/tools "*/aria2c.exe" -r
           cd package
           7z a -tzip ../AlterBO3.zip ./*
 
