@@ -973,13 +973,19 @@ cards
 
 /* play section inside card: stack button + version */
 .card-play .play-section { -ms-flex-wrap: wrap; flex-wrap: wrap; }
-.card-play .btn-play-large { width: 240px; max-width: 100%; -ms-flex: 0 1 auto; flex: 0 1 auto; }
+.card-play .btn-play-large { width: 100%; max-width: 100%; -ms-flex: 1 1 auto; flex: 1 1 auto; }
 .card-play .player-section { margin-top: 18px; max-width: 100%; }
 
 /* maintenance stacked buttons (no more full-width sprawl) */
 .action-stack { display: -ms-flexbox; display: flex; -ms-flex-direction: column; flex-direction: column; }
 .action-stack > * + * { margin-top: 9px; }
-.action-stack .btn { -ms-flex-pack: start; justify-content: flex-start; padding: 11px 16px; font-size: 13.5px; }
+.action-stack .btn {
+  -ms-flex-pack: start; justify-content: flex-start;
+  padding: 12px 14px; font-size: 13.5px;
+  background: #12100b; border: 1px solid rgba(242,196,17,0.10);
+  color: #e8e3d7; border-radius: 10px;
+}
+.action-stack .btn:hover { background: #221f1b; border-color: rgba(242,196,17,0.35); }
 
 .path-display { margin-top: 14px; }
 
@@ -1024,8 +1030,9 @@ cards
 }
 
 /* card variants (decorative hooks) */
-.card-actions { }
-.card-community { }
+/* card variants — consistent look */
+.card-actions .action-stack { margin-top: 4px; }
+.card-community .link-row:last-child { margin-bottom: 0; }
 .card-status { }
 
 /* ============================================================
