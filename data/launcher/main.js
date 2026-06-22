@@ -3640,4 +3640,102 @@ if (versionDisplay && creditsPopup) {
     }
   };
 }
+
+/* ============================================================
+   AlterBO3 (IKAAM) — Mod downloader
+   Câble les boutons .dl-btn au callback C++ downloadModFile,
+   et poll getDownloadStatus pour la barre de progression.
+   ============================================================ */
+(function() {
+  var dlPollTimer = null;
+  var dlActiveItem = null;
+
+  function dlSetState(item, cls) {
+    item.classList.remove('done');
+    item.classList.remove('error');
+    if (cls) item.classList.add(cls);
+  }
+
+  function dlPoll() {
+    if (!dlActiveItem) return;
+    var statusStr = '';
+    try { statusStr = window.external.getDownloadStatus(); } catch (e) { return; }
+    if (!statusStr) return;
+    var st;
+    try { st = JSON.parse(statusStr); } catch (e) { return; }
+
+    var fill = dlActiveItem.querySelector('.dl-progress-fill');
+    var label = dlActiveItem.querySelector('.dl-progress-label');
+    var btn = dlActiveItem.querySelector('.dl-btn');
+    var pct = Math.round(st.progress || 0);
+
+    if (fill) fill.style.width = pct + '%';
+
+    if (st.state === 'downloading') {
+      if (label) label.innerHTML = pct + '%' + (st.details ? ' — ' + st.details : '');
+    } else if (st.state === 'done') {
+      if (label) label.innerHTML = 'Terminé';
+      dlSetState(dlActiveItem, 'done');
+      if (btn) { btn.innerHTML = '&#10003; Installé'; btn.disabled = false; }
+      clearInterval(dlPollTimer); dlPollTimer = null; dlActiveItem = null;
+    } else if (st.state === 'error') {
+      if (label) label.innerHTML = 'Erreur : ' + (st.details || 'échec');
+      dlSetState(dlActiveItem, 'error');
+      if (btn) { btn.innerHTML = '&#11015; Réessayer'; btn.disabled = false; }
+      clearInterval(dlPollTimer); dlPollTimer = null; dlActiveItem = null;
+    }
+  }
+
+  function dlStart(item) {
+    var url = item.getAttribute('data-url');
+    var filename = item.getAttribute('data-name') || item.getAttribute('data-filename');
+    if (!url || !filename) return;
+
+    var btn = item.querySelector('.dl-btn');
+    var prog = item.querySelector('.dl-progress');
+    var label = item.querySelector('.dl-progress-label');
+    var fill = item.querySelector('.dl-progress-fill');
+
+    if (fill) fill.style.width = '0%';
+    if (label) label.innerHTML = 'Connexion...';
+    if (prog) prog.style.display = 'block';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Téléchargement...'; }
+    dlSetState(item, null);
+
+    var res = '';
+    try { res = window.external.downloadModFile(url, filename); } catch (e) {
+      if (label) label.innerHTML = 'Erreur : bridge indisponible';
+      dlSetState(item, 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#11015; Réessayer'; }
+      return;
+    }
+
+    if (res === 'busy') {
+      if (label) label.innerHTML = 'Un téléchargement est déjà en cours';
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#11015; Télécharger'; }
+      return;
+    }
+
+    dlActiveItem = item;
+    if (dlPollTimer) clearInterval(dlPollTimer);
+    dlPollTimer = setInterval(dlPoll, 400);
+  }
+
+  function dlBind() {
+    var items = document.querySelectorAll('#downloadsList .dl-item');
+    for (var i = 0; i < items.length; i++) {
+      (function(item) {
+        var btn = item.querySelector('.dl-btn');
+        if (btn) btn.onclick = function() { dlStart(item); };
+      })(items[i]);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', dlBind);
+  } else {
+    dlBind();
+  }
+})();
+
 })();
