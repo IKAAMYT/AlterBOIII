@@ -1270,7 +1270,7 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window("AlterBO3 — IKAAM", 1260, 680);
+  html_window window("AlterBO3 - IKAAM", 1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
@@ -2482,6 +2482,8 @@ bool run() {
       });
 
   // window.get_html_frame()->load_html(utils::nt::load_resource(MENU_MAIN));
+  // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if missing)
+  ensure_launcher_ui();
   window.get_html_frame()->load_url(utils::string::va(
       "file:///%ls", get_launcher_ui_file().wstring().c_str()));
 
@@ -2495,5 +2497,31 @@ bool run() {
 
 std::filesystem::path get_launcher_ui_file() {
   return game::get_appdata_path() / "data/launcher/main.html";
+}
+
+// AlterBO3 (IKAAM): on first launch the custom UI files may be missing.
+// Download them once from the IKAAM GitHub (raw) so the launcher renders.
+// This NEVER overwrites existing files — it only fills in what's absent,
+// so it can't undo local edits (unlike the disabled auto-updater).
+void ensure_launcher_ui() {
+  static const char *base =
+      "https://raw.githubusercontent.com/IKAAMYT/AlterBOIII/main/data/launcher/";
+  static const char *files[] = {"main.html", "main.css", "main.js"};
+
+  const auto ui_dir = game::get_appdata_path() / "data/launcher";
+
+  for (const auto *name : files) {
+    const auto target = ui_dir / name;
+    if (utils::io::file_exists(target.string())) {
+      continue; // already present — leave it untouched
+    }
+
+    const auto url = std::string(base) + name;
+    const auto data = utils::http::get_data(url);
+    if (data && !data->empty()) {
+      utils::io::create_directory(ui_dir);
+      utils::io::write_file(target.string(), *data);
+    }
+  }
 }
 } // namespace launcher
