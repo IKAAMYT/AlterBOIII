@@ -229,8 +229,8 @@ void update_discord() {
     ZeroMemory(&dp, sizeof(dp));
     dp.instance = 1;
     dp.button1_label = "Join our Discord \xF0\x9F\x91\x8D";
-    dp.button1_url = "https://discord.gg/ezz";
-    dp.button2_label = "Ezz Forum \xF0\x9F\xA4\x96";
+    dp.button1_url = "https://discord.gg/BdkJ5DukUm";
+    dp.button2_label = "AlterBOIII Forum \xF0\x9F\xA4\x96";
     dp.button2_url = "https://forum.ezz.lol";
 
     bool in_game = false;
@@ -249,10 +249,10 @@ void update_discord() {
       seh_Com_IsRunningUILevel(&ui_level);
 
       dp.startTimestamp = start_time;
-      dp.details = "BO3 via Ezz";
+      dp.details = "BO3 via AlterBOIII";
       dp.state = ui_level ? "Main Menu" : "Loading...";
       dp.largeImageKey = "logo";
-      dp.largeImageText = "Playing BO3 via Ezz!";
+      dp.largeImageText = "Playing BO3 via AlterBOIII!";
       dp.smallImageKey = "sexy";
       Discord_UpdatePresence(&dp);
       return;
@@ -340,7 +340,7 @@ void update_discord() {
         std::string(get_mode_name(is_mp, is_zm, is_cp)) + " - " + display_map;
     dp.largeImageText = large_text.c_str();
     dp.smallImageKey = "logo";
-    dp.smallImageText = "Playing BO3 via Ezz!";
+    dp.smallImageText = "Playing BO3 via AlterBOIII!";
 
     int max_clients = 0;
     try {
