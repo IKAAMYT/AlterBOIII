@@ -78,7 +78,7 @@ void show() {
 
           // Read the source bitmap dimensions to keep the aspect ratio.
           BITMAP bm{};
-          GetObject(image.get(), sizeof(bm), &bm);
+          GetObjectA(image.get(), sizeof(bm), &bm);
           const int src_w = bm.bmWidth > 0 ? bm.bmWidth : 16;
           const int src_h = bm.bmHeight > 0 ? bm.bmHeight : 9;
 
