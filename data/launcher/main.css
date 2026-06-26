@@ -394,7 +394,9 @@ a { color: #f2c411; text-decoration: none; }
 }
 .library-toolbar-actions, .workshop-browse-controls { display: -ms-flexbox; display: flex; gap: 10px; align-items: center; -ms-flex-align: center; flex-wrap: wrap; -ms-flex-wrap: wrap; }
 
-.workshop-input-row { display: -ms-flexbox; display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; -ms-flex-wrap: wrap; }
+.workshop-input-row { display: -ms-flexbox; display: flex; -ms-flex-align: center; align-items: center; }
+.workshop-input-row #workshopId { -ms-flex: 1 1 auto; flex: 1 1 auto; min-width: 1px; margin-right: 10px; }
+.workshop-input-row #workshopDownloadBtn { -ms-flex: 0 0 auto; flex: 0 0 auto; white-space: nowrap; }
 .workshop-search-input, .settings-input, .friends-add-row input {
   -ms-flex: 1 1 auto; flex: 1 1 auto; min-width: 200px;
   background: #1a1816; border: 1px solid rgba(242, 196, 17, 0.22);
@@ -845,10 +847,18 @@ a { color: #f2c411; text-decoration: none; }
 .version-selector-text { font-family: Consolas,'Courier New',monospace; font-size: 13.5px; }
 
 /* Quick-download card (main page) */
-.quick-download-card { display: -ms-flexbox; display: flex; align-items: center; -ms-flex-align: center; gap: 14px; padding: 16px 18px;
-  background: #1a1816; border: 1px solid rgba(242, 196, 17, 0.10); border-radius: 14px; max-width: 460px; }
+.quick-download-card {
+  display: -ms-flexbox; display: flex;
+  -ms-flex-align: center; align-items: center;
+  -ms-flex-pack: justify; justify-content: space-between;
+  padding: 18px 20px;
+  background: #1a1816; border: 1px solid rgba(242, 196, 17, 0.10);
+  border-radius: 14px; max-width: 620px;
+}
+.qd-text { -ms-flex: 0 0 auto; flex: 0 0 auto; padding-right: 20px; }
+.qd-action { -ms-flex: 1 1 auto; flex: 1 1 auto; min-width: 1px; }
 .qd-label { font-size: 14px; color: #f5f3ee; font-weight: 600; }
-.qd-sub { font-size: 12px; color: #968f81; margin-top: 2px; }
+.qd-sub { font-size: 12px; color: #968f81; margin-top: 3px; }
 
 /* Generic progress footer/blocks (alt class names used in HTML) */
 .progress-footer, .remove-progress-bar { background: #1a1816; border: 1px solid rgba(242, 196, 17, 0.22);
@@ -894,7 +904,7 @@ cards
 .workshop-browse-header > * + * { margin-left: 14px; }
 .library-toolbar-actions > * + * { margin-left: 10px; }
 .workshop-browse-controls > * + * { margin-left: 10px; }
-.workshop-input-row > * + * { margin-left: 10px; }
+
 .workshop-item-content > * + * { margin-top: 8px; }
 .mod-card-body > * + * { margin-top: 8px; }
 .mod-card-header > * + * { margin-left: 8px; }
@@ -930,7 +940,7 @@ cards
 .verify-mode-list > * + * { margin-left: 8px; }
 .verify-actions > * + * { margin-left: 10px; }
 /* Quick-download card (main page) */
-.quick-download-card > * + * { margin-left: 14px; }
+
 .progress-buttons > * + * { margin-left: 10px; }
 
 
@@ -1115,12 +1125,14 @@ cards
 }
 .home-bg {
   position: absolute; top:0; right:0; bottom:0; left:0;
+  pointer-events: none;
   background-image: url('bigboiii.jpg');
   background-size: cover; background-position: center top;
   background-repeat: no-repeat;
 }
 .home-bg-fade {
   position: absolute; top:0; right:0; bottom:0; left:0;
+  pointer-events: none;
   background: -ms-linear-gradient(top, rgba(10,9,8,0.15) 0%, rgba(10,9,8,0.35) 45%, rgba(10,9,8,0.92) 100%);
   background: linear-gradient(to bottom, rgba(10,9,8,0.15) 0%, rgba(10,9,8,0.35) 45%, rgba(10,9,8,0.92) 100%);
 }
@@ -1212,5 +1224,13 @@ cards
 }
 
 /* anchor absolute home children to the page */
-#mainPage { position: relative; height: 100%; overflow: hidden; }
-#mainPage.page.active { display: block; }
+#mainPage { position: relative; height: 100%; overflow: hidden; display: none; }
+#mainPage.active { display: block; }
+
+/* Launch options close button */
+.launch-dropdown-close {
+  float: right; background: none; border: none; color: #c9c2b4;
+  font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px;
+  margin-top: -2px;
+}
+.launch-dropdown-close:hover { color: #f2c411; }
