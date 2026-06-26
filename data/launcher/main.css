@@ -454,8 +454,15 @@ a { color: #f2c411; text-decoration: none; }
   min-width: 100%; min-height: 100%; width: auto; height: 132px;
   max-width: none; display: block;
 }
-.workshop-item-content { padding: 13px 14px; display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column; gap: 8px; }
-.mod-card-body { padding: 13px 14px; display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column; gap: 8px; flex: 1; }
+.workshop-item-content {
+  padding: 13px 14px;
+  display: -ms-flexbox; display: flex;
+  flex-direction: column; -ms-flex-direction: column;
+  -ms-flex: 1 1 auto; flex: 1 1 auto;
+}
+.workshop-item-content > * { margin-bottom: 8px; }
+.workshop-item-content > *:last-child { margin-bottom: 0; }
+.mod-card-body { padding: 13px 14px; display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column; gap: 8px; -ms-flex: 1 1 auto; flex: 1 1 auto; }
 .mod-card-header { display: -ms-flexbox; display: flex; align-items: center; -ms-flex-align: center; justify-content: space-between; -ms-flex-pack: justify; gap: 8px; }
 .mod-card-name, .workshop-item-title {
   font-weight: 600; font-size: 14.5px; color: #f5f3ee;
@@ -617,8 +624,8 @@ a { color: #f2c411; text-decoration: none; }
 #messagePopup.active, #confirmPopup.active, #creditsPopup.active, #verifyPopup.active,
 #manageInstallPopup.active, #workshopModal.active, #libraryModal.active { display: -ms-flexbox; display: flex; }
 
-.popup-content, .popup > div, .msg-popup > div, .confirm-popup > div,
-.verify-popup > div, .credits-popup > div, .workshop-modal-content,
+.popup-content, .popup, .msg-popup, .confirm-popup,
+.verify-popup, .credits-popup, .workshop-modal-content,
 .workshop-modal > div, .library-modal > div, #manageInstallPopup > div {
   background: #12100b;
   border: 1px solid rgba(242, 196, 17, 0.22);
@@ -627,6 +634,11 @@ a { color: #f2c411; text-decoration: none; }
   width: 100%; max-width: 540px; max-height: 86vh; overflow: hidden;
   display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column;
   animation: popIn .2s ease;
+}
+/* inner content area should not repeat the box chrome */
+.popup .popup-content, .msg-popup .popup-content {
+  background: transparent; border: none; box-shadow: none; border-radius: 0;
+  max-width: none; max-height: none; width: auto;
 }
 .workshop-modal-content, .workshop-modal > div, .library-modal > div { max-width: 720px; }
 @keyframes popIn { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: none; } }
@@ -676,7 +688,7 @@ a { color: #f2c411; text-decoration: none; }
   background: rgba(5,4,3,0.88);
   padding: 24px;
 }
-.launch-dropdown.open { display: -ms-flexbox; display: flex; }
+.launch-dropdown.open { display: -ms-flexbox; display: flex; -ms-flex-direction: column; flex-direction: column; }
 .launch-dropdown.open > .launch-dropdown-header,
 .launch-dropdown.open > .launch-dropdown-list {
   background: #12100b;
@@ -1070,4 +1082,26 @@ cards
 .home-hero .gear-btn {
   -ms-flex: 0 0 auto; flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* Bug 2 fix — workshop card content (vertical, contained) */
+.workshop-item-desc {
+  font-size: 12px; color: rgba(200,196,192,0.55); line-height: 1.35;
+  overflow: hidden; max-height: 32px;
+}
+.workshop-item-id {
+  font-size: 11px; color: rgba(200,196,192,0.35);
+  font-family: Consolas,'Courier New',monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.workshop-item-foot {
+  margin-top: auto; padding-top: 8px;
+  display: -ms-flexbox; display: flex;
+  -ms-flex-direction: column; flex-direction: column;
+  -ms-flex-align: stretch; align-items: stretch;
+}
+.workshop-item-foot .workshop-item-button { width: 100%; }
+.workshop-item-size {
+  font-size: 10.5px; color: rgba(200,196,192,0.4);
+  text-align: center; margin-top: 5px;
 }

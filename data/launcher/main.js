@@ -805,21 +805,18 @@ function renderWorkshopBrowse() {
 
     var contentHtml =
         '<div class="workshop-item-content">' +
-        '<div style="flex:1;min-width:0;">' +
         '<div class="workshop-item-title">' +
         escapeHtml(it.title || 'Untitled') + ratingHtml + '</div>' +
         (desc
-             ? '<div style="font-size:0.75rem;color:rgba(200,196,192,0.55);margin-top:2px;line-height:1.3;">' +
+             ? '<div class="workshop-item-desc">' +
                    escapeHtml(desc) + '</div>'
              : '') +
-        '<div style="font-size:0.7rem;color:rgba(200,196,192,0.35);margin-top:3px;font-family:Consolas,monospace;">ID: ' +
+        '<div class="workshop-item-id">ID: ' +
         escapeHtml(it.id) + '</div>' +
-        '</div>' +
-        '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;margin-left:10px;gap:3px;">' +
-        '<button type="button" class="workshop-item-button" data-workshop-id="' +
+        '<div class="workshop-item-foot">' +
+        '<button type="button" class="workshop-item-button btn btn-primary" data-workshop-id="' +
         escapeHtml(it.id) + '">Download</button>' +
-        '<span style="font-size:0.65rem;color:rgba(200,196,192,0.35);">' +
-        fStr + '</span>' +
+        '<span class="workshop-item-size">' + fStr + '</span>' +
         '</div>' +
         '</div>';
 

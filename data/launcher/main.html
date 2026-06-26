@@ -31,10 +31,6 @@
           <span class="nav-icon">&#128101;</span>
           <span class="nav-label">Amis</span>
         </button>
-        <button type="button" class="nav-btn" data-page="downloads" title="Téléchargements">
-          <span class="nav-icon">&#11015;</span>
-          <span class="nav-label">Téléchargements</span>
-        </button>
         <button type="button" class="nav-btn" data-page="settings" title="Réglages">
           <span class="nav-icon">&#9881;</span>
           <span class="nav-label">Réglages</span>
@@ -922,42 +918,6 @@
                   <div class="settings-row-desc">Target all available VRAM to reduce texture streaming stutter</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsFullVram" data-setting="fullVram"></button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div><!-- end page-scroll-inner -->
-    </div>
-
-    <div id="downloadsPage" class="page">
-      <div class="page-scroll-inner">
-        <div class="page-header">
-          <h2 class="page-title">Téléchargements</h2>
-          <p class="page-sub">Mods et outils IKAAM à télécharger directement dans le jeu.</p>
-        </div>
-
-        <div id="downloadsList" class="downloads-list">
-          <!--
-            ====== TES MODS (TORRENT) ICI ======
-            Duplique un bloc .dl-item par mod. Renseigne :
-              data-url  = lien direct vers ton fichier .torrent (ou magnet:?xt=...)
-              data-name = nom affiché (juste pour l'UI)
-            Le fichier sera téléchargé via aria2c dans le dossier du jeu.
-            IMPORTANT : il faut aria2c.exe dans le dossier "tools" du jeu,
-            et que tu seedes le torrent.
-          -->
-          <div class="dl-item" data-url="https://ikaam.fr/AlterCOD/mods/exemple.torrent" data-name="Mod Exemple">
-            <div class="dl-info">
-              <div class="dl-name">Mod Exemple</div>
-              <div class="dl-desc">Description du mod. Remplace ce bloc par tes vrais mods.</div>
-              <div class="dl-meta">torrent · seedé par IKAAM</div>
-            </div>
-            <div class="dl-action">
-              <button type="button" class="btn btn-primary dl-btn">&#11015; Télécharger</button>
-              <div class="dl-progress" style="display:none;">
-                <div class="dl-progress-track"><span class="dl-progress-fill"></span></div>
-                <div class="dl-progress-label">0%</div>
               </div>
             </div>
           </div>
