@@ -230,8 +230,8 @@ void update_discord() {
     dp.instance = 1;
     dp.button1_label = "Join our Discord \xF0\x9F\x91\x8D";
     dp.button1_url = "https://discord.gg/BdkJ5DukUm";
-    dp.button2_label = "AlterBOIII Forum \xF0\x9F\xA4\x96";
-    dp.button2_url = "https://forum.ezz.lol";
+    dp.button2_label = "Site web \xF0\x9F\x8C\x90";
+    dp.button2_url = "https://ikaam.fr/AlterCOD";
 
     bool in_game = false;
     seh_Com_IsInGame(&in_game);
