@@ -64,7 +64,7 @@
 
           <!-- Launch options modal (hidden until .open) -->
           <div class="launch-dropdown" id="launchDropdown">
-            <div class="launch-dropdown-header">Options de lancement</div>
+            <div class="launch-dropdown-header">Options de lancement<button type="button" class="launch-dropdown-close" id="launchCloseBtn" title="Fermer">&times;</button></div>
             <div class="launch-dropdown-list">
               <div class="launch-option-card" data-option="nointro" title="Passe la cinématique d'intro au démarrage"><span class="launch-option-dot"></span><span class="launch-option-name">Passer l'intro</span></div>
               <div class="launch-option-card" data-option="unsafe-lua" title="Autorise le chargement de scripts Lua non signés"><span class="launch-option-dot"></span><span class="launch-option-name">Lua non sécurisé</span></div>
@@ -124,17 +124,20 @@
       <div class="page-scroll-inner">
         <div class="page-header">
           <h2 class="page-title">Workshop</h2>
-          <p class="page-sub">Browse, download, and manage custom maps and mods from the Steam Workshop.</p>
+          <p class="page-sub">Parcourez, téléchargez et gérez des maps et mods custom du Steam Workshop.</p>
         </div>
 
         <div class="quick-download-card">
-          <div class="qd-label">Quick Download</div>
-          <p class="qd-sub">Download by Workshop ID or link</p>
-          <div class="workshop-input-row">
-            <input type="text" id="workshopId" placeholder="Enter Workshop ID or link..." autocomplete="off">
-            <button type="button" class="btn btn-primary" id="workshopDownloadBtn">Download</button>
+          <div class="qd-text">
+            <div class="qd-label">Quick Download</div>
+            <p class="qd-sub">Télécharger par ID Workshop ou lien</p>
           </div>
-          <div class="workshop-progress" id="workshopProgress" style="display:none;">
+          <div class="qd-action">
+            <div class="workshop-input-row">
+              <input type="text" id="workshopId" placeholder="ID Workshop ou lien..." autocomplete="off">
+              <button type="button" class="btn btn-primary" id="workshopDownloadBtn">Télécharger</button>
+            </div>
+            <div class="workshop-progress" id="workshopProgress" style="display:none;">
             <div id="workshopStatusMessage" class="ws-status-msg"></div>
             <div class="ws-progress-bar-row">
               <div class="ws-progress-track">
@@ -149,32 +152,33 @@
             <div id="workshopStatusDetails" class="ws-details"></div>
             <div class="workshop-status" id="workshopStatus" style="display:none;"></div>
           </div>
+          </div>
         </div>
 
         <div class="workshop-browse-container">
           <div class="workshop-browse-header">
-            <h3 class="workshop-browse-title">Browse Workshop</h3>
+            <h3 class="workshop-browse-title">Parcourir le Workshop</h3>
             <div class="workshop-browse-controls">
               <div class="workshop-filter-wrap">
                 <select id="workshopFilterSelect" class="workshop-filter-select">
-                  <option value="mostrecent">Most Recent</option>
-                  <option value="trend">Top Rated</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="alphabetical">Alphabetical</option>
+                  <option value="mostrecent">Plus récents</option>
+                  <option value="trend">Mieux notés</option>
+                  <option value="oldest">Plus anciens</option>
+                  <option value="alphabetical">Alphabétique</option>
                 </select>
               </div>
-              <input type="text" id="workshopSearchInput" class="workshop-search-input" placeholder="Search by name..."
+              <input type="text" id="workshopSearchInput" class="workshop-search-input" placeholder="Rechercher par nom..."
                 autocomplete="off">
-              <button type="button" class="btn" id="workshopSearchBtn">Search</button>
+              <button type="button" class="btn" id="workshopSearchBtn">Rechercher</button>
               <button type="button" class="btn" id="workshopBrowseRefreshBtn">&#8635; Refresh</button>
-              <button type="button" class="btn" id="workshopBrowseClearBtn">Clear</button>
+              <button type="button" class="btn" id="workshopBrowseClearBtn">Effacer</button>
             </div>
           </div>
 
           <div class="workshop-browse-grid" id="workshopBrowseGrid">
             <div class="workshop-loading">
               <div class="loading-spinner"></div>
-              <span>Loading workshop items...</span>
+              <span>Chargement des éléments workshop...</span>
             </div>
           </div>
 
@@ -185,7 +189,7 @@
       <div id="workshopOverlay" class="workshop-overlay"></div>
       <div id="workshopModal" class="workshop-modal">
         <div class="workshop-modal-header">
-          <h2 class="workshop-modal-title" id="workshopModalTitle">Mod Details</h2>
+          <h2 class="workshop-modal-title" id="workshopModalTitle">Détails du mod</h2>
           <button type="button" class="workshop-modal-close" id="workshopModalClose">&times;</button>
         </div>
         <div class="workshop-modal-body">
@@ -199,7 +203,7 @@
         </div>
         <div class="workshop-modal-footer">
           <button type="button" class="btn" id="workshopModalViewBtn">View on Steam</button>
-          <button type="button" class="btn btn-primary" id="workshopModalDownloadBtn">Download</button>
+          <button type="button" class="btn btn-primary" id="workshopModalDownloadBtn">Télécharger</button>
         </div>
       </div>
     </div>
@@ -207,18 +211,18 @@
     <div id="libraryPage" class="page">
       <div class="page-scroll-inner">
         <div class="page-header">
-          <h2 class="page-title">Library</h2>
-          <p class="page-sub">Browse and manage your installed workshop maps and mods.</p>
+          <h2 class="page-title">Bibliothèque</h2>
+          <p class="page-sub">Parcourez et gérez vos maps et mods workshop installés.</p>
         </div>
 
         <div class="library-toolbar">
-          <span class="library-toolbar-title">Installed Items</span>
+          <span class="library-toolbar-title">Éléments installés</span>
           <div class="library-toolbar-actions">
-            <button type="button" class="btn" id="workshopRefreshBtn">Refresh</button>
+            <button type="button" class="btn" id="workshopRefreshBtn">Actualiser</button>
             <button type="button" class="btn btn-steam" id="workshopLinkBtn"
               onclick="window.external.openUrl('https://steamcommunity.com/app/311210/workshop/')">Workshop</button>
-            <button type="button" class="btn" id="checkUpdatesBtn">Check Updates</button>
-            <button type="button" class="btn btn-danger" id="deleteAllModsBtn">Delete All</button>
+            <button type="button" class="btn" id="checkUpdatesBtn">Vérifier les MAJ</button>
+            <button type="button" class="btn btn-danger" id="deleteAllModsBtn">Tout supprimer</button>
           </div>
         </div>
 
@@ -243,7 +247,7 @@
       <div id="libraryOverlay" class="workshop-overlay"></div>
       <div id="libraryModal" class="workshop-modal">
         <div class="workshop-modal-header">
-          <h2 class="workshop-modal-title" id="libraryModalTitle">Mod Details</h2>
+          <h2 class="workshop-modal-title" id="libraryModalTitle">Détails du mod</h2>
           <button type="button" class="workshop-modal-close" id="libraryModalClose">&times;</button>
         </div>
         <div class="workshop-modal-body">
@@ -257,7 +261,7 @@
         </div>
         <div class="workshop-modal-footer">
           <button type="button" class="btn" id="libraryModalViewBtn">View on Steam</button>
-          <button type="button" class="btn btn-primary" id="libraryModalOpenBtn">Open Folder</button>
+          <button type="button" class="btn btn-primary" id="libraryModalOpenBtn">Ouvrir le dossier</button>
         </div>
       </div>
     </div>
@@ -265,26 +269,26 @@
     <div id="friendsPage" class="page">
       <div class="page-scroll-inner">
         <div class="page-header">
-          <h2 class="page-title">Friends</h2>
-          <p class="page-sub">Manage your friends list. Add friends by their Steam ID to see them here.</p>
+          <h2 class="page-title">Amis</h2>
+          <p class="page-sub">Gérez votre liste d'amis. Ajoutez des amis via leur Steam ID pour les voir ici.</p>
         </div>
 
         <div class="friends-add-card">
-          <div class="friends-add-label">Add Friend</div>
-          <p class="friends-add-sub">Enter a display name and Steam ID to add a friend</p>
+          <div class="friends-add-label">Ajouter un ami</div>
+          <p class="friends-add-sub">Entrez un nom et un Steam ID pour ajouter un ami</p>
           <p class="friends-add-sub" style="font-size:0.75rem;opacity:0.5;margin-top:-6px;">&#9432; Friends will also be
             auto-added when invited through Steam.</p>
           <div class="friends-add-row">
-            <input type="text" id="friendNameInput" placeholder="Display name..." autocomplete="off" maxlength="32">
-            <input type="text" id="friendSteamIdInput" placeholder="Steam ID (e.g. 76561198...)" autocomplete="off"
+            <input type="text" id="friendNameInput" placeholder="Nom affiché..." autocomplete="off" maxlength="32">
+            <input type="text" id="friendSteamIdInput" placeholder="Steam ID (ex. 76561198...)" autocomplete="off"
               maxlength="20">
-            <button type="button" class="btn btn-primary" id="friendAddBtn">Add</button>
+            <button type="button" class="btn btn-primary" id="friendAddBtn">Ajouter</button>
           </div>
         </div>
 
         <div class="friends-list-container">
           <div class="friends-list-header">
-            <span class="friends-list-title">Friends List</span>
+            <span class="friends-list-title">Liste d'amis</span>
             <span class="friends-count" id="friendsCount">0 friends</span>
           </div>
           <div class="friends-list-wrap">
@@ -298,14 +302,14 @@
       <div class="page-scroll-inner">
         <div class="page-header">
           <h2 class="page-title">Settings</h2>
-          <p class="page-sub">Configure launcher preferences, graphics, and network options.</p>
+          <p class="page-sub">Configurez les préférences du launcher, les graphismes et le réseau.</p>
         </div>
 
         <div class="settings-tabs">
-          <button type="button" class="settings-tab active" data-stab="general">General</button>
-          <button type="button" class="settings-tab" data-stab="graphics">Graphics</button>
+          <button type="button" class="settings-tab active" data-stab="general">Général</button>
+          <button type="button" class="settings-tab" data-stab="graphics">Graphismes</button>
           <button type="button" class="settings-tab" data-stab="assetpools">Asset Pools</button>
-          <button type="button" class="settings-tab" data-stab="patches">Patches</button>
+          <button type="button" class="settings-tab" data-stab="patches">Patchs</button>
         </div>
 
         <div class="settings-body">
@@ -313,10 +317,10 @@
           <!-- ═══ GENERAL TAB ═══ -->
           <div class="settings-tab-content active" id="settingsTabGeneral" data-stab="general">
             <div class="settings-section">
-              <div class="settings-section-title">Game Path</div>
+              <div class="settings-section-title">Dossier du jeu</div>
               <div class="settings-path-row">
-                <span class="settings-path-value" id="settingsPathDisplay">Not set</span>
-                <button type="button" class="btn" id="settingsChangePathBtn">Change</button>
+                <span class="settings-path-value" id="settingsPathDisplay">Non défini</span>
+                <button type="button" class="btn" id="settingsChangePathBtn">Changer</button>
               </div>
             </div>
 
@@ -324,16 +328,16 @@
               <div class="settings-section-title">Launcher</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Close launcher on play</div>
-                  <div class="settings-row-desc">Close the launcher window when you start the game</div>
+                  <div class="settings-row-label">Fermer le launcher en jouant</div>
+                  <div class="settings-row-desc">Ferme la fenêtre du launcher au lancement du jeu</div>
                 </div>
                 <button type="button" class="settings-toggle active" id="settingsCloseLauncher"
                   data-setting="closeLauncher"></button>
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Check for updates on launch</div>
-                  <div class="settings-row-desc">Automatically check for client updates when the launcher opens</div>
+                  <div class="settings-row-label">Vérifier les MAJ au lancement</div>
+                  <div class="settings-row-desc">Vérifie automatiquement les mises à jour à l'ouverture du launcher</div>
                 </div>
                 <button type="button" class="settings-toggle active" id="settingsAutoUpdate"
                   data-setting="autoUpdate"></button>
@@ -341,11 +345,11 @@
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">Downloads</div>
+              <div class="settings-section-title">Téléchargements</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Auto-refresh library</div>
-                  <div class="settings-row-desc">Refresh the mod library after a workshop download completes</div>
+                  <div class="settings-row-label">Actualisation auto de la bibliothèque</div>
+                  <div class="settings-row-desc">Actualise la bibliothèque après un téléchargement workshop</div>
                 </div>
                 <button type="button" class="settings-toggle active" id="settingsAutoRefresh"
                   data-setting="autoRefresh"></button>
@@ -376,7 +380,7 @@
               <div class="settings-section-title">Performance</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Extended asset pools</div>
+                  <div class="settings-row-label">Asset pools étendus</div>
                   <div class="settings-row-desc">Increase model, image, and material pool limits for heavy mods
                     (requires restart)</div>
                 </div>
@@ -415,7 +419,7 @@
 
 
             <div class="settings-section">
-              <div class="settings-section-title">Links</div>
+              <div class="settings-section-title">Liens</div>
               <div class="settings-links-row">
                 <button type="button" class="btn btn-discord"
                   onclick="window.external.openUrl('https://discord.gg/BdkJ5DukUm')">Discord</button>
@@ -427,7 +431,7 @@
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">About</div>
+              <div class="settings-section-title">À propos</div>
               <div class="settings-about">
                 <div class="settings-about-name">AlterBO3 — IKAAM</div>
                 <div class="settings-about-ver" id="settingsVersion">v1.0.0</div>
@@ -437,28 +441,28 @@
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">Network</div>
+              <div class="settings-section-title">Réseau</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Network Password</div>
+                  <div class="settings-row-label">Mot de passe réseau</div>
                   <div class="settings-row-desc">Private network key for server isolation (clients must match to connect)</div>
                 </div>
-                <input type="text" class="settings-input" id="settingsNetPassword" placeholder="No password"
+                <input type="text" class="settings-input" id="settingsNetPassword" placeholder="Aucun mot de passe"
                   autocomplete="off" maxlength="32" style="width:160px;">
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Game Password</div>
+                  <div class="settings-row-label">Mot de passe</div>
                   <div class="settings-row-desc">Password required to join your hosted game (g_password, leave empty to
                     disable)</div>
                 </div>
-                <input type="text" class="settings-input" id="settingsNetworkPassword" placeholder="No password"
+                <input type="text" class="settings-input" id="settingsNetworkPassword" placeholder="Aucun mot de passe"
                   autocomplete="off" maxlength="32" style="width:160px;">
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Friends Only</div>
-                  <div class="settings-row-desc">Only allow friends to join your lobby</div>
+                  <div class="settings-row-label">Amis seulement</div>
+                  <div class="settings-row-desc">Autorise seulement les amis à rejoindre ton lobby</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsFriendsOnly"
                   data-setting="friendsOnly"></button>
@@ -474,10 +478,10 @@
           <!-- ═══ ASSET POOLS TAB ═══ -->
           <div class="settings-tab-content" id="settingsTabAssetPools" data-stab="assetpools">
             <div class="settings-section">
-              <div class="settings-section-title">Asset Pool Expansion</div>
+              <div class="settings-section-title">Extension d'Asset Pool</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Disable asset pools patches</div>
+                  <div class="settings-row-label">Désactive les patchs d'asset pools</div>
                   <div class="settings-row-desc">Turn off all asset pool patches and use the game's original limits (requires restart)</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsDisableAssetPools" data-setting="disableAssetPools"></button>
@@ -491,7 +495,7 @@
 
             <div id="assetPoolsFieldset">
               <div class="settings-section">
-                <div class="settings-section-title">Core Pools</div>
+                <div class="settings-section-title">Pools de base</div>
                 <div class="settings-row">
                   <div>
                     <div class="settings-row-label">XModel</div>
@@ -590,7 +594,7 @@
               </div>
 
               <div class="settings-section">
-                <div class="settings-section-title">Gameplay Pools</div>
+                <div class="settings-section-title">Pools de gameplay</div>
                 <div class="settings-row">
                   <div>
                     <div class="settings-row-label">FX</div>
@@ -688,7 +692,7 @@
                 </div>
                 <div class="settings-row">
                   <div>
-                    <div class="settings-row-label">AI Type</div>
+                    <div class="settings-row-label">Type d'IA</div>
                     <div class="settings-row-desc">AI type definitions (default: 256, min: 64)</div>
                   </div>
                   <input type="number" class="settings-input asset-pool-input" id="apAiType" data-pool="ap_aitype" min="64" value="256" autocomplete="off" style="width:90px;">
@@ -762,40 +766,40 @@
           <!-- ═══ GRAPHICS TAB ═══ -->
           <div class="settings-tab-content" id="settingsTabGraphics" data-stab="graphics">
             <div class="settings-section">
-              <div class="settings-section-title">Graphics Preset</div>
+              <div class="settings-section-title">Préréglage graphique</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Quick preset</div>
-                  <div class="settings-row-desc">Apply a predefined graphics configuration</div>
+                  <div class="settings-row-label">Préréglage rapide</div>
+                  <div class="settings-row-desc">Applique une configuration graphique prédéfinie</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <select class="settings-select" id="settingsGraphicsPreset">
                     <option value="">Select...</option>
                     <option value="smooth">Smooth</option>
-                    <option value="lowlatency">Low-Latency</option>
+                    <option value="lowlatency">Faible latence</option>
                   </select>
                   <button type="button" class="btn btn-primary" id="settingsApplyPresetBtn"
-                    style="padding:6px 14px;">Apply</button>
+                    style="padding:6px 14px;">Appliquer</button>
                 </div>
               </div>
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">Display</div>
+              <div class="settings-section-title">Affichage</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Display Mode</div>
+                  <div class="settings-row-label">Mode d'affichage</div>
                   <div class="settings-row-desc">Windowed, Fullscreen, or Borderless</div>
                 </div>
                 <select class="settings-select" id="settingsDisplayMode">
-                  <option value="0">Windowed</option>
-                  <option value="1" selected>Fullscreen</option>
-                  <option value="2">Borderless</option>
+                  <option value="0">Fenêtré</option>
+                  <option value="1" selected>Plein écran</option>
+                  <option value="2">Sans bordure</option>
                 </select>
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Resolution</div>
+                  <div class="settings-row-label">Résolution</div>
                   <div class="settings-row-desc">Game render resolution (e.g. 1920x1080)</div>
                 </div>
                 <input type="text" class="settings-input" id="settingsResolution" placeholder="1920x1080"
@@ -803,8 +807,8 @@
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Refresh Rate</div>
-                  <div class="settings-row-desc">Monitor refresh rate in Hz</div>
+                  <div class="settings-row-label">Taux de rafraîchissement</div>
+                  <div class="settings-row-desc">Taux de rafraîchissement de l'écran en Hz</div>
                 </div>
                 <input type="text" class="settings-input" id="settingsRefreshRate" placeholder="60" autocomplete="off"
                   maxlength="4" style="width:70px;">
@@ -812,7 +816,7 @@
               <div class="settings-row">
                 <div>
                   <div class="settings-row-label">V-Sync</div>
-                  <div class="settings-row-desc">Enable vertical sync to prevent screen tearing</div>
+                  <div class="settings-row-desc">Active la synchro verticale pour éviter le tearing</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsVsync" data-setting="vsync"></button>
               </div>
@@ -822,7 +826,7 @@
               <div class="settings-section-title">Performance</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">FPS Limit</div>
+                  <div class="settings-row-label">Limite FPS</div>
                   <div class="settings-row-desc">Maximum frames per second (0 = unlimited)</div>
                 </div>
                 <input type="text" class="settings-input" id="settingsFpsLimit" placeholder="0" autocomplete="off"
@@ -839,14 +843,14 @@
               <div class="settings-row">
                 <div>
                   <div class="settings-row-label">Show FPS Counter</div>
-                  <div class="settings-row-desc">Display an in-game FPS counter</div>
+                  <div class="settings-row-desc">Affiche un compteur de FPS en jeu</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsDrawFps" data-setting="drawFps"></button>
               </div>
               <div class="settings-row">
                 <div>
                   <div class="settings-row-label">Smooth Framerate</div>
-                  <div class="settings-row-desc">Enable frame smoothing for consistent frame pacing</div>
+                  <div class="settings-row-desc">Active le lissage des images pour un framerate stable</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsSmoothFramerate"
                   data-setting="smoothFramerate"></button>
@@ -854,17 +858,17 @@
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">Advanced</div>
+              <div class="settings-section-title">Avancé</div>
               <div class="settings-row">
                 <div>
                   <div class="settings-row-label">Unlock all graphics options</div>
-                  <div class="settings-row-desc">Remove graphics restrictions for advanced settings access</div>
+                  <div class="settings-row-desc">Retire les restrictions graphiques pour accéder aux réglages avancés</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsUnlockGfx" data-setting="unlockGfx"></button>
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Max Frame Latency</div>
+                  <div class="settings-row-label">Latence max d'image</div>
                   <div class="settings-row-desc">Max queued frames (1=low latency, 4=smooth)</div>
                 </div>
                 <input type="text" class="settings-input" id="settingsMaxLatency" placeholder="1" autocomplete="off"
@@ -872,7 +876,7 @@
               </div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Full VRAM usage</div>
+                  <div class="settings-row-label">Utilisation VRAM complète</div>
                   <div class="settings-row-desc">Target all available VRAM to reduce texture streaming stutter</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsFullVram" data-setting="fullVram"></button>
@@ -906,7 +910,7 @@
   <div class="popup-backdrop" id="manageInstallPopup">
     <div class="popup component-selection-popup">
       <div class="popup-header">
-        <h3>Manage Installation</h3>
+        <h3>Gérer l'installation</h3>
         <button type="button" class="popup-close">&times;</button>
       </div>
       <div class="popup-content">
@@ -917,8 +921,8 @@
           <div class="components-list" id="componentsList"></div>
         </div>
         <div class="popup-actions">
-          <button type="button" class="btn" id="popupCancel">Cancel</button>
-          <button type="button" class="btn btn-danger" id="popupApply">Delete</button>
+          <button type="button" class="btn" id="popupCancel">Annuler</button>
+          <button type="button" class="btn btn-danger" id="popupApply">Supprimer</button>
         </div>
       </div>
     </div>
@@ -934,10 +938,10 @@
         <div class="verify-mode-group">
           <label class="verify-group-label">Select Game Mode</label>
           <div class="verify-mode-list">
-            <button type="button" class="verify-mode-btn selected" data-mode="all">All</button>
+            <button type="button" class="verify-mode-btn selected" data-mode="all">Tous</button>
             <button type="button" class="verify-mode-btn" data-mode="zm_">Zombies</button>
-            <button type="button" class="verify-mode-btn" data-mode="mp_">Multiplayer</button>
-            <button type="button" class="verify-mode-btn" data-mode="cp_">Campaign</button>
+            <button type="button" class="verify-mode-btn" data-mode="mp_">Multijoueur</button>
+            <button type="button" class="verify-mode-btn" data-mode="cp_">Campagne</button>
           </div>
         </div>
         <div class="verify-progress-section" id="verifyProgressSection">
@@ -950,7 +954,7 @@
         </div>
         <div class="verify-results" id="verifyResults"></div>
         <div class="verify-actions">
-          <button type="button" class="btn" id="verifyCancelBtn" style="display:none;">Cancel</button>
+          <button type="button" class="btn" id="verifyCancelBtn" style="display:none;">Annuler</button>
           <button type="button" class="btn btn-primary" id="verifyStartBtn">Start Verification</button>
         </div>
       </div>
@@ -975,15 +979,15 @@
   <div class="popup-backdrop" id="confirmPopup">
     <div class="popup confirm-popup">
       <div class="popup-header">
-        <h3 id="confirmPopupTitle">Confirm</h3>
+        <h3 id="confirmPopupTitle">Confirmer</h3>
         <button type="button" class="popup-close" data-close="confirmPopup">&times;</button>
       </div>
       <div class="popup-content">
         <div id="confirmPopupBody"></div>
       </div>
       <div class="popup-actions">
-        <button type="button" class="btn" id="confirmPopupCancel">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirmPopupConfirm">Confirm</button>
+        <button type="button" class="btn" id="confirmPopupCancel">Annuler</button>
+        <button type="button" class="btn btn-primary" id="confirmPopupConfirm">Confirmer</button>
       </div>
     </div>
   </div>
@@ -992,12 +996,12 @@
   <div class="popup-backdrop" id="creditsPopup">
     <div class="popup credits-popup">
       <div class="popup-header">
-        <h3>Credits</h3>
+        <h3>Crédits</h3>
         <button type="button" class="popup-close" data-close="creditsPopup">&times;</button>
       </div>
       <div class="popup-content">
         <div class="credits-section">
-          <div class="credits-label">Maintainers</div>
+          <div class="credits-label">Mainteneurs</div>
           <div class="maintainers-list">
             <div class="maintainer-card" onclick="window.external.openUrl('https://github.com/Skwll')">
               <img src="https://github.com/Skwll.png" alt="Skwll" class="maintainer-avatar">

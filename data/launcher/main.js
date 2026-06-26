@@ -264,7 +264,24 @@ if (gearBtn && launchDropdown) {
       gearBtn.classList.add('open');
     }
   };
-  launchDropdown.onclick = function(e) { e.stopPropagation(); };
+  // Clicking the dark backdrop (the dropdown container itself, not its inner
+  // panel) closes the menu. Clicks inside the panel are handled normally.
+  launchDropdown.onclick = function(e) {
+    if (e.target === launchDropdown) {
+      launchDropdown.classList.remove('open');
+      gearBtn.classList.remove('open');
+    } else {
+      e.stopPropagation();
+    }
+  };
+  var launchCloseBtn = document.getElementById('launchCloseBtn');
+  if (launchCloseBtn) {
+    launchCloseBtn.onclick = function(e) {
+      e.stopPropagation();
+      launchDropdown.classList.remove('open');
+      gearBtn.classList.remove('open');
+    };
+  }
 }
 
 document.addEventListener('click', function() {
@@ -622,7 +639,7 @@ function pollWorkshopBrowseResults(isSearchMode) {
       clearInterval(pollInterval);
       workshopBrowseLoading = false;
       if (workshopBrowseItems.length === 0)
-        showErrorOrCache('Loading took too long. Showing cached items...');
+        showErrorOrCache('Chargement trop long. Affichage du cache...');
       return;
     }
     try {
@@ -667,7 +684,7 @@ function showWorkshopLoading() {
 function showWorkshopEmpty(message) {
   workshopBrowseGrid.innerHTML =
       '<div class="workshop-browse-empty"><div class="workshop-browse-empty-icon">\u2715</div><div>' +
-      (message || 'No items found') + '</div></div>';
+      (message || 'Aucun élément trouvé') + '</div></div>';
   if (workshopBrowsePagination)
     workshopBrowsePagination.style.display = 'none';
 }
@@ -1000,7 +1017,7 @@ function showWorkshopModal(item) {
       '</div>' + modalSubsHtml + modalSizeHtml;
 
   workshopModalDescription.innerHTML =
-      convertBBCodeToHtml(item.description || 'No description available.');
+      convertBBCodeToHtml(item.description || 'Aucune description disponible.');
   workshopModalViewBtn.onclick = function() {
     try {
       window.external.openUrl(
@@ -1108,7 +1125,7 @@ function showLibraryModModal(item) {
       modalTypeHtml + modalRatingHtml + modalSubsHtml + modalSizeHtml;
 
   libraryModalDescription.innerHTML =
-      convertBBCodeToHtml(item.description || 'No description available.');
+      convertBBCodeToHtml(item.description || 'Aucune description disponible.');
 
   if (item.id && String(item.id).length > 0) {
     libraryModalViewBtn.style.display = '';
@@ -1629,7 +1646,7 @@ function startRemoveProgressPoll() {
     return;
   bar.style.display = 'block';
   if (msg)
-    msg.textContent = 'Removing...';
+    msg.textContent = 'Suppression...';
   if (det)
     det.textContent = '';
   if (fill) {
@@ -1657,7 +1674,7 @@ function startRemoveProgressPoll() {
         return;
       var st = typeof sj === 'string' ? JSON.parse(sj) : sj;
       if (msg)
-        msg.textContent = st.message || 'Removing...';
+        msg.textContent = st.message || 'Suppression...';
       if (det)
         det.textContent = st.details || '';
       if (fill) {
@@ -2124,7 +2141,7 @@ document.getElementById('checkUpdatesBtn').onclick = function() {
     var ex = getExternal();
     if (!ex || !ex.workshopList) {
       if (wsStatus)
-        wsStatus.textContent = 'Cannot check updates.';
+        wsStatus.textContent = 'Impossible de vérifier les MAJ.';
       return;
     }
     document.getElementById('checkUpdatesBtn').disabled = true;
@@ -2312,7 +2329,7 @@ document.getElementById('popupApply').onclick = function() {
   }
   if (selected.length === 0) {
     showMessage('Delete',
-                'No game modes selected or selected modes have no files.');
+                'Aucun mode sélectionné ou sans fichiers.');
     return;
   }
   hideManagePopup();
@@ -2462,7 +2479,7 @@ function startVerify() {
   try {
     var ex = getExternal();
     if (!ex) {
-      showMessage('Error', 'Verification not available.');
+      showMessage('Error', 'Vérification indisponible.');
       return;
     }
     var result = ex.verifyGameFiles(selectedVerifyMode);
@@ -2519,7 +2536,7 @@ function startVerify() {
         if (st.message && (st.message.indexOf('missing') !== -1 ||
                            st.message.indexOf('wrong size') !== -1 ||
                            st.message.indexOf('Not installed') !== -1 ||
-                           st.message.indexOf('No files found') !== -1)) {
+                           st.message.indexOf('Aucun fichier trouvé') !== -1)) {
           verifyStatusMsg.style.color = '#ef4444';
         } else {
           verifyStatusMsg.style.color = '';
@@ -2549,7 +2566,7 @@ function startVerify() {
           verifyStartBtn.onclick = startVerify;
         } else if (!st.running && st.message &&
                    (st.message.indexOf('Cancelled') !== -1 ||
-                    st.message.indexOf('No game files') !== -1)) {
+                    st.message.indexOf('Aucun fichier de jeu') !== -1)) {
           clearInterval(verifyPollInterval);
           verifyPollInterval = null;
           verifyCancelBtn.style.display = 'none';
@@ -3433,7 +3450,7 @@ if (friendAddBtn) {
 
     if (!name || !sid) {
       showMessage('Add Friend',
-                  'Please enter both a display name and a Steam ID.');
+                  "Entre un nom ET un Steam ID.");
       return;
     }
     if (!/^\d{5,20}$/.test(sid)) {
@@ -3452,7 +3469,7 @@ if (friendAddBtn) {
           return;
         } else if (result === 'error') {
           showMessage('Add Friend',
-                      'Failed to add friend. Please check the inputs.');
+                      "Echec de l'ajout. Verifie les champs.");
           return;
         }
       }
