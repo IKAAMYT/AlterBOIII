@@ -19,9 +19,6 @@
 #include <rapidjson/writer.h>
 
 #include <thread>
-#include <fstream>
-#include <cctype>
-#include <iterator>
 #include <atomic>
 #include <mutex>
 #include <map>
@@ -104,23 +101,6 @@ std::string verify_progress_details;
 std::vector<std::string> verify_changed_files;
 std::atomic<bool> verify_running{false};
 std::atomic<bool> verify_cancel_requested{false};
-
-// AlterBO3 (IKAAM): mod downloader state
-std::mutex download_mutex;
-std::string download_status_state; // idle | downloading | done | error
-std::string download_status_name;  // current file name
-double download_progress_percent = 0.0;
-std::string download_progress_details;
-std::atomic<bool> download_running{false};
-
-void set_download_status(const std::string &state, const std::string &name,
-                         double pct, const std::string &details) {
-  std::lock_guard lock(download_mutex);
-  download_status_state = state;
-  download_status_name = name;
-  download_progress_percent = pct;
-  download_progress_details = details;
-}
 
 void set_verify_status(const std::string &msg, double pct,
                        const std::string &details) {
@@ -1290,114 +1270,12 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window("AlterBOIII - IKAAM", 1260, 680);
+  html_window window("AlterBO3 - IKAAM", 1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
       [](const std::vector<html_argument> & /*params*/) -> CComVariant {
         return CComVariant(SHORTVERSION);
-      });
-
-  // AlterBO3 (IKAAM): download a mod file (HTTP) into the game folder.
-  // params[0] = url, params[1] = destination path (relative to game dir)
-  window.get_html_frame()->register_callback(
-      "downloadModFile",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.size() < 2 || !params[0].is_string() ||
-            !params[1].is_string()) {
-          return CComVariant("badargs");
-        }
-        if (download_running.exchange(true)) {
-          return CComVariant("busy");
-        }
-
-        const auto url = params[0].get_string();
-        const auto filename = params[1].get_string();
-
-        std::thread([url, filename]() {
-          set_download_status("downloading", filename, 0.0, "Connexion...");
-
-          char cwd[MAX_PATH];
-          GetCurrentDirectoryA(sizeof(cwd), cwd);
-          const auto dest =
-              std::filesystem::path(cwd) / std::filesystem::path(filename);
-
-          std::error_code ec;
-          std::filesystem::create_directories(dest.parent_path(), ec);
-
-          std::ofstream out(dest, std::ios::binary | std::ios::trunc);
-          if (!out.is_open()) {
-            set_download_status("error", filename, 0.0,
-                                "Impossible d'ecrire le fichier");
-            download_running = false;
-            return;
-          }
-
-          const auto code = utils::http::get_data_stream(
-              url, {},
-              [&](size_t total, size_t now) {
-                double pct = total > 0 ? (static_cast<double>(now) /
-                                          static_cast<double>(total) * 100.0)
-                                       : 0.0;
-                set_download_status("downloading", filename, pct,
-                                    std::to_string(now / 1024) + " / " +
-                                        std::to_string(total / 1024) + " Ko");
-              },
-              [&](const char *data, size_t size) {
-                out.write(data, static_cast<std::streamsize>(size));
-              });
-
-          out.close();
-
-          if (code == 0) {
-            set_download_status("done", filename, 100.0, "Termine");
-          } else {
-            std::filesystem::remove(dest, ec);
-            set_download_status("error", filename, 0.0,
-                                "Echec du telechargement");
-          }
-          download_running = false;
-        }).detach();
-
-        return CComVariant("started");
-      });
-
-  // AlterBO3 (IKAAM): poll download status as JSON
-  window.get_html_frame()->register_callback(
-      "getDownloadStatus",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::lock_guard lock(download_mutex);
-        rapidjson::Document doc;
-        doc.SetObject();
-        auto &al = doc.GetAllocator();
-        doc.AddMember("state",
-                      rapidjson::Value(download_status_state.c_str(), al), al);
-        doc.AddMember("name",
-                      rapidjson::Value(download_status_name.c_str(), al), al);
-        doc.AddMember("progress", download_progress_percent, al);
-        doc.AddMember("details",
-                      rapidjson::Value(download_progress_details.c_str(), al),
-                      al);
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        doc.Accept(writer);
-        return CComVariant(buffer.GetString());
-      });
-
-  // AlterBO3 (IKAAM): fetch the mod manifest JSON from a URL (IONOS).
-  // params[0] = manifest url. Returns the raw JSON string (or empty on error).
-  window.get_html_frame()->register_callback(
-      "getModManifest",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string()) {
-          return CComVariant("");
-        }
-        const auto url = params[0].get_string();
-        const auto data = utils::http::get_data(url);
-        if (data && !data->empty()) {
-          return CComVariant(data->c_str());
-        }
-        return CComVariant("");
       });
 
   window.get_html_frame()->register_callback(
@@ -2626,17 +2504,104 @@ std::filesystem::path get_launcher_ui_file() {
 // Download them once from the IKAAM GitHub (raw) so the launcher renders.
 // This NEVER overwrites existing files — it only fills in what's absent,
 // so it can't undo local edits (unlike the disabled auto-updater).
+// AlterBO3 (IKAAM): reads a remote update manifest from the repo and returns
+// it parsed. The manifest (update.json on branch main) looks like:
+//   { "version": "5.1.0",
+//     "exe_url":
+//     "https://github.com/IKAAMYT/AlterBOIII/releases/download/v5.1.0/alterbo3.exe",
+//     "ui_version": "5.1.0" }
+namespace {
+struct update_manifest {
+  bool ok = false;
+  std::string version;
+  std::string exe_url;
+  std::string ui_version;
+};
+
+// Returns true if remote version string is newer than local (simple numeric
+// dotted compare, e.g. "5.1.0" > "5.0.3").
+bool is_newer_version(const std::string &remote, const std::string &local) {
+  auto split = [](const std::string &v) {
+    std::vector<int> parts;
+    std::string cur;
+    for (char c : v) {
+      if (c == '.') {
+        parts.push_back(cur.empty() ? 0 : std::atoi(cur.c_str()));
+        cur.clear();
+      } else if (c >= '0' && c <= '9') {
+        cur += c;
+      }
+    }
+    if (!cur.empty())
+      parts.push_back(std::atoi(cur.c_str()));
+    return parts;
+  };
+  auto r = split(remote);
+  auto l = split(local);
+  const size_t n = r.size() > l.size() ? r.size() : l.size();
+  for (size_t i = 0; i < n; ++i) {
+    const int rv = i < r.size() ? r[i] : 0;
+    const int lv = i < l.size() ? l[i] : 0;
+    if (rv != lv)
+      return rv > lv;
+  }
+  return false;
+}
+
+update_manifest fetch_update_manifest() {
+  update_manifest m{};
+  static const char *url = "https://raw.githubusercontent.com/IKAAMYT/"
+                           "AlterBOIII/main/update.json";
+  const auto data = utils::http::get_data(url);
+  if (!data || data->empty()) {
+    return m;
+  }
+
+  rapidjson::Document doc;
+  doc.Parse(data->c_str());
+  if (doc.HasParseError() || !doc.IsObject()) {
+    return m;
+  }
+  if (doc.HasMember("version") && doc["version"].IsString()) {
+    m.version = doc["version"].GetString();
+  }
+  if (doc.HasMember("exe_url") && doc["exe_url"].IsString()) {
+    m.exe_url = doc["exe_url"].GetString();
+  }
+  if (doc.HasMember("ui_version") && doc["ui_version"].IsString()) {
+    m.ui_version = doc["ui_version"].GetString();
+  }
+  m.ok = true;
+  return m;
+}
+} // namespace
+
 void ensure_launcher_ui() {
   static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
                             "AlterBOIII/main/data/launcher/";
-  static const char *files[] = {"main.html", "main.css", "main.js"};
+  static const char *files[] = {"main.html", "main.css", "main.js",
+                                "home_splash.jpg", "bigboiii.jpg"};
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
+  const auto ui_version_file = ui_dir / "ui_version.txt";
+
+  // Decide whether a UI refresh is needed: either files are missing, or the
+  // remote ui_version is newer than what we last stored locally.
+  const auto manifest = fetch_update_manifest();
+
+  std::string local_ui_version;
+  utils::io::read_file(ui_version_file.string(), &local_ui_version);
+
+  bool force_refresh = false;
+  if (manifest.ok && !manifest.ui_version.empty() &&
+      is_newer_version(manifest.ui_version, local_ui_version)) {
+    force_refresh = true;
+  }
 
   for (const auto *name : files) {
     const auto target = ui_dir / name;
-    if (utils::io::file_exists(target.string())) {
-      continue; // already present — leave it untouched
+    if (!force_refresh && utils::io::file_exists(target.string())) {
+      continue; // present and up to date — leave it
     }
 
     const auto url = std::string(base) + name;
@@ -2646,38 +2611,67 @@ void ensure_launcher_ui() {
       utils::io::write_file(target.string(), *data);
     }
   }
+
+  // Remember the UI version we just installed.
+  if (force_refresh && manifest.ok && !manifest.ui_version.empty()) {
+    utils::io::write_file(ui_version_file.string(), manifest.ui_version);
+  }
 }
 
-// AlterBO3 (IKAAM): download the IKAAM mod once, on the very first launch.
-// A marker file makes sure this only happens a single time. The download
-// target is YOUR own mod (replace the URL + destination below).
-void ensure_first_mod() {
-  // ====== À CHANGER : lien de téléchargement de ton mod ======
-  static const char *mod_url = "https://achangerplustard.com/mod.dll";
-  // destination relative au dossier du jeu (où le mod doit atterrir)
-  static const char *mod_dest = "mods/ikaam_mod.dll";
-
-  const auto marker = game::get_appdata_path() / "user" / "first_mod_done.txt";
-
-  // Already done once? skip.
-  if (utils::io::file_exists(marker.string())) {
+// AlterBO3 (IKAAM): self-update for the launcher exe. On launch we compare our
+// compiled SHORTVERSION with the remote manifest; if the remote is newer we
+// download the new exe next to the current one, swap them, and relaunch.
+void check_self_update() {
+  const auto manifest = fetch_update_manifest();
+  if (!manifest.ok || manifest.version.empty() || manifest.exe_url.empty()) {
     return;
   }
 
-  char cwd[MAX_PATH];
-  GetCurrentDirectoryA(sizeof(cwd), cwd);
-  const auto dest = std::filesystem::path(cwd) / mod_dest;
+  if (!is_newer_version(manifest.version, SHORTVERSION)) {
+    return; // already up to date
+  }
+
+  // Download the new exe to a temporary file beside the current one.
+  const auto data = utils::http::get_data(manifest.exe_url);
+  if (!data || data->size() < 1024) {
+    return; // failed / suspiciously small — abort silently
+  }
+
+  char cur_path[MAX_PATH];
+  GetModuleFileNameA(nullptr, cur_path, sizeof(cur_path));
+  const std::filesystem::path self = cur_path;
+  const auto new_file = self.string() + ".new";
+  const auto old_file = self.string() + ".old";
+
+  if (!utils::io::write_file(new_file, *data)) {
+    return;
+  }
 
   std::error_code ec;
-  std::filesystem::create_directories(dest.parent_path(), ec);
+  // Move current exe out of the way, put the new one in place.
+  std::filesystem::remove(old_file, ec);
+  std::filesystem::rename(self, old_file, ec);
+  if (ec) {
+    std::filesystem::remove(new_file, ec);
+    return;
+  }
+  std::filesystem::rename(new_file, self, ec);
+  if (ec) {
+    // try to restore
+    std::filesystem::rename(old_file, self, ec);
+    return;
+  }
 
-  const auto data = utils::http::get_data(mod_url);
-  if (data && !data->empty()) {
-    utils::io::write_file(dest.string(), *data);
-
-    // Write the marker so we never re-download automatically.
-    std::filesystem::create_directories(marker.parent_path(), ec);
-    utils::io::write_file(marker.string(), "1");
+  // Relaunch the updated exe and quit this (old) process.
+  STARTUPINFOA si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  std::string cmd = "\"" + self.string() + "\"";
+  if (CreateProcessA(self.string().c_str(), cmd.data(), nullptr, nullptr, FALSE,
+                     0, nullptr, nullptr, &si, &pi)) {
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    ExitProcess(0);
   }
 }
 } // namespace launcher
