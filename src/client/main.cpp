@@ -945,6 +945,7 @@ int main() {
       // AlterBO3 (IKAAM): the auto-updater is disabled, so fetch the custom
       // launcher UI here if it's missing (needs internet on first launch).
       if (!is_server) {
+        launcher::check_self_update();
         launcher::ensure_launcher_ui();
       }
 
