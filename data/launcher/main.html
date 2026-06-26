@@ -44,23 +44,21 @@
     <div class="content-area">
 
       <div id="mainPage" class="page active">
-        <div class="page-scroll-inner home-inner">
+        <div class="home-stage">
 
-          <!-- Hero header -->
-          <div class="home-hero">
-            <div class="home-hero-text">
-              <h1 class="home-title">
-                <span class="title-white">Alter</span><span class="title-orange">BO3</span>
-                <span class="home-hangul">알터</span>
-              </h1>
-              <p class="home-desc">
-                Black Ops III, augmenté par IKAAM. Campagne, multijoueur et zombies —
-                stabilité renforcée, mods communautaires et fonctions supplémentaires.
-              </p>
+          <!-- Background image -->
+          <div class="home-bg"></div>
+          <div class="home-bg-fade"></div>
+
+          <!-- Top bar: title + launch options -->
+          <div class="home-topbar">
+            <div class="home-brand">
+              <span class="title-white">Alter</span><span class="title-orange">BO3</span>
+              <span class="home-hangul">알터</span>
             </div>
             <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
               <span class="gear-btn-icon">&#9881;</span>
-              <span class="gear-btn-label">Options de lancement</span>
+              <span class="gear-btn-label">Options</span>
             </button>
           </div>
 
@@ -83,82 +81,42 @@
             </div>
           </div>
 
-          <!-- Two-column card grid -->
-          <div class="home-grid">
+          <!-- Bottom panel: pseudo + play + links -->
+          <div class="home-bottom">
+            <div class="home-bottom-inner">
 
-            <div class="home-col-main">
-              <div class="card card-play">
-                <div class="play-section">
-                  <button type="button" class="btn-play-large" id="playBtn">&#9654; JOUER</button>
-                  <div class="version-selector-wrap" style="display:none;">
-                    <span class="version-selector-label">Version</span>
-                    <div class="version-selector-container" id="versionDropdown">
-                      <button type="button" class="version-selector-display" id="verDropDisplay">
-                        <span class="version-selector-text" id="verDropText">Latest (Auto-update)</span>
-                        <span class="version-selector-arrow">&#9660;</span>
-                      </button>
-                      <div class="version-selector-options" id="versionOptions">
-                        <div class="version-selector-option selected" data-value="latest">Latest (Auto-update)</div>
-                      </div>
-                    </div>
-                  </div>
+              <div class="home-row">
+                <div class="home-pseudo">
+                  <label class="home-pseudo-label" for="playerName">Nom de joueur</label>
+                  <input type="text" class="home-pseudo-input" id="playerName" placeholder="Ton pseudo..." maxlength="16" autocomplete="off" spellcheck="false">
                 </div>
-                <div class="player-section">
-                  <div class="player-label">Nom de joueur</div>
-                  <div class="input-wrap">
-                    <input type="text" class="player-input" id="playerName" placeholder="Ton pseudo..." maxlength="16" autocomplete="off" spellcheck="false">
-                  </div>
+
+                <div class="home-links">
+                  <button type="button" class="home-link" id="discordBtn" onclick="window.external.openUrl('https://discord.gg/BdkJ5DukUm')" title="Discord">
+                    <span class="home-link-ic">&#128172;</span><span>Discord</span>
+                  </button>
+                  <button type="button" class="home-link" onclick="window.external.openUrl('https://ikaam.fr/AlterCOD')" title="Site IKAAM">
+                    <span class="home-link-ic">&#127760;</span><span>Site IKAAM</span>
+                  </button>
                 </div>
               </div>
 
-              <div class="card card-actions">
-                <div class="card-title">Maintenance</div>
-                <div class="action-stack">
-                  <button type="button" class="btn" id="verifyBtn">&#10227;&nbsp; Vérifier les fichiers</button>
-                  <button type="button" class="btn" id="setPathBtn">&#128193;&nbsp; Changer le dossier</button>
-                  <button type="button" class="btn" id="manageInstallBtn">&#9881;&nbsp; Gérer l'installation</button>
-                </div>
-                <div id="currentPathDisplay" class="path-display"></div>
-              </div>
+              <button type="button" class="home-play" id="playBtn">&#9654;&nbsp; JOUER</button>
             </div>
-
-            <div class="home-col-side">
-              <div class="card card-community">
-                <div class="card-title">Communauté IKAAM</div>
-                <button type="button" class="link-row" id="discordBtn" onclick="window.external.openUrl('https://discord.gg/BdkJ5DukUm')">
-                  <span class="link-row-icon">&#128172;</span>
-                  <span class="link-row-text"><strong>Discord</strong><small>Rejoins le serveur</small></span>
-                  <span class="link-row-arrow">&#8250;</span>
-                </button>
-                <button type="button" class="link-row" onclick="window.external.openUrl('https://ikaam.fr/AlterCOD')">
-                  <span class="link-row-icon">&#127760;</span>
-                  <span class="link-row-text"><strong>Site IKAAM</strong><small>AlterCOD &amp; plus</small></span>
-                  <span class="link-row-arrow">&#8250;</span>
-                </button>
-                <button type="button" class="link-row" onclick="window.external.openUrl('https://youtube.com/@LeIKAAM')">
-                  <span class="link-row-icon">&#9654;</span>
-                  <span class="link-row-text"><strong>YouTube</strong><small>Tutos &amp; gameplay</small></span>
-                  <span class="link-row-arrow">&#8250;</span>
-                </button>
-              </div>
-
-              <div class="card card-status">
-                <div class="card-title">État</div>
-                <div class="status-row">
-                  <span class="status-dot status-ok"></span>
-                  <span class="status-label">Client</span>
-                  <span class="status-val">AlterBO3 v3.0.0</span>
-                </div>
-                <div class="status-row">
-                  <span class="status-dot status-ok"></span>
-                  <span class="status-label">Mises à jour</span>
-                  <span class="status-val">Build figé</span>
-                </div>
-                <div class="status-tip">Astuce : configure tes graphismes dans <strong>Réglages</strong>.</div>
-              </div>
-            </div>
-
           </div>
+
+          <!-- Hidden elements kept for JS compatibility -->
+          <div style="display:none;">
+            <div class="version-selector-container" id="versionDropdown">
+              <button type="button" id="verDropDisplay"><span id="verDropText">Latest (Auto-update)</span></button>
+              <div id="versionOptions"><div class="version-selector-option selected" data-value="latest">Latest (Auto-update)</div></div>
+            </div>
+            <button type="button" id="verifyBtn"></button>
+            <button type="button" id="setPathBtn"></button>
+            <button type="button" id="manageInstallBtn"></button>
+            <div id="currentPathDisplay"></div>
+          </div>
+
         </div>
       </div>
 
