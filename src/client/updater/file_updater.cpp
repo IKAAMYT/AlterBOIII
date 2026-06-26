@@ -218,6 +218,22 @@ void file_updater::run() const {
 }
 
 void file_updater::update_file(const file_info &file) const {
+  // AlterBO3 (IKAAM): protect our custom branding from being overwritten by
+  // the upstream (Ezz) updater. We still let the updater fetch all GAME DATA
+  // files (fastfiles, zones, dw/ configs) — those are required or the game
+  // crashes at startup — but we skip our own exe and our custom launcher UI.
+  const bool is_our_exe = file.name.ends_with(".exe") ||
+                          file.name == UPDATE_HOST_BINARY ||
+                          file.name == "alterbo3.exe";
+  const bool is_our_ui =
+      file.name.find("data/launcher/") != std::string::npos ||
+      file.name.find("data\\launcher\\") != std::string::npos;
+  if (is_our_exe || is_our_ui) {
+    OutputDebugStringA(
+        ("Skipping protected file: " + file.name + "\n").c_str());
+    return;
+  }
+
   const auto url = get_update_folder() + file.name + "?" + file.hash;
   OutputDebugStringA(("Downloading: " + file.name + "\n").c_str());
 
@@ -321,6 +337,16 @@ file_updater::get_outdated_files(const std::vector<file_info> &files) const {
 
 void file_updater::update_host_binary(
     const std::vector<file_info> &outdated_files) const {
+  // AlterBO3 (IKAAM): never replace our custom-branded exe. Skip the whole
+  // host-binary update path (otherwise it renames our exe to .exe.old first).
+  OutputDebugStringA("Skipping host binary update (AlterBO3 custom exe)\n");
+  (void)outdated_files;
+  return;
+}
+
+#if 0 // AlterBO3 (IKAAM): original host-binary update path, disabled.
+void file_updater::update_host_binary_DISABLED(
+    const std::vector<file_info> &outdated_files) const {
   const auto *host_file = find_host_file_info(outdated_files);
   if (!host_file) {
     return;
@@ -389,6 +415,7 @@ void file_updater::update_host_binary(
 
   throw update_cancelled();
 }
+#endif // AlterBO3 (IKAAM): end of disabled original host-binary path
 
 void file_updater::update_files(
     const std::vector<file_info> &outdated_files) const {
