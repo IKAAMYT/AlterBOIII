@@ -748,9 +748,12 @@ a { color: #f2c411; text-decoration: none; }
 .launch-dropdown-list { display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column; gap: 6px; padding: 4px 16px 18px; }
 .launch-option-card { display: -ms-flexbox; display: flex; align-items: center; -ms-flex-align: center; gap: 12px; padding: 13px 15px;
   background: #1a1816; border: 1px solid rgba(242, 196, 17, 0.10); border-radius: 9px; cursor: pointer; transition: all .14s; }
-.launch-option-card:hover { border-color: #f2c411; background: #221f1b; }
-.launch-option-dot { width: 10px; height: 10px; border-radius: 50%; background: #f2c411; box-shadow: 0 0 8px rgba(242,196,17,0.7); flex: 0 0 10px; }
-.launch-option-name { font-size: 14px; color: #f5f3ee; }
+.launch-option-card:hover { border-color: rgba(242, 196, 17, 0.45); background: #221f1b; }
+.launch-option-card.active { border-color: #f2c411; background: #221f1b; box-shadow: 0 0 0 1px rgba(242,196,17,0.4) inset; }
+.launch-option-dot { width: 12px; height: 12px; border-radius: 50%; background: transparent; border: 2px solid rgba(242,196,17,0.35); box-sizing: border-box; flex: 0 0 12px; -ms-flex: 0 0 12px; transition: all .14s; }
+.launch-option-card.active .launch-option-dot { background: #f2c411; border-color: #f2c411; box-shadow: 0 0 8px rgba(242,196,17,0.7); }
+.launch-option-name { font-size: 14px; color: #c9c2b4; }
+.launch-option-card.active .launch-option-name { color: #f5f3ee; }
 
 /* Credits */
 .credits-section { padding: 16px 24px; }
