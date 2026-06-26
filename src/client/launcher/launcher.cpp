@@ -19,6 +19,9 @@
 #include <rapidjson/writer.h>
 
 #include <thread>
+#include <fstream>
+#include <cctype>
+#include <iterator>
 #include <atomic>
 #include <mutex>
 #include <map>
@@ -101,6 +104,23 @@ std::string verify_progress_details;
 std::vector<std::string> verify_changed_files;
 std::atomic<bool> verify_running{false};
 std::atomic<bool> verify_cancel_requested{false};
+
+// AlterBO3 (IKAAM): mod downloader state
+std::mutex download_mutex;
+std::string download_status_state; // idle | downloading | done | error
+std::string download_status_name;  // current file name
+double download_progress_percent = 0.0;
+std::string download_progress_details;
+std::atomic<bool> download_running{false};
+
+void set_download_status(const std::string &state, const std::string &name,
+                         double pct, const std::string &details) {
+  std::lock_guard lock(download_mutex);
+  download_status_state = state;
+  download_status_name = name;
+  download_progress_percent = pct;
+  download_progress_details = details;
+}
 
 void set_verify_status(const std::string &msg, double pct,
                        const std::string &details) {
@@ -1270,12 +1290,114 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window("AlterBO3 - IKAAM", 1260, 680);
+  html_window window("AlterBOIII - IKAAM", 1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
       [](const std::vector<html_argument> & /*params*/) -> CComVariant {
         return CComVariant(SHORTVERSION);
+      });
+
+  // AlterBO3 (IKAAM): download a mod file (HTTP) into the game folder.
+  // params[0] = url, params[1] = destination path (relative to game dir)
+  window.get_html_frame()->register_callback(
+      "downloadModFile",
+      [](const std::vector<html_argument> &params) -> CComVariant {
+        if (params.size() < 2 || !params[0].is_string() ||
+            !params[1].is_string()) {
+          return CComVariant("badargs");
+        }
+        if (download_running.exchange(true)) {
+          return CComVariant("busy");
+        }
+
+        const auto url = params[0].get_string();
+        const auto filename = params[1].get_string();
+
+        std::thread([url, filename]() {
+          set_download_status("downloading", filename, 0.0, "Connexion...");
+
+          char cwd[MAX_PATH];
+          GetCurrentDirectoryA(sizeof(cwd), cwd);
+          const auto dest =
+              std::filesystem::path(cwd) / std::filesystem::path(filename);
+
+          std::error_code ec;
+          std::filesystem::create_directories(dest.parent_path(), ec);
+
+          std::ofstream out(dest, std::ios::binary | std::ios::trunc);
+          if (!out.is_open()) {
+            set_download_status("error", filename, 0.0,
+                                "Impossible d'ecrire le fichier");
+            download_running = false;
+            return;
+          }
+
+          const auto code = utils::http::get_data_stream(
+              url, {},
+              [&](size_t total, size_t now) {
+                double pct = total > 0 ? (static_cast<double>(now) /
+                                          static_cast<double>(total) * 100.0)
+                                       : 0.0;
+                set_download_status("downloading", filename, pct,
+                                    std::to_string(now / 1024) + " / " +
+                                        std::to_string(total / 1024) + " Ko");
+              },
+              [&](const char *data, size_t size) {
+                out.write(data, static_cast<std::streamsize>(size));
+              });
+
+          out.close();
+
+          if (code == 0) {
+            set_download_status("done", filename, 100.0, "Termine");
+          } else {
+            std::filesystem::remove(dest, ec);
+            set_download_status("error", filename, 0.0,
+                                "Echec du telechargement");
+          }
+          download_running = false;
+        }).detach();
+
+        return CComVariant("started");
+      });
+
+  // AlterBO3 (IKAAM): poll download status as JSON
+  window.get_html_frame()->register_callback(
+      "getDownloadStatus",
+      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+        std::lock_guard lock(download_mutex);
+        rapidjson::Document doc;
+        doc.SetObject();
+        auto &al = doc.GetAllocator();
+        doc.AddMember("state",
+                      rapidjson::Value(download_status_state.c_str(), al), al);
+        doc.AddMember("name",
+                      rapidjson::Value(download_status_name.c_str(), al), al);
+        doc.AddMember("progress", download_progress_percent, al);
+        doc.AddMember("details",
+                      rapidjson::Value(download_progress_details.c_str(), al),
+                      al);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        return CComVariant(buffer.GetString());
+      });
+
+  // AlterBO3 (IKAAM): fetch the mod manifest JSON from a URL (IONOS).
+  // params[0] = manifest url. Returns the raw JSON string (or empty on error).
+  window.get_html_frame()->register_callback(
+      "getModManifest",
+      [](const std::vector<html_argument> &params) -> CComVariant {
+        if (params.empty() || !params[0].is_string()) {
+          return CComVariant("");
+        }
+        const auto url = params[0].get_string();
+        const auto data = utils::http::get_data(url);
+        if (data && !data->empty()) {
+          return CComVariant(data->c_str());
+        }
+        return CComVariant("");
       });
 
   window.get_html_frame()->register_callback(
@@ -2523,6 +2645,39 @@ void ensure_launcher_ui() {
       utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
     }
+  }
+}
+
+// AlterBO3 (IKAAM): download the IKAAM mod once, on the very first launch.
+// A marker file makes sure this only happens a single time. The download
+// target is YOUR own mod (replace the URL + destination below).
+void ensure_first_mod() {
+  // ====== À CHANGER : lien de téléchargement de ton mod ======
+  static const char *mod_url = "https://achangerplustard.com/mod.dll";
+  // destination relative au dossier du jeu (où le mod doit atterrir)
+  static const char *mod_dest = "mods/ikaam_mod.dll";
+
+  const auto marker = game::get_appdata_path() / "user" / "first_mod_done.txt";
+
+  // Already done once? skip.
+  if (utils::io::file_exists(marker.string())) {
+    return;
+  }
+
+  char cwd[MAX_PATH];
+  GetCurrentDirectoryA(sizeof(cwd), cwd);
+  const auto dest = std::filesystem::path(cwd) / mod_dest;
+
+  std::error_code ec;
+  std::filesystem::create_directories(dest.parent_path(), ec);
+
+  const auto data = utils::http::get_data(mod_url);
+  if (data && !data->empty()) {
+    utils::io::write_file(dest.string(), *data);
+
+    // Write the marker so we never re-download automatically.
+    std::filesystem::create_directories(marker.parent_path(), ec);
+    utils::io::write_file(marker.string(), "1");
   }
 }
 } // namespace launcher
