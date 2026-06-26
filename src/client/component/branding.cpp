@@ -41,7 +41,11 @@ struct component final : client_component {
       scheduler::loop(draw_branding, scheduler::renderer);
 
       // Change window title prefix
-      utils::hook::copy_string(0x14303F3D8_g, "AlterBOIII");
+      // NOTE: this writes to a FIXED game memory address sized for a short
+      // string (original was "EZZ", 3 chars). Writing a longer string here
+      // overflows into adjacent game memory and crashes BlackOps3.exe at
+      // startup. Keep this 3 chars or fewer.
+      utils::hook::copy_string(0x14303F3D8_g, "ABO");
 
       // Change ingame console prefix
       utils::hook::call(0x141339970_g, get_ingame_console_prefix_stub);
