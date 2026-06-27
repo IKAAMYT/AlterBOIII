@@ -303,7 +303,7 @@
     <div id="settingsPage" class="page">
       <div class="page-scroll-inner">
         <div class="page-header">
-          <h2 class="page-title">Settings</h2>
+          <h2 class="page-title">Réglages</h2>
           <p class="page-sub">Configurez les préférences du launcher, les graphismes et le réseau.</p>
         </div>
 
@@ -404,7 +404,7 @@
               <div class="settings-section-title">Video</div>
               <div class="settings-row">
                 <div>
-                  <div class="settings-row-label">Skip game intro</div>
+                  <div class="settings-row-label">Passer l'intro du jeu</div>
                   <div class="settings-row-desc">Skip the BO3 logo intro video on startup</div>
                 </div>
                 <button type="button" class="settings-toggle" id="settingsSkipIntro" data-setting="skipIntro"></button>
@@ -749,18 +749,17 @@
           <!-- ═══ PATCHES TAB ═══ -->
           <div class="settings-tab-content" id="settingsTabPatches" data-stab="patches">
             <div class="settings-section">
-              <div class="settings-section-title">Steam Update Fix</div>
+              <div class="settings-section-title">Correctif mise à jour BOIII</div>
               <div
                 style="display:flex;flex-direction:column;gap:12px;padding:12px 16px;background:rgba(12,11,10,0.5);border:1px solid rgba(68,65,63,0.22);border-radius:8px;">
                 <div>
-                  <div class="settings-row-label">Previous BlackOps3.exe</div>
-                  <div class="settings-row-desc" style="margin-top:4px;">BOIII does not work with the latest Steam
-                    update. If you downloaded the latest update through Steam, use the button below to get the previous
-                    BlackOps3.exe and replace the one in your game directory.</div>
+                  <div class="settings-row-label">Revenir à une version précédente de BO3</div>
+                  <div class="settings-row-desc" style="margin-top:4px;">BO3 ne fonctionne pas avec la dernière
+                    mise à jour Steam. Si tu as installé la dernière mise à jour via Steam, télécharger BlackOps3.exe ci-dessous
+                    pour revenir à la version précédente de Black Ops III.</div>
                 </div>
                 <button type="button" class="btn btn-primary" style="margin-top:20px;"
-                  onclick="window.external.openUrl('https://archive.org/download/t7_full_game/BlackOps3.exe')">Download
-                  Previous BlackOps3.exe</button>
+                  onclick="window.external.openUrl('https://ikaam.fr/COD/downloads/BlackOps3.exe')">Télécharger BlackOps3.exe</button>
               </div>
             </div>
           </div>
@@ -918,7 +917,7 @@
       <div class="popup-content">
         <div class="component-selection-section">
           <div class="section-header">
-            <label>Select game modes to remove</label>
+            <label>Sélectionne les modes à retirer</label>
           </div>
           <div class="components-list" id="componentsList"></div>
         </div>
@@ -933,12 +932,12 @@
   <div class="popup-backdrop" id="verifyPopup">
     <div class="popup verify-popup">
       <div class="popup-header">
-        <h3>Verify Game Files</h3>
+        <h3>Vérifier les fichiers du jeu</h3>
         <button type="button" class="popup-close" id="verifyPopupClose">&times;</button>
       </div>
       <div class="popup-content">
         <div class="verify-mode-group">
-          <label class="verify-group-label">Select Game Mode</label>
+          <label class="verify-group-label">Sélectionner le mode de jeu</label>
           <div class="verify-mode-list">
             <button type="button" class="verify-mode-btn selected" data-mode="all">Tous</button>
             <button type="button" class="verify-mode-btn" data-mode="zm_">Zombies</button>
