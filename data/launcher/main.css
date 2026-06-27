@@ -1281,32 +1281,6 @@ cards
 }
 .launch-dropdown-close:hover { color: #f2c411; }
 
-/* ===== Home animated golden glow overlay ===== */
-.home-glow {
-  position: absolute; top:0; right:0; bottom:0; left:0;
-  pointer-events: none; z-index: 2;
-  background: -ms-radial-gradient(center, ellipse, rgba(242,196,17,0.18) 0%, rgba(242,196,17,0.06) 35%, rgba(242,196,17,0) 65%);
-  background: radial-gradient(ellipse at center, rgba(242,196,17,0.18) 0%, rgba(242,196,17,0.06) 35%, rgba(242,196,17,0) 65%);
-  animation: homeGlowPulse 4.5s ease-in-out infinite;
-}
-@keyframes homeGlowPulse {
-  0%   { opacity: 0.35; }
-  50%  { opacity: 0.9; }
-  100% { opacity: 0.35; }
-}
-/* subtle side bars glow that pulses with it */
-.home-glow-bars {
-  position: absolute; top:0; right:0; bottom:0; left:0;
-  pointer-events: none; z-index: 2;
-  box-shadow: inset 0 0 120px rgba(242,196,17,0.12);
-  animation: homeBarsPulse 4.5s ease-in-out infinite;
-}
-@keyframes homeBarsPulse {
-  0%   { box-shadow: inset 0 0 90px rgba(242,196,17,0.08); }
-  50%  { box-shadow: inset 0 0 160px rgba(242,196,17,0.22); }
-  100% { box-shadow: inset 0 0 90px rgba(242,196,17,0.08); }
-}
-
 /* ===== Custom workshop filter dropdown ===== */
 .ws-dropdown { position: relative; display: inline-block; min-width: 150px; }
 .ws-dropdown-toggle {

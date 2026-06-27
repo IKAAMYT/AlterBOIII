@@ -3824,7 +3824,7 @@ if (versionDisplay && creditsPopup) {
     }
     resize();
 
-    var COUNT = 120;
+    var COUNT = 160;
     for (var i = 0; i < COUNT; i++) {
       particles.push({
         x: Math.random() * W,
