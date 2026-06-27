@@ -373,8 +373,7 @@ void discord_log(const std::string &line) {
   // AlterBO3 (IKAAM): write a diagnostic line to a file we can inspect, since
   // printf output isn't visible in a normal launch.
   try {
-    const auto path =
-        utils::properties::get_appdata_path() / "discord_log.txt";
+    const auto path = utils::properties::get_appdata_path() / "discord_log.txt";
     const auto stamp = std::to_string(time(nullptr));
     utils::io::write_file(path.string(), "[" + stamp + "] " + line + "\n",
                           true);
