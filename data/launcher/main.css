@@ -1168,7 +1168,7 @@ cards
 .home-bg {
   position: absolute; top:0; right:0; bottom:0; left:0;
   pointer-events: none;
-  background-image: url('home_splash.jpg');
+  background-image: url('https://raw.githubusercontent.com/IKAAMYT/AlterBOIII/main/data/launcher/home_splash.jpg');
   background-size: cover; background-position: center center;
   background-repeat: no-repeat;
 }
