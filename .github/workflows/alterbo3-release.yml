@@ -85,12 +85,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p package
-          cp build/bin/x64/Release/boiii.exe package/alterbo3.exe
+          cp build/bin/x64/Release/boiii.exe package/AlterBOIII.exe
+          # Copy data/ but EXCLUDE data/launcher (the launcher UI is downloaded
+          # automatically on first run, so it doesn't need to ship in the zip).
           cp -r data package/data
-          # Bundle aria2c.exe (for torrent downloads) into tools/
-          mkdir -p package/tools
-          curl -L -o aria2.zip "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip"
-          7z e aria2.zip -opackage/tools "*/aria2c.exe" -r
+          rm -rf package/data/launcher
           cd package
           7z a -tzip ../AlterBO3.zip ./*
 
@@ -124,6 +123,6 @@ jobs:
           generate_release_notes: true
           body: |
             **AlterBO3** — reskin IKAAM du client BOIII (Black Ops III).
-            Theme MW jaune. Decompresse l'archive dans ton dossier Black Ops III et lance alterbo3.exe.
+            Theme MW jaune. Decompresse l'archive dans ton dossier Black Ops III et lance AlterBOIII.exe.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
