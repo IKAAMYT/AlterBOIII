@@ -3805,4 +3805,113 @@ if (versionDisplay && creditsPopup) {
   }
 })();
 
+
+/* ===== AlterBO3 (IKAAM): Home particles + ambient audio ===== */
+(function() {
+  function initParticles() {
+    var canvas = document.getElementById('homeParticles');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var particles = [];
+    var W = 0, H = 0;
+
+    function resize() {
+      var stage = canvas.parentNode;
+      W = stage ? stage.offsetWidth : 800;
+      H = stage ? stage.offsetHeight : 600;
+      canvas.width = W;
+      canvas.height = H;
+    }
+    resize();
+
+    var COUNT = 46;
+    for (var i = 0; i < COUNT; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 0.6 + Math.random() * 1.8,
+        sp: 0.2 + Math.random() * 0.7,
+        drift: (Math.random() - 0.5) * 0.4,
+        a: 0.15 + Math.random() * 0.5,
+        tw: Math.random() * 6.28
+      });
+    }
+
+    function frame() {
+      if (!W || !H) { resize(); }
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.y -= p.sp;
+        p.x += p.drift;
+        p.tw += 0.04;
+        if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+        if (p.x < -5) p.x = W + 5;
+        if (p.x > W + 5) p.x = -5;
+        var alpha = p.a * (0.6 + 0.4 * Math.sin(p.tw));
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fillStyle = 'rgba(242,196,17,' + alpha.toFixed(3) + ')';
+        ctx.fill();
+      }
+      if (window.requestAnimationFrame) {
+        requestAnimationFrame(frame);
+      } else {
+        setTimeout(frame, 33);
+      }
+    }
+    frame();
+
+    if (window.addEventListener) {
+      window.addEventListener('resize', resize, false);
+    }
+  }
+
+  function initAudio() {
+    var audio = document.getElementById('homeAudio');
+    var btn = document.getElementById('homeAudioBtn');
+    var icon = document.getElementById('homeAudioIcon');
+    if (!audio || !btn) return;
+
+    audio.volume = 0.10;
+    var muted = false;
+
+    function tryPlay() {
+      try { audio.play(); } catch (e) {}
+    }
+    tryPlay();
+    if (document.addEventListener) {
+      var once = function() {
+        if (!muted) tryPlay();
+        document.removeEventListener('click', once, false);
+      };
+      document.addEventListener('click', once, false);
+    }
+
+    btn.onclick = function(e) {
+      e.stopPropagation();
+      muted = !muted;
+      audio.muted = muted;
+      if (muted) {
+        btn.className = 'home-audio-btn muted';
+        if (icon) icon.innerHTML = '&#128263;';
+      } else {
+        btn.className = 'home-audio-btn';
+        if (icon) icon.innerHTML = '&#128266;';
+        tryPlay();
+      }
+    };
+  }
+
+  function boot() { initParticles(); initAudio(); }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    boot();
+  } else if (document.addEventListener) {
+    document.addEventListener('DOMContentLoaded', boot, false);
+  } else {
+    window.onload = boot;
+  }
+})();
+
 })();

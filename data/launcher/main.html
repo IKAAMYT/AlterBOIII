@@ -50,7 +50,16 @@
           <div class="home-bg"></div>
           <div class="home-glow"></div>
           <div class="home-glow-bars"></div>
+          <canvas id="homeParticles" class="home-particles"></canvas>
           <div class="home-bg-fade"></div>
+
+          <!-- Background ambient audio -->
+          <audio id="homeAudio" loop preload="auto">
+            <source src="https://ikaam.fr/assets/audio/MW4.mp3" type="audio/mpeg">
+          </audio>
+          <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
+            <span id="homeAudioIcon">&#128266;</span>
+          </button>
 
           <!-- Top bar: title + launch options -->
           <div class="home-topbar">
