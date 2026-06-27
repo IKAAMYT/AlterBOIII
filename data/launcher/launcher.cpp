@@ -19,9 +19,6 @@
 #include <rapidjson/writer.h>
 
 #include <thread>
-#include <fstream>
-#include <cctype>
-#include <iterator>
 #include <atomic>
 #include <mutex>
 #include <map>
@@ -104,23 +101,6 @@ std::string verify_progress_details;
 std::vector<std::string> verify_changed_files;
 std::atomic<bool> verify_running{false};
 std::atomic<bool> verify_cancel_requested{false};
-
-// AlterBO3 (IKAAM): mod downloader state
-std::mutex download_mutex;
-std::string download_status_state; // idle | downloading | done | error
-std::string download_status_name;  // current file name
-double download_progress_percent = 0.0;
-std::string download_progress_details;
-std::atomic<bool> download_running{false};
-
-void set_download_status(const std::string &state, const std::string &name,
-                         double pct, const std::string &details) {
-  std::lock_guard lock(download_mutex);
-  download_status_state = state;
-  download_status_name = name;
-  download_progress_percent = pct;
-  download_progress_details = details;
-}
 
 void set_verify_status(const std::string &msg, double pct,
                        const std::string &details) {
@@ -1296,147 +1276,6 @@ bool run() {
       "getVersion",
       [](const std::vector<html_argument> & /*params*/) -> CComVariant {
         return CComVariant(SHORTVERSION);
-      });
-
-  // AlterBO3 (IKAAM): download a mod via torrent using bundled aria2c.
-  // params[0] = .torrent URL (or magnet), params[1] = display name
-  window.get_html_frame()->register_callback(
-      "downloadModFile",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.size() < 2 || !params[0].is_string() ||
-            !params[1].is_string()) {
-          return CComVariant("badargs");
-        }
-        if (download_running.exchange(true)) {
-          return CComVariant("busy");
-        }
-
-        const auto source = params[0].get_string();
-        const auto filename = params[1].get_string();
-
-        std::thread([source, filename]() {
-          set_download_status("downloading", filename, 0.0, "Préparation...");
-
-          char cwd[MAX_PATH];
-          GetCurrentDirectoryA(sizeof(cwd), cwd);
-          const auto game_dir = std::filesystem::path(cwd);
-          const auto aria = game_dir / "tools" / "aria2c.exe";
-
-          if (!std::filesystem::exists(aria)) {
-            set_download_status("error", filename, 0.0,
-                                "aria2c.exe introuvable (dossier tools)");
-            download_running = false;
-            return;
-          }
-
-          // aria2c writes a status line per second on stdout; we redirect it
-          // to a temp log and parse the percentage from it.
-          const auto log_path = game_dir / "tools" / "aria2_progress.log";
-          std::filesystem::remove(log_path);
-
-          // Build command: download torrent/magnet into the game dir, seed 0s.
-          std::string cmd = "\"" + aria.string() + "\"" + " --dir=\"" +
-                            game_dir.string() + "\"" +
-                            " --seed-time=0 --summary-interval=1" +
-                            " --console-log-level=notice" +
-                            " --bt-stop-timeout=0 --allow-overwrite=true" +
-                            " \"" + source + "\"";
-
-          // Launch aria2c hidden, stdout -> log file.
-          SECURITY_ATTRIBUTES sa{};
-          sa.nLength = sizeof(sa);
-          sa.bInheritHandle = TRUE;
-          HANDLE log_handle = CreateFileA(
-              log_path.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa,
-              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-          STARTUPINFOA si{};
-          si.cb = sizeof(si);
-          si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-          si.wShowWindow = SW_HIDE;
-          si.hStdOutput = log_handle;
-          si.hStdError = log_handle;
-          PROCESS_INFORMATION pi{};
-
-          std::string mutable_cmd = cmd;
-          BOOL ok = CreateProcessA(nullptr, mutable_cmd.data(), nullptr,
-                                   nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
-                                   nullptr, &si, &pi);
-          if (!ok) {
-            if (log_handle)
-              CloseHandle(log_handle);
-            set_download_status("error", filename, 0.0,
-                                "Impossible de lancer aria2c");
-            download_running = false;
-            return;
-          }
-
-          // Poll: read the log, extract the latest "(NN%)" token.
-          while (WaitForSingleObject(pi.hProcess, 500) == WAIT_TIMEOUT) {
-            std::ifstream lf(log_path, std::ios::binary);
-            if (lf.is_open()) {
-              std::string content((std::istreambuf_iterator<char>(lf)),
-                                  std::istreambuf_iterator<char>());
-              lf.close();
-              auto ppos = content.rfind('%');
-              if (ppos != std::string::npos && ppos > 0) {
-                size_t start = ppos;
-                while (start > 0 &&
-                       (isdigit((unsigned char)content[start - 1]) ||
-                        content[start - 1] == '.')) {
-                  start--;
-                }
-                std::string num = content.substr(start, ppos - start);
-                try {
-                  double pct = num.empty() ? 0.0 : std::stod(num);
-                  set_download_status("downloading", filename, pct, num + "%");
-                } catch (...) {
-                }
-              }
-            }
-          }
-
-          DWORD exit_code = 1;
-          GetExitCodeProcess(pi.hProcess, &exit_code);
-          CloseHandle(pi.hProcess);
-          CloseHandle(pi.hThread);
-          if (log_handle)
-            CloseHandle(log_handle);
-          std::error_code ec;
-          std::filesystem::remove(log_path, ec);
-
-          if (exit_code == 0) {
-            set_download_status("done", filename, 100.0, "Terminé");
-          } else {
-            set_download_status("error", filename, 0.0,
-                                "Échec du téléchargement");
-          }
-          download_running = false;
-        }).detach();
-
-        return CComVariant("started");
-      });
-
-  // AlterBO3 (IKAAM): poll download status as JSON
-  window.get_html_frame()->register_callback(
-      "getDownloadStatus",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::lock_guard lock(download_mutex);
-        rapidjson::Document doc;
-        doc.SetObject();
-        auto &al = doc.GetAllocator();
-        doc.AddMember("state",
-                      rapidjson::Value(download_status_state.c_str(), al), al);
-        doc.AddMember("name",
-                      rapidjson::Value(download_status_name.c_str(), al), al);
-        doc.AddMember("progress", download_progress_percent, al);
-        doc.AddMember("details",
-                      rapidjson::Value(download_progress_details.c_str(), al),
-                      al);
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        doc.Accept(writer);
-        return CComVariant(buffer.GetString());
       });
 
   window.get_html_frame()->register_callback(
@@ -2665,17 +2504,116 @@ std::filesystem::path get_launcher_ui_file() {
 // Download them once from the IKAAM GitHub (raw) so the launcher renders.
 // This NEVER overwrites existing files — it only fills in what's absent,
 // so it can't undo local edits (unlike the disabled auto-updater).
+// AlterBO3 (IKAAM): reads a remote update manifest from the repo and returns
+// it parsed. The manifest (update.json on branch main) looks like:
+//   { "version": "5.1.0",
+//     "exe_url":
+//     "https://github.com/IKAAMYT/AlterBOIII/releases/download/v5.1.0/alterbo3.exe",
+//     "ui_version": "5.1.0" }
+namespace {
+struct update_manifest {
+  bool ok = false;
+  std::string version;
+  std::string exe_url;
+  std::string ui_version;
+};
+
+// Returns true if remote version string is newer than local (simple numeric
+// dotted compare, e.g. "5.1.0" > "5.0.3").
+bool is_newer_version(const std::string &remote, const std::string &local) {
+  auto split = [](const std::string &v) {
+    std::vector<int> parts;
+    std::string cur;
+    for (char c : v) {
+      if (c == '.') {
+        parts.push_back(cur.empty() ? 0 : std::atoi(cur.c_str()));
+        cur.clear();
+      } else if (c >= '0' && c <= '9') {
+        cur += c;
+      }
+    }
+    if (!cur.empty())
+      parts.push_back(std::atoi(cur.c_str()));
+    return parts;
+  };
+  auto r = split(remote);
+  auto l = split(local);
+  const size_t n = r.size() > l.size() ? r.size() : l.size();
+  for (size_t i = 0; i < n; ++i) {
+    const int rv = i < r.size() ? r[i] : 0;
+    const int lv = i < l.size() ? l[i] : 0;
+    if (rv != lv)
+      return rv > lv;
+  }
+  return false;
+}
+
+update_manifest fetch_update_manifest() {
+  update_manifest m{};
+  static const char *url = "https://raw.githubusercontent.com/IKAAMYT/"
+                           "AlterBOIII/main/update.json";
+  const auto data = utils::http::get_data(url);
+  if (!data || data->empty()) {
+    return m;
+  }
+
+  rapidjson::Document doc;
+  doc.Parse(data->c_str());
+  if (doc.HasParseError() || !doc.IsObject()) {
+    return m;
+  }
+  if (doc.HasMember("version") && doc["version"].IsString()) {
+    m.version = doc["version"].GetString();
+  }
+  if (doc.HasMember("exe_url") && doc["exe_url"].IsString()) {
+    m.exe_url = doc["exe_url"].GetString();
+  }
+  if (doc.HasMember("ui_version") && doc["ui_version"].IsString()) {
+    m.ui_version = doc["ui_version"].GetString();
+  }
+  m.ok = true;
+  return m;
+}
+} // namespace
+
 void ensure_launcher_ui() {
   static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
                             "AlterBOIII/main/data/launcher/";
-  static const char *files[] = {"main.html", "main.css", "main.js"};
+  static const char *files[] = {"main.html", "main.css", "main.js",
+                                "home_splash.jpg", "bigboiii.jpg"};
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
+  const auto ui_version_file = ui_dir / "ui_version.txt";
+
+  // Decide whether a UI refresh is needed: either files are missing, or the
+  // remote ui_version is newer than what we last stored locally.
+  const auto manifest = fetch_update_manifest();
+
+  std::string local_ui_version;
+  utils::io::read_file(ui_version_file.string(), &local_ui_version);
+
+  bool force_refresh = false;
+  if (manifest.ok && !manifest.ui_version.empty() &&
+      is_newer_version(manifest.ui_version, local_ui_version)) {
+    force_refresh = true;
+  }
 
   for (const auto *name : files) {
     const auto target = ui_dir / name;
+
+    // AlterBO3 (IKAAM): consider a file "present" only if it exists AND is not
+    // suspiciously small (a 0-byte or truncated file from a failed earlier
+    // download would otherwise block the re-download and leave e.g. a missing
+    // background image).
+    bool present = false;
     if (utils::io::file_exists(target.string())) {
-      continue; // already present — leave it untouched
+      std::error_code fsec;
+      const auto sz = std::filesystem::file_size(target, fsec);
+      present = !fsec && sz > 256; // anything smaller is treated as invalid
+    }
+
+    if (!force_refresh && present) {
+      continue; // present and valid — leave it
     }
 
     const auto url = std::string(base) + name;
@@ -2684,6 +2622,68 @@ void ensure_launcher_ui() {
       utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
     }
+  }
+
+  // Remember the UI version we just installed.
+  if (force_refresh && manifest.ok && !manifest.ui_version.empty()) {
+    utils::io::write_file(ui_version_file.string(), manifest.ui_version);
+  }
+}
+
+// AlterBO3 (IKAAM): self-update for the launcher exe. On launch we compare our
+// compiled SHORTVERSION with the remote manifest; if the remote is newer we
+// download the new exe next to the current one, swap them, and relaunch.
+void check_self_update() {
+  const auto manifest = fetch_update_manifest();
+  if (!manifest.ok || manifest.version.empty() || manifest.exe_url.empty()) {
+    return;
+  }
+
+  if (!is_newer_version(manifest.version, SHORTVERSION)) {
+    return; // already up to date
+  }
+
+  // Download the new exe to a temporary file beside the current one.
+  const auto data = utils::http::get_data(manifest.exe_url);
+  if (!data || data->size() < 1024) {
+    return; // failed / suspiciously small — abort silently
+  }
+
+  char cur_path[MAX_PATH];
+  GetModuleFileNameA(nullptr, cur_path, sizeof(cur_path));
+  const std::filesystem::path self = cur_path;
+  const auto new_file = self.string() + ".new";
+  const auto old_file = self.string() + ".old";
+
+  if (!utils::io::write_file(new_file, *data)) {
+    return;
+  }
+
+  std::error_code ec;
+  // Move current exe out of the way, put the new one in place.
+  std::filesystem::remove(old_file, ec);
+  std::filesystem::rename(self, old_file, ec);
+  if (ec) {
+    std::filesystem::remove(new_file, ec);
+    return;
+  }
+  std::filesystem::rename(new_file, self, ec);
+  if (ec) {
+    // try to restore
+    std::filesystem::rename(old_file, self, ec);
+    return;
+  }
+
+  // Relaunch the updated exe and quit this (old) process.
+  STARTUPINFOA si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  std::string cmd = "\"" + self.string() + "\"";
+  if (CreateProcessA(self.string().c_str(), cmd.data(), nullptr, nullptr, FALSE,
+                     0, nullptr, nullptr, &si, &pi)) {
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    ExitProcess(0);
   }
 }
 } // namespace launcher
