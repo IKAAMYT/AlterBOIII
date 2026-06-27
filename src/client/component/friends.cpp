@@ -547,6 +547,20 @@ struct component final : client_component {
 
     scheduler::once([] { fetch_public_ip(); }, scheduler::async, 2000ms);
 
+    // AlterBO3 (IKAAM): try to advertise our brand in the Steam rich presence.
+    // Steam shows the *game name* (Black Ops III) from the AppID and that can't
+    // be changed, but we can publish extra rich-presence keys. We set a couple
+    // of common display keys so that, where Steam honours them, our brand line
+    // ("AlterBOIII par IKAAM") shows under the game name. If Steam ignores the
+    // token for this AppID, nothing breaks — the game name simply stays alone.
+    scheduler::loop(
+        [] {
+          steam_proxy::set_rich_presence("steam_display", "#StatusFull");
+          steam_proxy::set_rich_presence("status", "AlterBOIII par IKAAM");
+          steam_proxy::set_rich_presence("StatusFull", "AlterBOIII par IKAAM");
+        },
+        scheduler::async, 15s);
+
     // Poll for incoming Steam invites via callback 337
     scheduler::loop(
         [] {
