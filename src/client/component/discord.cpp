@@ -8,6 +8,8 @@
 
 #include <discord_rpc.h>
 #include <utils/string.hpp>
+#include <utils/io.hpp>
+#include <utils/properties.hpp>
 
 #include <ctime>
 #include <unordered_map>
@@ -367,13 +369,30 @@ void update_discord() {
   }
 }
 
+void discord_log(const std::string &line) {
+  // AlterBO3 (IKAAM): write a diagnostic line to a file we can inspect, since
+  // printf output isn't visible in a normal launch.
+  try {
+    const auto path =
+        utils::properties::get_appdata_path() / "discord_log.txt";
+    const auto stamp = std::to_string(time(nullptr));
+    utils::io::write_file(path.string(), "[" + stamp + "] " + line + "\n",
+                          true);
+    OutputDebugStringA(("[AlterBO3 Discord] " + line + "\n").c_str());
+  } catch (...) {
+  }
+}
+
 void ready(const DiscordUser *request) {
   SetEnvironmentVariableA("discord_user", request->userId);
-  printf("Discord: Ready: %s - %s\n", request->userId, request->username);
+  discord_log(std::string("READY connected as ") +
+              (request->username ? request->username : "?") + " (" +
+              (request->userId ? request->userId : "?") + ")");
 }
 
 void errored(const int error_code, const char *message) {
-  printf("Discord: Error (%i): %s\n", error_code, message);
+  discord_log("ERROR " + std::to_string(error_code) + ": " +
+              (message ? message : "?"));
 }
 } // namespace
 
@@ -393,6 +412,8 @@ public:
     handlers.disconnected = errored;
 
     Discord_Initialize(DISCORD_APP_ID, &handlers, 1, nullptr);
+    discord_log(std::string("Discord_Initialize called with App ID ") +
+                DISCORD_APP_ID);
 
     scheduler::loop(Discord_RunCallbacks, scheduler::pipeline::async, 1s);
     scheduler::loop(update_discord, scheduler::pipeline::main, 5s);
