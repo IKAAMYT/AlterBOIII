@@ -17,7 +17,7 @@ void updater_ui::update_files(const std::vector<file_info> &files) {
   this->downloading_files_.clear();
 
   this->progress_ui_ = {game::is_headless()};
-  this->progress_ui_.set_title("AlterBO3 Updater");
+  this->progress_ui_.set_title("Mise à jour AlterBOIII");
   this->progress_ui_.show(false);
 
   // Is it good to add artificial sleeps?
@@ -98,10 +98,10 @@ void updater_ui::update_file_name() const {
   const auto total_file_count = this->get_total_files();
 
   if (downloaded_file_count == total_file_count) {
-    this->progress_ui_.set_line(1, "Update successful.");
+    this->progress_ui_.set_line(1, "Mise à jour terminée.");
   } else {
     this->progress_ui_.set_line(
-        1, utils::string::va("Updating files... (%zu/%zu)",
+        1, utils::string::va("Téléchargement... (%zu/%zu)",
                              downloaded_file_count, total_file_count));
   }
 
