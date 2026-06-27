@@ -1,409 +1,73 @@
-# Ezz BOIII ☄️: Call of Duty® Black Ops III Client
+<div align="center">
 
-[![github](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/Ezz-lol/boiii-free)
+<img src="https://raw.githubusercontent.com/IKAAMYT/AlterBOIII/main/data/launcher/home_splash.jpg" alt="AlterBOIII" width="100%">
 
----
+# AlterBOIII
 
-> [!NOTE]
-> Feel free to open up Pull requests 😑
+**Le client communautaire IKAAM pour Call of Duty: Black Ops III**
 
----
+Multijoueur · Zombies · Workshop · Mises à jour automatiques
 
-## Table of Contents
+[![Télécharger](https://img.shields.io/badge/Télécharger-AlterBOIII.7z-f2c411?style=for-the-badge)](https://ikaam.fr/COD/downloads/AlterBOIII.7z)
+[![Discord](https://img.shields.io/badge/Discord-Rejoindre-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BdkJ5DukUm)
+[![Site](https://img.shields.io/badge/Site-ikaam.fr-7ee6d0?style=for-the-badge)](https://ikaam.fr)
 
-- [About BOIII](#about-boiii)
-- [Client Download](#client-download)
-- [Prerequisites](#prerequisites)
-- [Install Instructions](#install-instructions)
-- [Loading Mods & Custom Maps](#loading-mods--custom-maps)
-- [Workshop Downloader](#workshop-downloader)
-- [Command Line Arguments](#command-line-arguments)
-- [Hosting a Dedicated Server](#hosting-a-dedicated-server)
-  - [Requirements](#requirements)
-  - [Server Setup](#server-setup)
-  - [Connecting](#connecting)
-  - [Port Forwarding Alternatives](#port-forwarding-alternatives)
-- [Zombies Server Setup](#zombies-server-setup)
-- [Compile from Source](#compile-from-source)
-- [GSC Scripting Additions](#gsc-scripting-additions)
-- [Credits](#credits)
-- [Disclaimer](#disclaimer)
+</div>
 
 ---
 
-## About BOIII
+## À propos
 
-BOIII is a free, community-driven modification for Call of Duty: Black Ops III that removes Steam ownership verification and enhances the multiplayer and zombies experience. Whether you own the game or not, BOIII lets you jump in and play!
+**AlterBOIII** est un launcher maison qui s'installe par-dessus une copie **légale** de Black Ops III et débloque le multijoueur en ligne, le mode Zombies et les maps custom du Workshop, le tout dans une interface soignée aux couleurs d'IKAAM.
 
-**Key Features:**
-- ✅ No Steam ownership required
-- 🌐 Cross-platform server browser
-- 🎮 Full multiplayer & zombies support
-- 🗺️ Custom maps and mods support
-- 🔧 Dedicated server hosting
-- 🎨 Steam Workshop integration
+C'est un fork communautaire pensé pour être simple : tu télécharges, tu extrais, tu lances. Le launcher gère le reste, y compris ses propres mises à jour.
 
----
+## Fonctionnalités
 
-## Client Download
+- 🎯 **Multijoueur en ligne** — serveurs communautaires, compteurs de joueurs et de parties en direct
+- 🧟 **Zombies** — toutes les maps jouables en solo ou en coop
+- 🗺️ **Workshop intégré** — recherche, filtres, aperçus et téléchargement des maps custom en un clic
+- ⚡ **Mises à jour automatiques** — le launcher et son interface se mettent à jour seuls
+- 🎨 **Interface maison** — design IKAAM, localisée en français
+- 🔊 **Ambiance** — accueil animé avec particules et son d'ambiance réglable
 
-**Latest Release:** [Download BOIII Client](https://github.com/Ezz-lol/boiii-free/releases/latest)
+## Installation
 
-**Available Downloads:**
-- `boiii.exe` - Main BOIII client executable
-- `BOIII-Full.zip` - Complete package with all files
-- Source code available on GitHub
+1. **[Télécharge `AlterBOIII.7z`](https://ikaam.fr/COD/downloads/AlterBOIII.7z)**
+2. Extrais l'archive dans ton dossier **Black Ops III** (7-Zip requis)
+3. Lance **`AlterBOIII.exe`**
+4. Entre ton pseudo et clique sur **Jouer** 🎮
 
-**Quick Links:**
-- 📖 [Full Installation Guide](https://forum.ezz.lol/topic/5/bo3-guide)
-- 💬 [Discord Community](https://dc.ezz.lol)
-- 🐛 [Report Issues](https://github.com/Ezz-lol/boiii-free/issues)
+> Pour jouer en ligne, un VPN type [Radmin VPN](https://www.radmin-vpn.com/) peut être utilisé pour simuler un réseau local entre amis.
 
----
+📺 **[Tuto vidéo complet](https://youtu.be/GMcwgc1sUd4)**
 
-## Prerequisites
+## Prérequis
 
-- **Operating System:** Windows 10/11 (64-bit)
-- **Game Files:** Call of Duty: Black Ops III installation
-- **Storage:** ~60GB free space (for full game + DLC)
-- **Required:** Steam
+| | |
+|---|---|
+| **OS** | Windows 10 / 11 |
+| **DirectX** | 11 |
+| **RAM** | 6 Go |
+| **GPU** | GTX 970 ou équivalent |
+| **Jeu** | Une copie Steam **légale** de Black Ops III |
 
----
+## Liens
 
-## Install Instructions
+- 🌐 Site : [ikaam.fr](https://ikaam.fr)
+- 💬 Discord : [discord.gg/BdkJ5DukUm](https://discord.gg/BdkJ5DukUm)
+- 🎮 Page AlterCOD : [ikaam.fr/AlterCOD](https://ikaam.fr/AlterCOD)
 
-1. **Download** the latest `BOIII.exe` from [Releases](https://github.com/ezz-boiii/boiii/releases/latest)
-2. **Place** the executable in your Call of Duty: Black Ops III game directory
-3. **Run** `BOIII.exe`
-4. **Play!** 🎮
+## Avertissement légal
 
-> [!TIP]
-> The default Steam installation path is usually:
-> `C:/Program Files (x86)/Steam/steamapps/common/Call of Duty Black Ops III`
+AlterBOIII est un projet **communautaire et gratuit**. Il s'installe par-dessus une copie légale de Call of Duty: Black Ops III et ne distribue **aucun fichier** du jeu original.
+
+AlterBOIII et IKAAM ne sont **ni affiliés ni approuvés** par Activision ou Treyarch. *Call of Duty* et *Black Ops III* sont des marques de leurs propriétaires respectifs. Procure-toi le jeu légalement via Steam.
 
 ---
 
-## Where Can I Get the Game?
+<div align="center">
 
-### Option 1: Steam 
-Purchase and download from [Steam Store](https://store.steampowered.com/app/311210/Call_of_Duty_Black_Ops_III/) 💰 \
-If you struggle with this step, join our [Discord](https://dc.ezz.lol) and ask for help!
----
+Fait avec ❤️ par **IKAAM**
 
-## Loading Mods & Custom Maps
-
-> [!TIP]
-> **Default Workshop Location (Steam):**
-> `C:/Program Files (x86)/Steam/steamapps/workshop/content/311210/`
-> 
-> **BOIII comes with a built-in Workshop Downloader** - see the [Workshop Downloader](#workshop-downloader) section!
-
-**Installation Steps:**
-
-1. **Download Mods/Maps**
-   - Use the built-in BOIII Workshop Downloader
-   - Or copy from your Steam workshop folder (if you own the game)
-   - Or use external workshop downloaders
-
-2. **Create Folders** (if they don't exist):
-   ```
-   Call of Duty Black Ops III/
-     ├─ mods/
-     └─ usermaps/
-   ```
-
-3. **Place Files:**
-   - **Mods:** Extract to `mods/` folder
-     - Example: `mods/zombie_mod_v2/zone/`
-     - The folder structure should be: `mods/[MOD_NAME]/zone/`
-   - **Custom Maps:** Extract to `usermaps/` folder
-     - Example: `usermaps/zm_castle/zone/`
-     - The folder structure should be: `usermaps/[MAP_NAME]/zone/`
-
-4. **Launch Ezz BOIII** and select your mod/map from the menu! 🎮
-
-> [!IMPORTANT]
-> **For Workshop Downloads from Steam:**
-> - Workshop items are in numbered folders (e.g., `311210/1234567890/`)
-> - Copy the entire numbered folder
-> - Rename it to match the mod/map name if needed
-> - Make sure the `zone/` folder is inside
-
-**Troubleshooting:**
-- If a mod shows "unsafe Lua" warning, launch with `-unsafe-lua` argument
-- If a map doesn't load, verify the folder structure matches `[type]/[name]/zone/`
-- Check [forum.ezz.lol](https://forum.ezz.lol/topic/5/bo3-guide) for detailed guides
-
----
-
-## Workshop Downloader
-
-**BOIII has a built-in Steam Workshop Downloader!** 🎉
-
-You can download Steam Workshop content directly through the BOIII client without needing Steam ownership.
-
-**How to use:**
-1. Launch `boiii.exe`
-2. Navigate to the Workshop Downloader section
-3. Enter the Workshop ID or URL
-4. Download directly to your game folder
-
-**External Tool (Alternative):**
-If you prefer a standalone tool, check out [BOIIIWD by faroukbmiled](https://github.com/faroukbmiled/BOIIIWD)
-
-**Finding Workshop IDs:**
-- Go to any Steam Workshop item page
-- Look at the URL: `steamcommunity.com/sharedfiles/filedetails/?id=XXXXXXXXX`
-- The numbers after `id=` are the Workshop ID
-
----
-
-## Command Line Arguments
-
-Launch BOIII with these arguments for extra features:
-
-| Argument | Description |
-|:---------|:------------|
-| `-unsafe-lua` | Allow mods to use unsafe Lua functions (required for some mods like All-Around Enhancement) |
-| `-dedicated` | Launch as a dedicated server |
-| `-nosteam` | Bypass Steam entirely |
-| `-nointro` | Skip intro videos |
-| `-windowed` | Launch in windowed mode |
-| `-safe` | Launch in safe mode (disable mods) |
-| `-console` | Enable developer console |
-| `-port XXXX` | Set server port (default: 27017) |
-| `-launch` | Start the game immediately, skipping some launcher UI and pre-checks |
-| `-noupdate` | Disable automatic updates (not recommended) |
-| `-update` | Force enable updates (including host binary in debug builds) |
-| `-norelaunch` | Skip automatic relaunch after updates |
-| `-headless` | Run in headless mode (no GUI) |
-| `-nopatch` | Disable selected runtime patches |
-| `-plugins` | Load additional plugins from the `plugins/` directory |
-| `-trimlogs` | Trim or rotate old log files on startup |
-| `-keep-launcher` | Keep the launcher process running after starting the game |
-| `-noconsole` | Suppress the external launcher console window |
-| `-nobranding` | Disable EZZ watermark and console prefix |
-| `-noratelimit` | Disable rate limiting in dedicated server |
-| `-mitigatepacketspam` | In dedicated server, attempt to reduce unnecessary reliable command packets sent by some custom maps' scripts. Fixes Kowloon and Daybreak client load-in failures. |
-| `-dump` | Dump game or server executable to file in containing directory after Arxan unpack |
-
-**Example:**
-```bash
-boiii.exe -nointro -console -unsafe-lua
-```
-
-> [!WARNING]
-> The `-unsafe-lua` argument is **required** for certain mods that need to modify the UI, menus, or game scripts (like All-Around Enhancement Mod). Only use this with trusted mods!
->
-> The `-headless` option may not behave correctly on non-server systems.
-
----
-
-## Hosting a Dedicated Server
-
-### Requirements
-
-- ✅ [Visual C++ 2015-2022 Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
-- ✅ Text editor ([VS Code](https://code.visualstudio.com/), [Notepad++](https://notepad-plus-plus.org/), or [Sublime Text](https://www.sublimetext.com/))
-- ✅ Computer or VPS with 24/7 uptime
-- ✅ Decent internet connection (10+ Mbps upload recommended)
-- ✅ Basic technical knowledge
-- ⚠️ Port forwarding access (or see [alternatives](#port-forwarding-alternatives))
-
-### Server Setup
-
-**For detailed server setup instructions, check out:**
-🔗 [BO3 Server Installer by framilano](https://github.com/framilano/BlackOps3ServerInstaller)
-
-**Quick Steps:**
-
-1. **Download** BO3 Unranked Dedicated Server from Steam (Tools section)
-
-2. **Add BOIII files** to your server directory
-
-3. **Configure server settings:**
-   - Edit `zone/dedicated.cfg`
-   - Set server name, map rotation, game mode
-   - Configure player count and rules
-
-4. **Setup firewall rules:**
-   - Allow UDP port 27017 (or your custom port)
-   - Allow TCP port 27017 (optional but recommended)
-
-5. **Launch server:**
-   ```bash
-   boiii.exe -dedicated
-   ```
-
-6. **Monitor** the console for any errors
-
-### Connecting
-
-**Option 1: Server Browser**
-- Open Ezz BOIII client
-- Navigate to "Server Browser"
-- Find your server and join!
-
-**Option 2: Direct Connect**
-- Open console (press `~`)
-- Type: `/connect IP:PORT`
-
-**Examples:**
-- Local: `/connect 192.168.1.100:27017`
-- WAN: `/connect 45.123.67.89:27017`
-
-> [!TIP]
-> Find your local IP: Press `Win + R`, type `cmd`, then type `ipconfig`
-> Find your WAN IP: Visit [WhatIsMyIP.com](https://www.whatismyip.com/)
-
-### Port Forwarding Alternatives
-
-Don't want to mess with port forwarding? Use these VPN tools to play with friends! 😎
-
-**Recommended Options:**
-- **ZeroTier** (Best for gaming)
-- **Radmin VPN** (Easy setup)
-- **Hamachi** (Classic choice)
-
-**Setup:**
-1. Download and install your chosen VPN tool
-2. Create/join a network
-3. Start your BOIII server
-4. Friends connect using your VPN IP: `/connect VPN_IP:27017`
-
----
-
-## Zombies Server Setup
-
-Hosting Zombies requires additional files that don't come with the dedicated server package.
-
-### Required Files
-
-Copy these from your full game installation to your dedicated server:
-
-**Common Zombies Files:**
-```
-zone/en_zm_patch.ff
-zone/en_zm_common.ff
-zone/zm_patch.ff
-zone/zm_common.fd
-zone/zm_common.ff
-zone/zm_levelcommon.ff
-```
-
-**Map-Specific Files (Example: Shadows of Evil):**
-```
-zone/en_zm_zod.ff
-zone/en_zm_zod_patch.ff
-zone/zm_zod.ff
-zone/zm_zod_patch.ff
-```
-
-### Installation
-
-1. **Copy files** from `Call of Duty Black Ops III/zone/` to your server's `zone/` folder
-2. **Repeat** for each map you want to host
-3. **Skip** `.xpak` files (these are textures/sounds that servers don't need)
-
-> [!NOTE]
-> If the server crashes on startup, check `console_mp.log` for missing zone files
-
-**Common Maps:**
-- `zm_zod` - Shadows of Evil
-- `zm_factory` - The Giant
-- `zm_castle` - Der Eisendrache
-- `zm_island` - Zetsubou No Shima
-- `zm_stalingrad` - Gorod Krovi
-- `zm_genesis` - Revelations
-
----
-
-## Compile from Source
-
-Want to build Ezz BOIII yourself? Here's how! 🔨
-
-### Prerequisites
-
-- [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Community Edition is free)
-- [Git](https://git-scm.com/downloads)
-- Windows 10/11 SDK
-- [clang-format](https://releases.llvm.org/) (for C/C++ formatting — install via VS "C++ Clang tools" component or standalone LLVM)
-- [StyLua](https://github.com/JohnnyMorganz/StyLua/releases) (for Lua formatting)
-- VS Build Tools ([vs config you can import to quickly get the right ones](https://app.filen.io/#/d/52faaefc-2331-4904-897f-97bc2b36e4f1%23373366412d6a5456715853426253475063347531343161793171796d726d7445))<img width="1128" height="399" alt="image" src="https://github.com/user-attachments/assets/8f3a7a4d-b933-4d47-a193-c67260b96f16" />
-
-
-### Build Steps
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Ezz-lol/boiii-free.git
-   cd boiii-free
-   ```
-
-2. **Initialize submodules:**
-   ```bash
-   git submodule update --init --recursive
-   ```
-
-3. **Generate project files:**
-   ```bash
-   generate.bat
-   ```
-
-4. **Open in Visual Studio:**
-   - Open `boiii.sln`
-   - Set configuration to `Release` and platform to `x64`
-   - Build the solution (Ctrl+Shift+B)
-
-5. **Find your build:**
-   - Output will be in `build/bin/x64/Release/`
-
-> [!TIP]
-> You can also use `build.bat` to compile directly from the command line!
-
----
-
-## GSC Scripting Additions
-
-This project supports loading raw GSC code with a more relaxed syntax and adds extra utility functions to make scripting and mod development easier.
-
-For the full guide and examples, see [docs/gsc-scripting.md](docs/gsc-scripting.md).
-
----
-
-## Credits
-
-**BOIII Development Team** 💪
-- Developers, contributors, and the entire BOIII community
-
-**Special Thanks:**
-- [Likeicareaboutit](https://github.com/Likeicareaboutit) - Steam Workshop Downloader
-- [framilano](https://github.com/framilano) - BO3 Server Installer
-- Everyone in the [BOIII Discord](https://dc.ezz.lol) community! 😎
-
-
----
-
-## Disclaimer
-
-This software has been created purely for the purposes of academic research and to preserve access to Call of Duty: Black Ops III multiplayer and zombies modes. It is not intended to be used to harm others or violate any terms of service.
-
-**Project maintainers are not responsible or liable for misuse of the software. Use responsibly.**
-
-This is a non-profit, community-driven project. We do not condone piracy. If you enjoy the game, please consider supporting the developers by purchasing it legally.
-
----
-
-<p align="center">
-  <strong>Join our community!</strong><br>
-  <a href="https://dc.ezz.lol">Discord</a> • 
-  <a href="https://github.com/Ezz-lol/boiii-free">GitHub</a> • 
-  <a href="https://github.com/Ezz-lol/boiii-free/issues">Report Issues</a> •
-  <a href="https://forum.ezz.lol/topic/5/bo3-guide">Installation Guide</a>
-</p>
-
-<p align="center">
-  Made with ❤️ by the BOIII community ☄️
-</p>
-
-
+</div>
