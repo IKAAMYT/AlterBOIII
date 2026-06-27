@@ -3824,15 +3824,15 @@ if (versionDisplay && creditsPopup) {
     }
     resize();
 
-    var COUNT = 46;
+    var COUNT = 120;
     for (var i = 0; i < COUNT; i++) {
       particles.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        r: 0.6 + Math.random() * 1.8,
-        sp: 0.2 + Math.random() * 0.7,
-        drift: (Math.random() - 0.5) * 0.4,
-        a: 0.15 + Math.random() * 0.5,
+        r: 0.5 + Math.random() * 2.2,
+        sp: 0.15 + Math.random() * 0.85,
+        drift: (Math.random() - 0.5) * 0.5,
+        a: 0.2 + Math.random() * 0.6,
         tw: Math.random() * 6.28
       });
     }
@@ -3875,6 +3875,24 @@ if (versionDisplay && creditsPopup) {
 
     audio.volume = 0.10;
     var muted = false;
+
+    // Volume slider
+    var slider = document.getElementById('homeVolumeSlider');
+    if (slider) {
+      slider.oninput = slider.onchange = function() {
+        var v = (parseInt(slider.value, 10) || 0) / 100;
+        audio.volume = v;
+        if (v === 0) {
+          muted = true; audio.muted = true;
+          btn.className = 'home-audio-btn muted';
+          if (icon) icon.innerHTML = '&#128263;';
+        } else {
+          muted = false; audio.muted = false;
+          btn.className = 'home-audio-btn';
+          if (icon) icon.innerHTML = '&#128266;';
+        }
+      };
+    }
 
     function tryPlay() {
       try { audio.play(); } catch (e) {}

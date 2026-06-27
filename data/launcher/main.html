@@ -57,9 +57,12 @@
           <audio id="homeAudio" loop preload="auto">
             <source src="https://ikaam.fr/assets/audio/MW4.mp3" type="audio/mpeg">
           </audio>
-          <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
-            <span id="homeAudioIcon">&#128266;</span>
-          </button>
+          <div class="home-audio-ctrl">
+            <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
+              <span id="homeAudioIcon">&#128266;</span>
+            </button>
+            <input type="range" class="home-volume-slider" id="homeVolumeSlider" min="0" max="100" value="10" title="Volume">
+          </div>
 
           <!-- Top bar: title + launch options -->
           <div class="home-topbar">
