@@ -327,6 +327,19 @@ file_updater::get_outdated_files(const std::vector<file_info> &files) const {
   std::vector<file_info> outdated_files{};
 
   for (const auto &info : files) {
+    // AlterBO3 (IKAAM): never treat our own exe or our custom launcher UI as
+    // outdated. Their hash will always differ from the upstream (Ezz) server,
+    // so without this they would re-appear in the updater on every launch.
+    const bool is_our_exe = info.name.ends_with(".exe") ||
+                            info.name == UPDATE_HOST_BINARY ||
+                            info.name == "AlterBOIII.exe";
+    const bool is_our_ui =
+        info.name.find("data/launcher/") != std::string::npos ||
+        info.name.find("data\\launcher\\") != std::string::npos;
+    if (is_our_exe || is_our_ui) {
+      continue;
+    }
+
     if (this->is_outdated_file(info)) {
       outdated_files.emplace_back(info);
     }
