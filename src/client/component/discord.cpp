@@ -101,7 +101,7 @@ static __declspec(noinline) bool seh_get_client_count(int max_clients,
 
 namespace discord {
 namespace {
-constexpr auto DISCORD_APP_ID = "967371125573177474";
+constexpr auto DISCORD_APP_ID = "1520258667071537233";
 
 time_t start_time = 0;
 time_t match_time = 0;
@@ -250,10 +250,11 @@ void update_discord() {
 
       dp.startTimestamp = start_time;
       dp.details = "BO3 via AlterBOIII";
-      dp.state = ui_level ? "Main Menu" : "Loading...";
-      dp.largeImageKey = "logo";
-      dp.largeImageText = "Playing BO3 via AlterBOIII!";
-      dp.smallImageKey = "sexy";
+      dp.state = ui_level ? "Menu principal" : "Chargement...";
+      dp.largeImageKey = "boiii";
+      dp.largeImageText = "AlterBOIII par IKAAM";
+      dp.smallImageKey = "logo";
+      dp.smallImageText = "AlterBOIII";
       Discord_UpdatePresence(&dp);
       return;
     }
@@ -334,13 +335,13 @@ void update_discord() {
     dp.state = state.c_str();
 
     const bool known_map = map_names.count(mapname) > 0;
-    dp.largeImageKey = known_map ? mapname.c_str() : "logo";
+    dp.largeImageKey = known_map ? mapname.c_str() : "boiii";
 
     std::string large_text =
         std::string(get_mode_name(is_mp, is_zm, is_cp)) + " - " + display_map;
     dp.largeImageText = large_text.c_str();
     dp.smallImageKey = "logo";
-    dp.smallImageText = "Playing BO3 via AlterBOIII!";
+    dp.smallImageText = "AlterBOIII";
 
     int max_clients = 0;
     try {
