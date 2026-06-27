@@ -3876,7 +3876,6 @@ if (versionDisplay && creditsPopup) {
     audio.volume = 0.10;
     var muted = false;
 
-    // Volume slider
     var slider = document.getElementById('homeVolumeSlider');
     if (slider) {
       slider.oninput = slider.onchange = function() {
