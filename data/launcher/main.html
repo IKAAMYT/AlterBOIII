@@ -50,16 +50,7 @@
           <div class="home-bg"></div>
           <div class="home-glow"></div>
           <div class="home-glow-bars"></div>
-          <canvas id="homeParticles" class="home-particles"></canvas>
           <div class="home-bg-fade"></div>
-
-          <!-- Background ambient audio -->
-          <audio id="homeAudio" loop preload="auto">
-            <source src="https://ikaam.fr/assets/audio/MW4.mp3" type="audio/mpeg">
-          </audio>
-          <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
-            <span id="homeAudioIcon">&#128266;</span>
-          </button>
 
           <!-- Top bar: title + launch options -->
           <div class="home-topbar">
@@ -171,7 +162,19 @@
             <h3 class="workshop-browse-title">Parcourir le Workshop</h3>
             <div class="workshop-browse-controls">
               <div class="workshop-filter-wrap">
-                <select id="workshopFilterSelect" class="workshop-filter-select">
+                <div class="ws-dropdown" id="wsFilterDropdown">
+                  <button type="button" class="ws-dropdown-toggle" id="wsFilterToggle">
+                    <span id="wsFilterLabel">Plus récents</span>
+                    <span class="ws-dropdown-arrow">&#9662;</span>
+                  </button>
+                  <div class="ws-dropdown-menu" id="wsFilterMenu">
+                    <div class="ws-dropdown-item selected" data-value="mostrecent">Plus récents</div>
+                    <div class="ws-dropdown-item" data-value="trend">Mieux notés</div>
+                    <div class="ws-dropdown-item" data-value="oldest">Plus anciens</div>
+                    <div class="ws-dropdown-item" data-value="alphabetical">Alphabétique</div>
+                  </div>
+                </div>
+                <select id="workshopFilterSelect" class="workshop-filter-select" style="display:none;">
                   <option value="mostrecent">Plus récents</option>
                   <option value="trend">Mieux notés</option>
                   <option value="oldest">Plus anciens</option>
@@ -213,7 +216,7 @@
           </div>
         </div>
         <div class="workshop-modal-footer">
-          <button type="button" class="btn" id="workshopModalViewBtn">View on Steam</button>
+          <button type="button" class="btn" id="workshopModalViewBtn">Voir sur Steam</button>
           <button type="button" class="btn btn-primary" id="workshopModalDownloadBtn">Télécharger</button>
         </div>
       </div>
@@ -271,7 +274,7 @@
           </div>
         </div>
         <div class="workshop-modal-footer">
-          <button type="button" class="btn" id="libraryModalViewBtn">View on Steam</button>
+          <button type="button" class="btn" id="libraryModalViewBtn">Voir sur Steam</button>
           <button type="button" class="btn btn-primary" id="libraryModalOpenBtn">Ouvrir le dossier</button>
         </div>
       </div>

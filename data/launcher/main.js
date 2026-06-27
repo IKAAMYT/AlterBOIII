@@ -999,9 +999,9 @@ function showWorkshopModal(item) {
                     : mSize > 1048576  ? (mSize / 1048576).toFixed(1) + ' MB'
                     : mSize > 1024     ? (mSize / 1024).toFixed(0) + ' KB'
                                        : mSize + ' B')
-                 : 'Unknown';
+                 : 'Inconnu';
   var modalSizeHtml = '<div class="workshop-modal-info-item">' +
-                      '<div class="workshop-modal-info-label">Size</div>' +
+                      '<div class="workshop-modal-info-label">Taille</div>' +
                       '<div class="workshop-modal-info-value">' + sStr +
                       '</div></div>';
 
@@ -1103,7 +1103,7 @@ function showLibraryModModal(item) {
                : mSize > 1024     ? (mSize / 1024).toFixed(0) + ' KB'
                                   : mSize + ' B';
     modalSizeHtml = '<div class="workshop-modal-info-item">' +
-                    '<div class="workshop-modal-info-label">Size</div>' +
+                    '<div class="workshop-modal-info-label">Taille</div>' +
                     '<div class="workshop-modal-info-value">' + sStr +
                     '</div></div>';
   }
@@ -2098,7 +2098,7 @@ document.getElementById('deleteAllModsBtn').onclick = function() {
     for (var ci = 0; ci < items.length; ci++) {
       var cItem = items[ci];
       var cName =
-          (cItem.name || cItem.folder || 'Unknown').replace(/</g, '&lt;');
+          (cItem.name || cItem.folder || 'Inconnu').replace(/</g, '&lt;');
       var cSz2 =
           parseInt(cItem.localSize, 10) || parseInt(cItem.file_size, 10) || 0;
       var cSzStr = '';
@@ -3400,7 +3400,7 @@ function renderFriendsList() {
   for (var i = 0; i < _friendsData.length; i++) {
     var f = _friendsData[i];
     var sid = (f.steam_id !== undefined) ? String(f.steam_id) : '';
-    var nm = f.name || 'Unknown';
+    var nm = f.name || 'Inconnu';
     html += '<div class="friend-item" data-steamid="' + sid + '">';
     html += '<div class="friend-icon">&#128100;</div>';
     html += '<div class="friend-info">';
@@ -3753,118 +3753,55 @@ if (versionDisplay && creditsPopup) {
 })();
 
 
-/* ===== AlterBO3 (IKAAM): Home particles + ambient audio ===== */
+/* ===== AlterBO3 (IKAAM): custom workshop filter dropdown ===== */
 (function() {
-  // ---------- Particles (golden, drifting upward) ----------
-  function initParticles() {
-    var canvas = document.getElementById('homeParticles');
-    if (!canvas || !canvas.getContext) return;
-    var ctx = canvas.getContext('2d');
-    var particles = [];
-    var W = 0, H = 0;
+  function initFilterDropdown() {
+    var dd = document.getElementById('wsFilterDropdown');
+    var toggle = document.getElementById('wsFilterToggle');
+    var menu = document.getElementById('wsFilterMenu');
+    var label = document.getElementById('wsFilterLabel');
+    var sel = document.getElementById('workshopFilterSelect');
+    if (!dd || !toggle || !menu || !sel) return;
 
-    function resize() {
-      var stage = canvas.parentNode;
-      W = stage ? stage.offsetWidth : 800;
-      H = stage ? stage.offsetHeight : 600;
-      canvas.width = W;
-      canvas.height = H;
-    }
-    resize();
+    var items = menu.getElementsByClassName('ws-dropdown-item');
 
-    var COUNT = 46;
-    for (var i = 0; i < COUNT; i++) {
-      particles.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        r: 0.6 + Math.random() * 1.8,
-        sp: 0.2 + Math.random() * 0.7,
-        drift: (Math.random() - 0.5) * 0.4,
-        a: 0.15 + Math.random() * 0.5,
-        tw: Math.random() * 6.28
-      });
-    }
-
-    function frame() {
-      if (!W || !H) { resize(); }
-      ctx.clearRect(0, 0, W, H);
-      for (var i = 0; i < particles.length; i++) {
-        var p = particles[i];
-        p.y -= p.sp;
-        p.x += p.drift;
-        p.tw += 0.04;
-        if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
-        if (p.x < -5) p.x = W + 5;
-        if (p.x > W + 5) p.x = -5;
-        var alpha = p.a * (0.6 + 0.4 * Math.sin(p.tw));
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
-        ctx.fillStyle = 'rgba(242,196,17,' + alpha.toFixed(3) + ')';
-        ctx.fill();
-      }
-      if (window.requestAnimationFrame) {
-        requestAnimationFrame(frame);
-      } else {
-        setTimeout(frame, 33);
-      }
-    }
-    frame();
-
-    if (window.addEventListener) {
-      window.addEventListener('resize', resize, false);
-    }
-  }
-
-  // ---------- Ambient audio (10% volume, mute toggle) ----------
-  function initAudio() {
-    var audio = document.getElementById('homeAudio');
-    var btn = document.getElementById('homeAudioBtn');
-    var icon = document.getElementById('homeAudioIcon');
-    if (!audio || !btn) return;
-
-    audio.volume = 0.10; // default 10%
-    var muted = false;
-
-    // Try to start playback (may be blocked until first interaction).
-    function tryPlay() {
-      try { var p = audio.play(); } catch (e) {}
-    }
-    tryPlay();
-    // Some engines only allow audio after a user gesture: start on first click.
-    if (document.addEventListener) {
-      var once = function() {
-        if (!muted) tryPlay();
-        document.removeEventListener('click', once, false);
-      };
-      document.addEventListener('click', once, false);
-    }
-
-    btn.onclick = function(e) {
+    toggle.onclick = function(e) {
       e.stopPropagation();
-      muted = !muted;
-      audio.muted = muted;
-      if (muted) {
-        btn.className = 'home-audio-btn muted';
-        if (icon) icon.innerHTML = '&#128263;'; // muted speaker
-      } else {
-        btn.className = 'home-audio-btn';
-        if (icon) icon.innerHTML = '&#128266;'; // speaker
-        tryPlay();
-      }
+      dd.className = (dd.className.indexOf('open') !== -1)
+        ? 'ws-dropdown' : 'ws-dropdown open';
     };
-  }
 
-  function boot() {
-    initParticles();
-    initAudio();
+    for (var i = 0; i < items.length; i++) {
+      (function(item) {
+        item.onclick = function(e) {
+          e.stopPropagation();
+          var val = item.getAttribute('data-value');
+          if (label) label.innerHTML = item.innerHTML;
+          // update hidden select + fire its change handler
+          sel.value = val;
+          for (var k = 0; k < items.length; k++) {
+            items[k].className = 'ws-dropdown-item';
+          }
+          item.className = 'ws-dropdown-item selected';
+          dd.className = 'ws-dropdown';
+          if (typeof sel.onchange === 'function') sel.onchange();
+        };
+      })(items[i]);
+    }
+
+    if (document.addEventListener) {
+      document.addEventListener('click', function() {
+        dd.className = 'ws-dropdown';
+      }, false);
+    }
   }
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    boot();
+    initFilterDropdown();
   } else if (document.addEventListener) {
-    document.addEventListener('DOMContentLoaded', boot, false);
+    document.addEventListener('DOMContentLoaded', initFilterDropdown, false);
   } else {
-    window.onload = boot;
+    window.onload = initFilterDropdown;
   }
 })();
 
