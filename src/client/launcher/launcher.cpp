@@ -2503,105 +2503,25 @@ std::filesystem::path get_launcher_ui_file() {
 // AlterBO3 (IKAAM): on first launch the custom UI files may be missing.
 // Download them once from the IKAAM GitHub (raw) so the launcher renders.
 // This NEVER overwrites existing files — it only fills in what's absent,
-// so it can't undo local edits (unlike the disabled auto-updater).
-// AlterBO3 (IKAAM): reads a remote update manifest from the repo and returns
-// it parsed. The manifest (update.json on branch main) looks like:
-//   { "version": "5.1.0",
-//     "exe_url":
-//     "https://github.com/IKAAMYT/AlterBOIII/releases/download/v5.1.0/alterbo3.exe",
-//     "ui_version": "5.1.0" }
-namespace {
-struct update_manifest {
-  bool ok = false;
-  std::string version;
-  std::string exe_url;
-  std::string ui_version;
-};
-
-// Returns true if remote version string is newer than local (simple numeric
-// dotted compare, e.g. "5.1.0" > "5.0.3").
-bool is_newer_version(const std::string &remote, const std::string &local) {
-  auto split = [](const std::string &v) {
-    std::vector<int> parts;
-    std::string cur;
-    for (char c : v) {
-      if (c == '.') {
-        parts.push_back(cur.empty() ? 0 : std::atoi(cur.c_str()));
-        cur.clear();
-      } else if (c >= '0' && c <= '9') {
-        cur += c;
-      }
-    }
-    if (!cur.empty())
-      parts.push_back(std::atoi(cur.c_str()));
-    return parts;
-  };
-  auto r = split(remote);
-  auto l = split(local);
-  const size_t n = r.size() > l.size() ? r.size() : l.size();
-  for (size_t i = 0; i < n; ++i) {
-    const int rv = i < r.size() ? r[i] : 0;
-    const int lv = i < l.size() ? l[i] : 0;
-    if (rv != lv)
-      return rv > lv;
-  }
-  return false;
-}
-
-update_manifest fetch_update_manifest() {
-  update_manifest m{};
-  static const char *url = "https://raw.githubusercontent.com/IKAAMYT/"
-                           "AlterBOIII/main/update.json";
-  const auto data = utils::http::get_data(url);
-  if (!data || data->empty()) {
-    return m;
-  }
-
-  rapidjson::Document doc;
-  doc.Parse(data->c_str());
-  if (doc.HasParseError() || !doc.IsObject()) {
-    return m;
-  }
-  if (doc.HasMember("version") && doc["version"].IsString()) {
-    m.version = doc["version"].GetString();
-  }
-  if (doc.HasMember("exe_url") && doc["exe_url"].IsString()) {
-    m.exe_url = doc["exe_url"].GetString();
-  }
-  if (doc.HasMember("ui_version") && doc["ui_version"].IsString()) {
-    m.ui_version = doc["ui_version"].GetString();
-  }
-  m.ok = true;
-  return m;
-}
-} // namespace
+// so it can't undo local edits.
 
 void ensure_launcher_ui() {
+  // AlterBO3 (IKAAM): download the custom launcher UI on first launch only.
+  // No version manifest, no ui_version.txt — if a file is missing locally we
+  // fetch it once; if it already exists we leave it alone. To push a new UI to
+  // existing users, they simply delete the file (or the whole data/launcher
+  // folder) and it will be re-downloaded on next launch.
   static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
                             "AlterBOIII/main/data/launcher/";
   static const char *files[] = {"main.html", "main.css", "main.js",
                                 "home_splash.jpg", "bigboiii.jpg"};
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
-  const auto ui_version_file = ui_dir / "ui_version.txt";
-
-  // Decide whether a UI refresh is needed: either files are missing, or the
-  // remote ui_version is newer than what we last stored locally.
-  const auto manifest = fetch_update_manifest();
-
-  std::string local_ui_version;
-  utils::io::read_file(ui_version_file.string(), &local_ui_version);
-
-  bool force_refresh = false;
-  if (manifest.ok && !manifest.ui_version.empty() &&
-      is_newer_version(manifest.ui_version, local_ui_version)) {
-    force_refresh = true;
-  }
 
   for (const auto *name : files) {
     const auto target = ui_dir / name;
-    if (!force_refresh && utils::io::file_exists(target.string())) {
-      continue; // present and up to date — leave it
+    if (utils::io::file_exists(target.string())) {
+      continue; // already present — leave it
     }
 
     const auto url = std::string(base) + name;
@@ -2611,67 +2531,12 @@ void ensure_launcher_ui() {
       utils::io::write_file(target.string(), *data);
     }
   }
-
-  // Remember the UI version we just installed.
-  if (force_refresh && manifest.ok && !manifest.ui_version.empty()) {
-    utils::io::write_file(ui_version_file.string(), manifest.ui_version);
-  }
 }
 
-// AlterBO3 (IKAAM): self-update for the launcher exe. On launch we compare our
-// compiled SHORTVERSION with the remote manifest; if the remote is newer we
-// download the new exe next to the current one, swap them, and relaunch.
+// AlterBO3 (IKAAM): self-update disabled. We no longer use a version manifest;
+// the launcher UI is fetched on first launch only (see ensure_launcher_ui).
 void check_self_update() {
-  const auto manifest = fetch_update_manifest();
-  if (!manifest.ok || manifest.version.empty() || manifest.exe_url.empty()) {
-    return;
-  }
-
-  if (!is_newer_version(manifest.version, SHORTVERSION)) {
-    return; // already up to date
-  }
-
-  // Download the new exe to a temporary file beside the current one.
-  const auto data = utils::http::get_data(manifest.exe_url);
-  if (!data || data->size() < 1024) {
-    return; // failed / suspiciously small — abort silently
-  }
-
-  char cur_path[MAX_PATH];
-  GetModuleFileNameA(nullptr, cur_path, sizeof(cur_path));
-  const std::filesystem::path self = cur_path;
-  const auto new_file = self.string() + ".new";
-  const auto old_file = self.string() + ".old";
-
-  if (!utils::io::write_file(new_file, *data)) {
-    return;
-  }
-
-  std::error_code ec;
-  // Move current exe out of the way, put the new one in place.
-  std::filesystem::remove(old_file, ec);
-  std::filesystem::rename(self, old_file, ec);
-  if (ec) {
-    std::filesystem::remove(new_file, ec);
-    return;
-  }
-  std::filesystem::rename(new_file, self, ec);
-  if (ec) {
-    // try to restore
-    std::filesystem::rename(old_file, self, ec);
-    return;
-  }
-
-  // Relaunch the updated exe and quit this (old) process.
-  STARTUPINFOA si{};
-  si.cb = sizeof(si);
-  PROCESS_INFORMATION pi{};
-  std::string cmd = "\"" + self.string() + "\"";
-  if (CreateProcessA(self.string().c_str(), cmd.data(), nullptr, nullptr, FALSE,
-                     0, nullptr, nullptr, &si, &pi)) {
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    ExitProcess(0);
-  }
+  // Intentionally does nothing — kept so the declaration in launcher.hpp stays
+  // valid. The exe is distributed via the .7z release, not auto-updated.
 }
 } // namespace launcher
