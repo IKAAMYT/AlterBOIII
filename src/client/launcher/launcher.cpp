@@ -2506,26 +2506,39 @@ std::filesystem::path get_launcher_ui_file() {
 // so it can't undo local edits.
 
 void ensure_launcher_ui() {
-  // AlterBO3 (IKAAM): download the custom launcher UI on first launch only.
-  // A small revision marker lets us force a one-time refresh: bump
-  // UI_REVISION below whenever the UI changes, and on the next launch the old
-  // files are deleted once and re-downloaded. After that, files are kept as-is.
+  // AlterBO3 (IKAAM): the launcher UI updates itself WITHOUT recompiling the
+  // exe. A small text file on the repo (ui_rev.txt) holds a revision number.
+  // At every boot we read it: if it differs from the revision stored locally,
+  // we wipe the UI files once and re-download the fresh ones. So to push a new
+  // UI to everyone, just edit the files in data/launcher/ AND bump the number
+  // in ui_rev.txt on the repo — every launcher picks it up on next launch.
   static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
                             "AlterBOIII/main/data/launcher/";
+  static const char *rev_url = "https://raw.githubusercontent.com/IKAAMYT/"
+                               "AlterBOIII/main/data/launcher/ui_rev.txt";
   static const char *files[] = {"main.html", "main.css", "main.js",
                                 "home_splash.jpg", "bigboiii.jpg"};
-
-  // Bump this string each time you ship a new launcher UI.
-  static const char *UI_REVISION = "6";
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
   const auto marker = ui_dir / ".ui_rev";
 
-  // If the stored revision differs from the current one, wipe the UI files once
-  // so the new versions get pulled fresh below.
-  std::string stored_rev;
-  utils::io::read_file(marker.string(), &stored_rev);
-  const bool needs_refresh = (stored_rev != UI_REVISION);
+  // Read the remote revision (trimmed). If the network fails we just skip the
+  // forced refresh and fall back to "download only what's missing".
+  std::string remote_rev;
+  const auto rev_data = utils::http::get_data(rev_url);
+  if (rev_data && !rev_data->empty()) {
+    remote_rev = *rev_data;
+    while (!remote_rev.empty() &&
+           (remote_rev.back() == '\n' || remote_rev.back() == '\r' ||
+            remote_rev.back() == ' ' || remote_rev.back() == '\t')) {
+      remote_rev.pop_back();
+    }
+  }
+
+  std::string local_rev;
+  utils::io::read_file(marker.string(), &local_rev);
+
+  const bool needs_refresh = (!remote_rev.empty() && remote_rev != local_rev);
 
   if (needs_refresh) {
     for (const auto *name : files) {
@@ -2540,7 +2553,7 @@ void ensure_launcher_ui() {
   for (const auto *name : files) {
     const auto target = ui_dir / name;
     if (utils::io::file_exists(target.string())) {
-      continue; // already present — leave it
+      continue; // already present and up to date — leave it
     }
 
     const auto url = std::string(base) + name;
@@ -2554,7 +2567,7 @@ void ensure_launcher_ui() {
   // Remember the revision we just installed so the wipe only happens once.
   if (needs_refresh) {
     utils::io::create_directory(ui_dir);
-    utils::io::write_file(marker.string(), UI_REVISION);
+    utils::io::write_file(marker.string(), remote_rev);
   }
 }
 
