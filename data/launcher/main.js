@@ -295,6 +295,11 @@ document.addEventListener('click', function() {
 try {
   var ver =
       getExternal() && getExternal().getVersion && getExternal().getVersion();
+  // AlterBO3 (IKAAM): fall back to the known release version if the build
+  // reports nothing or an unversioned "0.0.0" (e.g. compiled without a git tag).
+  if (!ver || ver === '0.0.0') {
+    ver = '1.0.6';
+  }
   if (ver) {
     var vd = document.getElementById('versionDisplay');
     if (vd)
@@ -1337,7 +1342,7 @@ function doStartWorkshopDownload(id, displayName) {
         if (inst && inst.length > 0) {
           showMessage('Déjà installé',
                       'Cette map Workshop est déjà installée dans :\n' + inst +
-                          '\n\nRetire-la d\'abord pour la réinstaller.');
+                          '\n\nRemove it first if you want to reinstall.');
           return;
         }
       }
