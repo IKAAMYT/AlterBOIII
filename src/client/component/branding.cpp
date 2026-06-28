@@ -26,7 +26,7 @@ void draw_branding() {
     return;
 
   game::render::R_AddCmdDrawText(
-      "AlterBOIII: " VERSION, std::numeric_limits<int>::max(), font, x,
+      "AlterBOIII: " SHORTVERSION, std::numeric_limits<int>::max(), font, x,
       y + static_cast<float>(font[2]) * scale, scale, scale, 0.0f, &color,
       game::itemTextStyle::NORMAL);
 }
