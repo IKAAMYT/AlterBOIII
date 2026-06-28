@@ -10,6 +10,21 @@
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
+// AlterBO3 (IKAAM): convert a UTF-8 std::string to a wide string so accented
+// French characters render correctly with the DrawTextW API (DrawTextA mangles
+// UTF-8 bytes, showing "Ã©" instead of "é").
+static std::wstring utf8_to_wide(const std::string &str) {
+  if (str.empty()) {
+    return std::wstring();
+  }
+  const int size = MultiByteToWideChar(
+      CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
+  std::wstring result(static_cast<size_t>(size), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()),
+                      result.data(), size);
+  return result;
+}
+
 namespace utils {
 namespace {
 constexpr int WINDOW_W = 580;
@@ -431,7 +446,7 @@ void progress_ui::paint(HDC hdc, const RECT &rc) const {
   }
 
   RECT title_text_rc = {16, 0, rc.right - 56, TITLE_BAR_H};
-  DrawTextA(hdc, title.c_str(), -1, &title_text_rc,
+  DrawTextW(hdc, utf8_to_wide(title).c_str(), -1, &title_text_rc,
             DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
 
   SelectObject(hdc, old_font);
@@ -477,7 +492,7 @@ void progress_ui::paint(HDC hdc, const RECT &rc) const {
 
   if (!line1.empty()) {
     RECT l1_rc = {PADDING, y, rc.right - PADDING, y + 20};
-    DrawTextA(hdc, line1.c_str(), -1, &l1_rc,
+    DrawTextW(hdc, utf8_to_wide(line1).c_str(), -1, &l1_rc,
               DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_NOPREFIX |
                   DT_END_ELLIPSIS);
   }
@@ -540,7 +555,7 @@ void progress_ui::paint(HDC hdc, const RECT &rc) const {
   if (!line2.empty()) {
     SetTextColor(hdc, COL_TEXT_DIM);
     RECT l2_rc = {PADDING, y, rc.right - PADDING, y + 18};
-    DrawTextA(hdc, line2.c_str(), -1, &l2_rc,
+    DrawTextW(hdc, utf8_to_wide(line2).c_str(), -1, &l2_rc,
               DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_NOPREFIX |
                   DT_END_ELLIPSIS);
   }
@@ -572,7 +587,7 @@ void progress_ui::paint(HDC hdc, const RECT &rc) const {
     std::lock_guard<std::recursive_mutex> lock(state_mutex_);
     btn_text = state_.btn_text;
   }
-  DrawTextA(hdc, btn_text.c_str(), -1, &cancel_rc,
+  DrawTextW(hdc, utf8_to_wide(btn_text).c_str(), -1, &cancel_rc,
             DT_SINGLELINE | DT_CENTER | DT_VCENTER);
   SelectObject(hdc, old_font);
   DeleteObject(btn_font);
