@@ -1509,9 +1509,9 @@ function pollWorkshopStatus() {
           if (isDone) {
             if (msgEl)
               msgEl.style.color = 'rgba(34,197,94,0.9)';
-            showMessage('Download Complete',
+            showMessage('Téléchargement terminé',
                         status.details ||
-                            'Workshop item installed successfully.');
+                            'Map Workshop installée avec succès.');
           } else if (isCanceled) {
             if (msgEl)
               msgEl.style.color = 'rgba(250,204,21,0.9)';

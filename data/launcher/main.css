@@ -657,6 +657,22 @@ a { color: #f2c411; text-decoration: none; }
 #messagePopup.active, #confirmPopup.active, #creditsPopup.active, #verifyPopup.active,
 #manageInstallPopup.active, #workshopModal.active, #libraryModal.active { display: -ms-flexbox; display: flex; }
 
+/* AlterBO3 (IKAAM) fix: an inner popup box must NOT inherit the full-screen
+   backdrop layout. When a .popup div sits inside a backdrop, force it back to a
+   normal centered box (otherwise it stretches to fill the whole window). */
+.popup-backdrop > .popup,
+.popup-backdrop > .msg-popup,
+.popup-backdrop > .confirm-popup,
+.popup-backdrop > .credits-popup,
+.popup-backdrop > .verify-popup,
+.popup-backdrop > .component-selection-popup {
+  position: relative; top: auto; right: auto; bottom: auto; left: auto;
+  z-index: auto; padding: 0;
+  display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column;
+  width: 100%; max-width: 460px; max-height: 86vh; margin: auto;
+  background: #12100b; border: 1px solid rgba(242, 196, 17, 0.22);
+}
+
 .popup-content, .popup, .msg-popup, .confirm-popup,
 .verify-popup, .credits-popup, .workshop-modal-content,
 .workshop-modal > div, .library-modal > div, #manageInstallPopup > div {
