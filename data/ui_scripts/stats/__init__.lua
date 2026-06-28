@@ -36,8 +36,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Unlock All Loot",
-      "Unlocks all Black Market loot.",
+      "Tout débloquer (Loot)",
+      "Débloque tout le loot du Black Market.",
       "MPStatsSettings_unlock_loot",
       "cg_unlockall_loot",
       {
@@ -60,8 +60,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Unlock All Purchases",
-        "All items that need to be purchased with unlock tokens are unlocked.",
+        "Débloquer tous les achats",
+        "Tous les éléments à acheter avec des jetons sont débloqués.",
         "MPStatsSettings_purchase_all",
         "cg_unlockall_purchases",
         {
@@ -83,8 +83,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Unlock All Class Slots",
-        "Unlocks all create-a-class slots and sets.",
+        "Débloquer tous les emplacements de classe",
+        "Débloque tous les emplacements et sets de création de classe.",
         "MPStatsSettings_unlockall_cac_slots",
         "cg_unlockall_cac_slots",
         {
@@ -107,8 +107,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Unlock All Attachments",
-      "All attachments on weapons are unlocked.",
+      "Débloquer tous les accessoires",
+      "Tous les accessoires des armes sont débloqués.",
       "MPStatsSettings_unlockall_attachments",
       "cg_unlockall_attachments",
       {
@@ -130,8 +130,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Unlock all Camos and Reticles",
-      "All camos and reticles on weapons are unlocked.",
+      "Débloquer tous les camos et réticules",
+      "Tous les camos et réticules des armes sont débloqués.",
       "MPStatsSettings_unlockall_camos_and_reticles",
       "cg_unlockall_camos_and_reticles",
       {
@@ -153,8 +153,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Unlock all Calling Cards",
-      "All calling cards are unlocked.",
+      "Débloquer toutes les cartes de visite",
+      "Toutes les cartes de visite sont débloquées.",
       "MPStatsSettings_unlockall_calling_cards",
       "cg_unlockall_calling_cards",
       {
@@ -177,8 +177,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Unlock all Specialists Outfits",
-        "All specialists outfits are unlocked.",
+        "Débloquer toutes les tenues de spécialistes",
+        "Toutes les tenues de spécialistes sont débloquées.",
         "MPStatsSettings_unlockall_specialists_outfits",
         "cg_unlockall_specialists_outfits",
         {
@@ -202,8 +202,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Unlock Easter Eggs",
-        "Complete all Easter Egg Achievements.",
+        "Débloquer les Easter Eggs",
+        "Complète tous les succès Easter Egg.",
         "MPStatsSettings_complete_ee",
         "all_ee_completed",
         {
@@ -260,19 +260,19 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
         name = value <= minlevel and "Min" or value >= maxlevel and "Max" or value,
         value = value - 1,
         default = value == currentRank,
-        title = "Rank Level",
-        desc = value ~= currentRank and "" or "Current Rank",
+        title = "Niveau de rang",
+        desc = value ~= currentRank and "" or "Rang actuel",
       })
     end
 
     if hasDefault and currentRank ~= minlevel and currentRank < maxlevel and not isMasterPrestige then
       table.insert(rankObjs, {
-        name = "Current: "
+        name = "Actuel : "
           .. tostring(currentRank <= minlevel and "Min" or currentRank >= maxlevel and "Max" or currentRank),
         value = currentRank - 1,
         default = true,
-        title = "Rank Level",
-        desc = "Do not adjust rank",
+        title = "Niveau de rang",
+        desc = "Ne pas modifier le rang",
       })
     end
   end
@@ -280,7 +280,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
   local prestigeTable = {}
   for i = 0, 11 do
     table.insert(prestigeTable, {
-      name = i == 0 and "None" or i == 11 and "Master" or i,
+      name = i == 0 and "Aucun" or i == 11 and "Maître" or i,
       value = i,
       default = i == currentPrestige,
       title = "Prestige",
@@ -354,7 +354,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
 
     table.insert(optionsTable, {
       models = {
-        name = "Rank Level",
+        name = "Niveau de rang",
         desc = "",
         image = nil,
         optionsDatasource = createSettingsDatasource(
@@ -458,9 +458,9 @@ LUI.createMenu.BoiiiStatsMenu = function(controller)
   local GameSettingsBackground = CoD.GameSettings_Background.new(self, controller)
   GameSettingsBackground:setLeftRight(true, true, 0, 0)
   GameSettingsBackground:setTopBottom(true, true, 0, 0)
-  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("STATS SETTINGS"))
+  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES STATS"))
   GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-    Engine.Localize("STATS SETTINGS")
+    Engine.Localize("PARAMÈTRES STATS")
   )
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeInfo:setAlpha(0)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeName:setAlpha(0)
