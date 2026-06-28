@@ -659,7 +659,7 @@ a { color: #f2c411; text-decoration: none; }
 
 /* AlterBO3 (IKAAM) fix: an inner popup box must NOT inherit the full-screen
    backdrop layout. When a .popup div sits inside a backdrop, force it back to a
-   normal centered box (otherwise it stretches to fill the whole window). */
+   normal centered box (otherwise it stretches/overflows the window). */
 .popup-backdrop > .popup,
 .popup-backdrop > .msg-popup,
 .popup-backdrop > .confirm-popup,
@@ -700,6 +700,7 @@ a { color: #f2c411; text-decoration: none; }
 .popup-body, .msg-popup-body, #messagePopupBody, #confirmPopupBody,
 .workshop-modal-body, .library-modal-description {
   padding: 0 24px 8px; color: #c9c2b4; font-size: 14px; line-height: 1.6; overflow-y: auto;
+  word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap;
 }
 .popup-actions, .popup-actions-center {
   display: -ms-flexbox; display: flex; gap: 10px; justify-content: flex-end; -ms-flex-pack: end;

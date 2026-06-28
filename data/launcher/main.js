@@ -577,7 +577,7 @@ function loadWorkshopBrowse(page, searchTerm) {
   } catch (e) {
     workshopBrowseLoading = false;
     showErrorOrCache(
-        'Workshop browsing not available. Showing cached items...');
+        'Navigation Workshop indisponible. Affichage du cache...');
   }
 }
 
@@ -660,7 +660,7 @@ function pollWorkshopBrowseResults(isSearchMode) {
               workshopBrowseCurrentPage = 1;
               renderWorkshopBrowse();
             } else if (workshopBrowseItems.length === 0) {
-              showErrorOrCache('No workshop items found.');
+              showErrorOrCache('Aucune map Workshop trouvée.');
             }
           }
           workshopBrowseLoading = false;
@@ -678,7 +678,7 @@ function pollWorkshopBrowseResults(isSearchMode) {
 
 function showWorkshopLoading() {
   workshopBrowseGrid.innerHTML =
-      '<div class="workshop-loading"><div class="loading-spinner"></div><span>Loading workshop items...</span></div>';
+      '<div class="workshop-loading"><div class="loading-spinner"></div><span>Chargement des maps Workshop...</span></div>';
 }
 
 function showWorkshopEmpty(message) {
@@ -766,7 +766,7 @@ function renderWorkshopBrowse() {
 
   if (!filteredItems || filteredItems.length === 0) {
     showWorkshopEmpty(workshopBrowseSearchTerm ? 'No items match your search'
-                                               : 'No workshop items available');
+                                               : 'Aucune map Workshop disponible');
     return;
   }
 
@@ -1335,8 +1335,8 @@ function doStartWorkshopDownload(id, displayName) {
       if (ex.workshopCheckInstalled) {
         var inst = ex.workshopCheckInstalled(String(id));
         if (inst && inst.length > 0) {
-          showMessage('Already Installed',
-                      'This workshop item is already installed at:\n' + inst +
+          showMessage('Déjà installé',
+                      'Cette map Workshop est déjà installée dans :\n' + inst +
                           '\n\nRemove it first if you want to reinstall.');
           return;
         }
@@ -1509,9 +1509,9 @@ function pollWorkshopStatus() {
           if (isDone) {
             if (msgEl)
               msgEl.style.color = 'rgba(34,197,94,0.9)';
-            showMessage('Téléchargement terminé',
+            showMessage('Download Complete',
                         status.details ||
-                            'Map Workshop installée avec succès.');
+                            'Workshop item installed successfully.');
           } else if (isCanceled) {
             if (msgEl)
               msgEl.style.color = 'rgba(250,204,21,0.9)';
@@ -1519,9 +1519,9 @@ function pollWorkshopStatus() {
             if (msgEl)
               msgEl.style.color = 'rgba(249,115,22,0.9)';
             showMessage(
-                'Already Installed',
+                'Déjà installé',
                 status.details ||
-                    'This item is already installed. Remove it first to reinstall.');
+                    'Cet élément est déjà installé. Retire-le d\'abord pour réinstaller.');
           } else {
             if (msgEl)
               msgEl.style.color = 'rgba(239,68,68,0.9)';
@@ -1711,7 +1711,7 @@ function refreshModsGrid() {
     if (!ex) {
       modsItemsCache = [];
       modsGrid.innerHTML =
-          '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">No workshop items installed yet</div></div>';
+          '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">Aucune map Workshop installée</div></div>';
       if (modsPagination)
         modsPagination.style.display = 'none';
       return;
@@ -1777,7 +1777,7 @@ function refreshModsGrid() {
   } catch (e) {
     modsItemsCache = [];
     modsGrid.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-text">Error loading workshop items</div></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-text">Erreur de chargement des maps Workshop</div></div>';
     if (modsPagination)
       modsPagination.style.display = 'none';
   }
@@ -1787,7 +1787,7 @@ function renderModsPage() {
   modsGrid.innerHTML = '';
   if (!modsItemsCache || modsItemsCache.length === 0) {
     modsGrid.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">No workshop items installed yet</div></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">Aucune map Workshop installée</div></div>';
     if (modsPagination)
       modsPagination.style.display = 'none';
     return;
@@ -1889,7 +1889,7 @@ function renderModsPage() {
       var viewBtn = document.createElement('button');
       viewBtn.className = 'btn';
       viewBtn.type = 'button';
-      viewBtn.textContent = 'View';
+      viewBtn.textContent = 'Voir';
       viewBtn.setAttribute(
           'data-open-url',
           'https://steamcommunity.com/sharedfiles/filedetails/?id=' +
@@ -1905,7 +1905,7 @@ function renderModsPage() {
         updateBtn.style.fontWeight = 'bold';
       }
       updateBtn.type = 'button';
-      updateBtn.textContent = item.needsUpdate ? 'Update Now' : 'Update';
+      updateBtn.textContent = item.needsUpdate ? 'Mettre à jour' : 'Mettre à jour';
       (function(itemId, itemName) {
         updateBtn.onclick = function(e) {
           e.stopPropagation();
@@ -1945,21 +1945,21 @@ function renderModsPage() {
     var removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-remove';
     removeBtn.type = 'button';
-    removeBtn.textContent = 'Remove';
+    removeBtn.textContent = 'Retirer';
     (function(folderName, itemName, itemSource, itemPath) {
       removeBtn.onclick = function(e) {
         e.stopPropagation();
         if (!folderName && !itemPath) {
-          showMessage('Remove', 'Cannot remove: folder name is missing.');
+          showMessage('Retirer', 'Impossible de retirer : nom du dossier manquant.');
           return;
         }
-        var rb = 'Remove <strong>' +
+        var rb = 'Retirer <strong>' +
                  (itemName || folderName).replace(/</g, '&lt;') +
-                 '</strong> from your game folder?';
-        showConfirm('Remove workshop item', rb, function() {
+                 '</strong> de ton dossier de jeu ?';
+        showConfirm('Retirer la map Workshop', rb, function() {
           var ex = getExternal();
           if (!ex) {
-            showMessage('Remove', 'Workshop remove is not available.');
+            showMessage('Retirer', 'Le retrait Workshop n\'est pas disponible.');
             return;
           }
           var done = false;
@@ -1991,7 +1991,7 @@ function renderModsPage() {
           if (done)
             startRemoveProgressPoll();
           else
-            showMessage('Remove', 'Workshop remove is not available.');
+            showMessage('Retirer', 'Le retrait Workshop n\'est pas disponible.');
         });
       };
     })(item.folder || '', item.name || item.folder, item.source || '',
@@ -2090,9 +2090,9 @@ document.getElementById('workshopRefreshBtn').onclick =
 
 document.getElementById('deleteAllModsBtn').onclick = function() {
   var items = modsItemsCache || [];
-  var lh = '<p style="margin:0 0 8px 0;">Remove <strong>' + items.length +
-           '</strong> workshop item' + (items.length !== 1 ? 's' : '') +
-           ' from your game folder? This cannot be undone.</p>';
+  var lh = '<p style="margin:0 0 8px 0;">Retirer <strong>' + items.length +
+           '</strong> map' + (items.length !== 1 ? 's' : '') +
+           ' Workshop de ton dossier de jeu ? Cette action est irréversible.</p>';
   if (items.length > 0) {
     lh += '<ul class="confirm-item-list">';
     for (var ci = 0; ci < items.length; ci++) {
@@ -2335,7 +2335,7 @@ document.getElementById('popupApply').onclick = function() {
   hideManagePopup();
   showConfirm('Delete Game Modes',
               'Are you sure you want to remove ' + names.join(', ') +
-                  '? This cannot be undone.',
+                  '? Cette action est irréversible.',
               function() {
                 try {
                   var ex = getExternal();
@@ -3271,7 +3271,7 @@ if (resetBtn) {
   resetBtn.onclick = function() {
     showConfirm(
         'Reset Settings',
-        'Are you sure you want to reset all settings to defaults? This cannot be undone.',
+        'Réinitialiser tous les réglages par défaut ? Cette action est irréversible.',
         function() {
           try {
             var ex = getExternal();
@@ -3410,7 +3410,7 @@ function renderFriendsList() {
     html += '</div>';
     html +=
         '<button type="button" class="friend-remove-btn" data-remove-sid="' +
-        sid + '" title="Remove">&times;</button>';
+        sid + '" title="Retirer">&times;</button>';
     html += '</div>';
   }
   list.innerHTML = html;
