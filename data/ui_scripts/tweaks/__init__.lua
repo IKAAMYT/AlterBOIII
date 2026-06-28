@@ -37,8 +37,8 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Movement Speed",
-        "Player movement speed.",
+        "Vitesse de déplacement",
+        "Vitesse de déplacement du joueur.",
         "GameTweaks_gspeed",
         "g_speed",
         speedOptions,
@@ -77,8 +77,8 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Infinite Ammo",
-        "Never run out of ammo.",
+        "Munitions infinies",
+        "Ne jamais être à court de munitions.",
         "GameTweaks_infiniteammo",
         "player_sustainAmmo",
         {
@@ -94,8 +94,8 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Game Speed",
-        "Speed up or slow down the game.",
+        "Vitesse du jeu",
+        "Accélère ou ralentit le jeu.",
         "GameTweaks_timescale",
         "timescale",
         {
@@ -115,8 +115,8 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Hide Weapon Model",
-        "Hide the gun model on screen.",
+        "Masquer l'arme",
+        "Masque le modèle de l'arme à l'écran.",
         "GameTweaks_drawgun",
         "cg_drawGun",
         {
@@ -132,13 +132,13 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Disable Fog",
-        "Remove fog effects.",
+        "Désactiver le brouillard",
+        "Supprime les effets de brouillard.",
         "GameTweaks_fog",
         "r_fog",
         {
           { option = "Fog On (Default)", value = 1, default = true },
-          { option = "Fog Off", value = 0 },
+          { option = "Brouillard désactivé", value = 0 },
         },
         nil,
         updateDvar
@@ -162,7 +162,7 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Field of View",
+        "Champ de vision",
         "Adjust your field of view (65-120).",
         "GameTweaks_fov",
         "cg_fov_default",
@@ -185,7 +185,7 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "FOV Scale",
+        "Échelle FOV",
         "Multiplier for ADS/zoom FOV. 1.0 = default.",
         "GameTweaks_fovscale",
         "cg_fovScale",
@@ -244,10 +244,10 @@ if isPrivateGame then
       local frame = CoD.GenericMenuFrame.new(self, controller)
       frame:setLeftRight(true, true, 0, 0)
       frame:setTopBottom(true, true, 0, 0)
-      frame.titleLabel:setText(Engine.Localize("GAME TWEAKS"))
+      frame.titleLabel:setText(Engine.Localize("AJUSTEMENTS"))
       pcall(function()
         frame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-          Engine.Localize("GAME TWEAKS")
+          Engine.Localize("AJUSTEMENTS")
         )
       end)
       frame:setModel(self.buttonModel, controller)
