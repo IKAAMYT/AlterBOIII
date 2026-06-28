@@ -295,11 +295,6 @@ document.addEventListener('click', function() {
 try {
   var ver =
       getExternal() && getExternal().getVersion && getExternal().getVersion();
-  // AlterBO3 (IKAAM): fall back to the known release version if the build
-  // reports nothing or an unversioned "0.0.0" (e.g. compiled without a git tag).
-  if (!ver || ver === '0.0.0') {
-    ver = '1.0.6';
-  }
   if (ver) {
     var vd = document.getElementById('versionDisplay');
     if (vd)
@@ -3925,7 +3920,27 @@ if (versionDisplay && creditsPopup) {
     };
   }
 
-  function boot() { initParticles(); initAudio(); }
+  function boot() {
+    initParticles();
+    initAudio();
+    // AlterBO3 (IKAAM): refresh the latest Workshop maps automatically at
+    // boot, in the background. The native browse is already sorted by
+    // "mostrecent", so this pulls the newest published maps. Done after a
+    // short delay and without blocking, so it never slows down startup.
+    try {
+      setTimeout(function() {
+        try {
+          var ex = getExternal();
+          if (ex && ex.workshopBrowse && typeof loadWorkshopBrowse ===
+                                             'function') {
+            loadWorkshopBrowse(1);
+          }
+        } catch (e) {
+        }
+      }, 1200);
+    } catch (e) {
+    }
+  }
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     boot();
