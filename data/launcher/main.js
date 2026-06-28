@@ -3920,9 +3920,45 @@ if (versionDisplay && creditsPopup) {
     };
   }
 
+  // AlterBO3 (IKAAM): fetch the number of online AlterBOIII players from our
+  // PHP proxy (which queries the BOIII master server) and show it on the home
+  // topbar. Refreshed every 60s. Pure UI — no exe change needed.
+  function refreshOnlineCount() {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET',
+               'https://ikaam.fr/COD/players.php?_=' + Date.now(), true);
+      xhr.timeout = 8000;
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState !== 4) return;
+        var el = document.getElementById('onlineCount');
+        if (!el) return;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var d = JSON.parse(xhr.responseText);
+            var n = (d && typeof d.players !== 'undefined') ? d.players : 0;
+            el.textContent = n;
+          } catch (e) {
+            el.textContent = '0';
+          }
+        } else {
+          el.textContent = '0';
+        }
+      };
+      xhr.send();
+    } catch (e) {
+    }
+  }
+
   function boot() {
     initParticles();
     initAudio();
+    // Online players counter: first fetch shortly after boot, then every 60s.
+    try {
+      setTimeout(refreshOnlineCount, 800);
+      setInterval(refreshOnlineCount, 60000);
+    } catch (e) {
+    }
     // AlterBO3 (IKAAM): refresh the latest Workshop maps automatically at
     // boot, in the background. The native browse is already sorted by
     // "mostrecent", so this pulls the newest published maps. Done after a

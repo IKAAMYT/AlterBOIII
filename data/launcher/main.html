@@ -68,10 +68,18 @@
               <span class="title-white">Alter</span><span class="title-orange">BO3</span>
               <span class="home-hangul">알터</span>
             </div>
-            <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
-              <span class="gear-btn-icon">&#9881;</span>
-              <span class="gear-btn-label">Options</span>
-            </button>
+            <div style="display:-ms-flexbox;display:flex;-ms-flex-align:center;align-items:center;gap:12px;">
+              <div class="online-counter" id="onlineCounter" title="Joueurs AlterBOIII en ligne"
+                style="display:-ms-flexbox;display:flex;-ms-flex-align:center;align-items:center;gap:8px;padding:7px 14px;border-radius:9px;background:rgba(0,0,0,0.35);border:1px solid rgba(242,196,17,0.25);font-family:'Rajdhani',sans-serif;">
+                <span class="online-dot" style="width:9px;height:9px;border-radius:50%;background:#3ba55d;box-shadow:0 0 8px #3ba55d;display:inline-block;"></span>
+                <span class="online-count" id="onlineCount" style="color:#f2c411;font-weight:700;font-size:15px;">--</span>
+                <span class="online-label" style="color:#cfc8b8;font-size:13px;">en ligne</span>
+              </div>
+              <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
+                <span class="gear-btn-icon">&#9881;</span>
+                <span class="gear-btn-label">Options</span>
+              </button>
+            </div>
           </div>
 
           <!-- Launch options modal (hidden until .open) -->
@@ -169,12 +177,7 @@
 
         <div class="workshop-browse-container">
           <div class="workshop-browse-header">
-            <div class="workshop-browse-title-row" style="display:-ms-flexbox;display:flex;-ms-flex-align:center;align-items:center;-ms-flex-pack:justify;justify-content:space-between;width:100%;-ms-flex-wrap:wrap;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-              <h3 class="workshop-browse-title" style="margin:0;">Parcourir le Workshop</h3>
-              <button type="button" class="btn btn-primary" id="workshopOpenSteamBtn"
-                onclick="window.external.openUrl('https://steamcommunity.com/app/311210/workshop/')"
-                title="Ouvrir le Workshop Steam dans le navigateur">&#128279; Voir toutes les maps sur Steam</button>
-            </div>
+            <h3 class="workshop-browse-title">Parcourir le Workshop</h3>
             <div class="workshop-browse-controls">
               <div class="workshop-filter-wrap">
                 <div class="ws-dropdown" id="wsFilterDropdown">
@@ -201,6 +204,9 @@
               <button type="button" class="btn" id="workshopSearchBtn">Rechercher</button>
               <button type="button" class="btn" id="workshopBrowseRefreshBtn">&#8635; Actualiser</button>
               <button type="button" class="btn" id="workshopBrowseClearBtn">Effacer</button>
+              <button type="button" class="btn btn-primary" id="workshopOpenSteamBtn"
+                onclick="window.external.openUrl('https://steamcommunity.com/app/311210/workshop/')"
+                title="Ouvrir le Workshop Steam dans le navigateur">&#128279; Voir tout sur Steam</button>
             </div>
           </div>
 
