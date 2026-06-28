@@ -389,7 +389,7 @@ DataSources.ServerBrowserCategories = ListHelper_SetupDataSource("ServerBrowserC
 
   table.insert(tabs, {
     models = {
-      tabName = "ALL SERVERS",
+      tabName = "TOUS LES SERVEURS",
       serverType = CUSTOM_TYPE_ALL,
     },
   })
