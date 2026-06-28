@@ -37,7 +37,7 @@
         </button>
       </div>
       <div class="nav-footer">
-        <span class="nav-version" id="versionDisplay" style="cursor: pointer;" title="Show Credits">v1.0.6</span>
+        <span class="nav-version" id="versionDisplay" style="cursor: pointer;" title="Show Credits">v1.0.0</span>
       </div>
     </nav>
 
@@ -141,7 +141,7 @@
 
         <div class="quick-download-card">
           <div class="qd-text">
-            <div class="qd-label">Quick Download</div>
+            <div class="qd-label">Téléchargement rapide</div>
             <p class="qd-sub">Télécharger par ID Workshop ou lien</p>
           </div>
           <div class="qd-action">
@@ -157,7 +157,7 @@
                 <span id="workshopProgressPercent" class="ws-pct-label"></span>
               </div>
               <button type="button" class="btn btn-icon-sm" id="workshopProgressFolder"
-                title="Open Folder">&#128194;</button>
+                title="Ouvrir le dossier">&#128194;</button>
               <button type="button" class="btn btn-icon-sm" id="workshopProgressPause" title="Pause">&#9208;</button>
               <button type="button" class="btn btn-icon-sm" id="workshopProgressCancel" title="Cancel">&times;</button>
             </div>
@@ -194,8 +194,11 @@
               <input type="text" id="workshopSearchInput" class="workshop-search-input" placeholder="Rechercher par nom..."
                 autocomplete="off">
               <button type="button" class="btn" id="workshopSearchBtn">Rechercher</button>
-              <button type="button" class="btn" id="workshopBrowseRefreshBtn">&#8635; Refresh</button>
+              <button type="button" class="btn" id="workshopBrowseRefreshBtn">&#8635; Actualiser</button>
               <button type="button" class="btn" id="workshopBrowseClearBtn">Effacer</button>
+              <button type="button" class="btn btn-primary" id="workshopOpenSteamBtn"
+                onclick="window.external.openUrl('https://steamcommunity.com/app/311210/workshop/')"
+                title="Ouvrir le Workshop Steam dans le navigateur">&#128279; Voir tout sur Steam</button>
             </div>
           </div>
 
