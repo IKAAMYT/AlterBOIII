@@ -2507,16 +2507,35 @@ std::filesystem::path get_launcher_ui_file() {
 
 void ensure_launcher_ui() {
   // AlterBO3 (IKAAM): download the custom launcher UI on first launch only.
-  // No version manifest, no ui_version.txt — if a file is missing locally we
-  // fetch it once; if it already exists we leave it alone. To push a new UI to
-  // existing users, they simply delete the file (or the whole data/launcher
-  // folder) and it will be re-downloaded on next launch.
+  // A small revision marker lets us force a one-time refresh: bump
+  // UI_REVISION below whenever the UI changes, and on the next launch the old
+  // files are deleted once and re-downloaded. After that, files are kept as-is.
   static const char *base = "https://raw.githubusercontent.com/IKAAMYT/"
                             "AlterBOIII/main/data/launcher/";
   static const char *files[] = {"main.html", "main.css", "main.js",
                                 "home_splash.jpg", "bigboiii.jpg"};
 
+  // Bump this string each time you ship a new launcher UI.
+  static const char *UI_REVISION = "6";
+
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
+  const auto marker = ui_dir / ".ui_rev";
+
+  // If the stored revision differs from the current one, wipe the UI files once
+  // so the new versions get pulled fresh below.
+  std::string stored_rev;
+  utils::io::read_file(marker.string(), &stored_rev);
+  const bool needs_refresh = (stored_rev != UI_REVISION);
+
+  if (needs_refresh) {
+    for (const auto *name : files) {
+      const auto target = ui_dir / name;
+      if (utils::io::file_exists(target.string())) {
+        std::error_code ec;
+        std::filesystem::remove(target, ec);
+      }
+    }
+  }
 
   for (const auto *name : files) {
     const auto target = ui_dir / name;
@@ -2530,6 +2549,12 @@ void ensure_launcher_ui() {
       utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
     }
+  }
+
+  // Remember the revision we just installed so the wipe only happens once.
+  if (needs_refresh) {
+    utils::io::create_directory(ui_dir);
+    utils::io::write_file(marker.string(), UI_REVISION);
   }
 }
 
