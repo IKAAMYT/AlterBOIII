@@ -1337,7 +1337,7 @@ function doStartWorkshopDownload(id, displayName) {
         if (inst && inst.length > 0) {
           showMessage('Déjà installé',
                       'Cette map Workshop est déjà installée dans :\n' + inst +
-                          '\n\nRemove it first if you want to reinstall.');
+                          '\n\nRetire-la d\'abord pour la réinstaller.');
           return;
         }
       }
