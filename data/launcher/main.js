@@ -43,6 +43,10 @@ var workshopBrowseCurrentPage = 1;
 var workshopBrowseItemsPerPage = 10;
 var workshopBrowseLoading = false;
 var workshopBrowseSearchTerm = '';
+// État unifié browse/search (aligné sur le C++ workshopGetBrowseState)
+var workshopBrowseMode = 'browse';
+var workshopBrowseSource = 'none';
+var workshopBrowseError = '';
 var workshopBrowseCacheKey = 'workshopBrowseCache';
 var _workshopBrowsePollInterval = null;
 
@@ -524,16 +528,10 @@ function setPage(targetPage) {
   if (targetPage === 'workshop' && workshopBrowseItems.length === 0 &&
       !workshopBrowseLoading) {
     try {
-      var exP = getExternal();
-      if (exP && exP.workshopGetBrowseData) {
-        var cachedD = exP.workshopGetBrowseData();
-        if (cachedD && cachedD !== '[]') {
-          var parsedD = JSON.parse(cachedD);
-          if (parsedD && Array.isArray(parsedD) && parsedD.length > 0) {
-            workshopBrowseItems = parsedD;
-            renderWorkshopBrowse();
-          }
-        }
+      var initState = getWorkshopBrowseState();
+      if (initState && initState.items && initState.items.length > 0) {
+        workshopBrowseItems = initState.items;
+        renderWorkshopBrowse();
       }
     } catch (e) {
     }
@@ -697,6 +695,23 @@ function loadWorkshopSearch(query) {
   }
 }
 
+// Lit l'état unifié browse/search depuis le C++ (workshopGetBrowseState).
+// Renvoie {items, loading, complete, error, source, query} ou null.
+function getWorkshopBrowseState() {
+  try {
+    var ex = getExternal();
+    if (!ex || !ex.workshopGetBrowseState) return null;
+    var stateJson = ex.workshopGetBrowseState();
+    if (!stateJson) return null;
+    var state =
+        typeof stateJson === 'string' ? JSON.parse(stateJson) : stateJson;
+    if (!state || !Array.isArray(state.items)) return null;
+    return state;
+  } catch (e) {
+    return null;
+  }
+}
+
 function pollWorkshopBrowseResults(isSearchMode) {
   if (_workshopBrowsePollInterval) {
     clearInterval(_workshopBrowsePollInterval);
@@ -708,60 +723,59 @@ function pollWorkshopBrowseResults(isSearchMode) {
   var pollInterval = setInterval(function() {
     pollCount++;
     _workshopBrowsePollInterval = pollInterval;
-    if (!isSearchMode && !hasShownCachedData && pollCount === 20) {
-      try {
-        var ex3 = getExternal();
-        if (ex3 && ex3.workshopGetBrowseData) {
-          var cj = ex3.workshopGetBrowseData();
-          if (cj && cj !== '[]') {
-            var cd = typeof cj === 'string' ? JSON.parse(cj) : cj;
-            if (cd && Array.isArray(cd) && cd.length > 0) {
-              workshopBrowseItems = cd;
-              hasShownCachedData = true;
-              workshopBrowseCurrentPage = 1;
-              renderWorkshopBrowse();
-            }
-          }
-        }
-      } catch (e) {
-      }
-    }
+
+    // Timeout de sécurité.
     if (pollCount > maxPolls) {
       clearInterval(pollInterval);
+      _workshopBrowsePollInterval = null;
       workshopBrowseLoading = false;
       if (workshopBrowseItems.length === 0)
         showErrorOrCache('Chargement trop long. Affichage du cache...');
       return;
     }
-    try {
-      var ex2 = getExternal();
-      if (ex2 && ex2.workshopIsBrowseLoading) {
-        var isLoading = ex2.workshopIsBrowseLoading() === 'true';
-        if (!isLoading) {
-          var dataJson =
-              ex2.workshopGetBrowseData ? ex2.workshopGetBrowseData() : null;
-          clearInterval(pollInterval);
-          if (dataJson) {
-            var data =
-                typeof dataJson === 'string' ? JSON.parse(dataJson) : dataJson;
-            if (data && Array.isArray(data) && data.length > 0) {
-              workshopBrowseItems = data;
-              if (!isSearchMode)
-                saveWorkshopCache(workshopBrowseItems);
-              workshopBrowseCurrentPage = 1;
-              renderWorkshopBrowse();
-            } else if (workshopBrowseItems.length === 0) {
-              showErrorOrCache('Aucune map Workshop trouvée.');
-            }
-          }
-          workshopBrowseLoading = false;
-        }
-      }
-    } catch (e) {
+
+    var state = getWorkshopBrowseState();
+    if (!state) {
+      // C++ ne répond pas encore (ou pas dispo) : on retente au prochain tick.
+      return;
+    }
+
+    // Affichage anticipé : dès qu'on a des items, on les montre même si la
+    // requête n'est pas terminée (browse uniquement, pas en recherche).
+    if (!isSearchMode && !hasShownCachedData &&
+        state.items && state.items.length > 0) {
+      workshopBrowseItems = state.items;
+      hasShownCachedData = true;
+      workshopBrowseCurrentPage = 1;
+      renderWorkshopBrowse();
+    }
+
+    // La requête est terminée : on fige le résultat final.
+    if (state.complete === true || state.loading === false) {
       clearInterval(pollInterval);
+      _workshopBrowsePollInterval = null;
       workshopBrowseLoading = false;
-      if (workshopBrowseItems.length === 0)
-        showErrorOrCache('Error loading workshop data.');
+      workshopBrowseSource = state.source || 'none';
+      workshopBrowseError = state.error || '';
+
+      if (state.error) {
+        if (workshopBrowseItems.length === 0)
+          showErrorOrCache(state.error);
+        return;
+      }
+
+      if (state.items && state.items.length > 0) {
+        workshopBrowseItems = state.items;
+        // On ne met en cache que le browse normal, pas les recherches.
+        if (!isSearchMode && state.source !== 'search')
+          saveWorkshopCache(workshopBrowseItems);
+        workshopBrowseCurrentPage = 1;
+        renderWorkshopBrowse();
+      } else if (workshopBrowseItems.length === 0) {
+        showErrorOrCache(isSearchMode
+                             ? 'Aucun résultat pour ta recherche.'
+                             : 'Aucune map Workshop trouvée.');
+      }
     }
   }, 100);
   _workshopBrowsePollInterval = pollInterval;
@@ -782,17 +796,11 @@ function showWorkshopEmpty(message) {
 
 function showErrorOrCache(errorMessage) {
   try {
-    var ex = getExternal();
-    if (ex && ex.workshopGetBrowseData) {
-      var fd = ex.workshopGetBrowseData();
-      if (fd && fd !== '[]') {
-        var parsed = JSON.parse(fd);
-        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-          workshopBrowseItems = parsed;
-          renderWorkshopBrowse();
-          return;
-        }
-      }
+    var errState = getWorkshopBrowseState();
+    if (errState && errState.items && errState.items.length > 0) {
+      workshopBrowseItems = errState.items;
+      renderWorkshopBrowse();
+      return;
     }
   } catch (e) {
   }
