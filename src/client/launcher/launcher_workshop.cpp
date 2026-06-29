@@ -1446,10 +1446,10 @@ std::string find_installed_workshop_item(const std::filesystem::path &game_path,
 void workshop_download_thread(std::string workshop_id) {
   try {
     if (::workshop::downloading_workshop_item) {
-      set_workshop_status("Erreur : un téléchargement est déjà en cours en jeu.",
-                          0.0,
-                          "Wait for the current in-game download to finish "
-                          "before starting a new one from the launcher.");
+      set_workshop_status(
+          "Erreur : un téléchargement est déjà en cours en jeu.", 0.0,
+          "Wait for the current in-game download to finish "
+          "before starting a new one from the launcher.");
       return;
     }
 
@@ -1457,7 +1457,8 @@ void workshop_download_thread(std::string workshop_id) {
     reset_workshop_status();
     workshop_cancel_requested = false;
     workshop_paused = false;
-    set_workshop_status("Initialisation...", -1.0, "Workshop ID: " + workshop_id);
+    set_workshop_status("Initialisation...", -1.0,
+                        "Workshop ID: " + workshop_id);
 
     char cwd[MAX_PATH];
     GetCurrentDirectoryA(sizeof(cwd), cwd);
@@ -1485,8 +1486,8 @@ void workshop_download_thread(std::string workshop_id) {
       std::error_code ec;
       std::filesystem::create_directories(steamcmd_dir, ec);
       if (ec) {
-        set_workshop_status("Erreur : impossible de créer le dossier steamcmd.", 0.0,
-                            ec.message());
+        set_workshop_status("Erreur : impossible de créer le dossier steamcmd.",
+                            0.0, ec.message());
         return;
       }
 
@@ -1494,7 +1495,8 @@ void workshop_download_thread(std::string workshop_id) {
           "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip", {},
           {}, 3);
       if (!zip_data || zip_data->empty()) {
-        set_workshop_status("Erreur : échec du téléchargement de SteamCMD.", 0.0,
+        set_workshop_status("Erreur : échec du téléchargement de SteamCMD.",
+                            0.0,
                             "Could not reach steamcdn-a.akamaihd.net. Check "
                             "your internet connection.");
         return;
@@ -1504,8 +1506,8 @@ void workshop_download_thread(std::string workshop_id) {
       try {
         auto files = utils::compression::zip::extract(*zip_data);
         if (files.empty()) {
-          set_workshop_status("Erreur : l'archive SteamCMD est vide ou corrompue.", 0.0,
-                              "");
+          set_workshop_status(
+              "Erreur : l'archive SteamCMD est vide ou corrompue.", 0.0, "");
           return;
         }
         for (const auto &[name, data] : files) {
@@ -1551,7 +1553,8 @@ void workshop_download_thread(std::string workshop_id) {
 
         const auto new_size = std::filesystem::file_size(steamcmd_exe, ec);
         if (!ec && new_size < 3 * 1024 * 1024) {
-          set_workshop_status("Erreur : échec de l'initialisation de SteamCMD.", 0.0,
+          set_workshop_status("Erreur : échec de l'initialisation de SteamCMD.",
+                              0.0,
                               "The self-update may have failed. Try again or "
                               "check your internet connection.");
           return;
@@ -1768,8 +1771,9 @@ void workshop_download_thread(std::string workshop_id) {
                 if (last_line.find("Downloading update") != std::string::npos ||
                     last_line.find("downloading") != std::string::npos) {
                   is_steamcmd_updating = true;
-                  set_workshop_status("Mise à jour de SteamCMD..." + attempt_str, 0.0,
-                                      "Please wait");
+                  set_workshop_status("Mise à jour de SteamCMD..." +
+                                          attempt_str,
+                                      0.0, "Please wait");
                 } else if (is_steamcmd_updating) {
                   is_steamcmd_updating = false;
                 }
@@ -2019,8 +2023,8 @@ void workshop_download_thread(std::string workshop_id) {
             details += " | Attempt " + std::to_string(attempt);
           }
 
-          set_workshop_status("Téléchargement de " + workshop_title + "...", percent,
-                              details);
+          set_workshop_status("Téléchargement de " + workshop_title + "...",
+                              percent, details);
 
           if (!active_folder.empty()) {
             std::lock_guard lock(workshop_status_mutex);
@@ -2252,9 +2256,9 @@ void workshop_download_thread(std::string workshop_id) {
     std::error_code ec;
     std::filesystem::create_directories(dest, ec);
     if (ec) {
-      set_workshop_status("Erreur : impossible de créer le dossier de destination.", 0.0,
-                          "Failed to create: " + dest.string() + "\n" +
-                              ec.message());
+      set_workshop_status(
+          "Erreur : impossible de créer le dossier de destination.", 0.0,
+          "Failed to create: " + dest.string() + "\n" + ec.message());
       return;
     }
 
@@ -2284,11 +2288,12 @@ void workshop_download_thread(std::string workshop_id) {
         set_workshop_status("Annulé.", 0.0, "");
         return;
       }
-      set_workshop_status("Erreur : échec de la copie des fichiers téléchargés.", 0.0,
-                          "Source: " + content_path.string() +
-                              "\n"
-                              "Destination: " +
-                              dest.string());
+      set_workshop_status(
+          "Erreur : échec de la copie des fichiers téléchargés.", 0.0,
+          "Source: " + content_path.string() +
+              "\n"
+              "Destination: " +
+              dest.string());
       return;
     }
 
@@ -2398,13 +2403,15 @@ void workshop_download_thread(std::string workshop_id) {
       if (!has_zone_files) {
         std::uint64_t dest_size = compute_folder_size_bytes(dest);
         if (dest_size < 1024) {
-          set_workshop_status("Erreur : aucun fichier de jeu trouvé dans le téléchargement.", 0.0,
-                              "The workshop item downloaded but contained no "
-                              "usable zone files.\n"
-                              "Installed to: " +
-                                  dest.string() +
-                                  "\n"
-                                  "This item may be corrupt or incompatible.");
+          set_workshop_status(
+              "Erreur : aucun fichier de jeu trouvé dans le téléchargement.",
+              0.0,
+              "The workshop item downloaded but contained no "
+              "usable zone files.\n"
+              "Installed to: " +
+                  dest.string() +
+                  "\n"
+                  "This item may be corrupt or incompatible.");
           return;
         }
         set_workshop_status(
@@ -2432,12 +2439,15 @@ void workshop_download_thread(std::string workshop_id) {
           "Error: Disk full.", 0.0,
           "Ran out of disk space. Free up space and try again.");
     } else {
-      set_workshop_status("Erreur : erreur du système de fichiers.", 0.0, detail);
+      set_workshop_status("Erreur : erreur du système de fichiers.", 0.0,
+                          detail);
     }
   } catch (const std::exception &ex) {
-    set_workshop_status("Erreur : le téléchargement Workshop a échoué.", 0.0, ex.what());
+    set_workshop_status("Erreur : le téléchargement Workshop a échoué.", 0.0,
+                        ex.what());
   } catch (...) {
-    set_workshop_status("Erreur : le téléchargement Workshop a planté.", 0.0, "");
+    set_workshop_status("Erreur : le téléchargement Workshop a planté.", 0.0,
+                        "");
   }
 
   ::workshop::launcher_downloading = false;
