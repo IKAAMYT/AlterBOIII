@@ -3968,9 +3968,6 @@ if (versionDisplay && creditsPopup) {
           } catch (e) {
           }
         }
-        // Petit compteur en haut
-        var el = document.getElementById('onlineCount');
-        if (el) el.textContent = players;
         // Stats animées (joueurs + serveurs)
         animateCount(document.getElementById('statPlayers'), players);
         animateCount(document.getElementById('statServers'), servers);
@@ -3980,17 +3977,6 @@ if (versionDisplay && creditsPopup) {
     }
   }
 
-  // Met à jour la stat "Maps Workshop" avec le nombre de maps chargées.
-  function refreshMapsStat() {
-    try {
-      var el = document.getElementById('statMaps');
-      if (el && typeof workshopBrowseItems !== 'undefined' &&
-          workshopBrowseItems && workshopBrowseItems.length) {
-        animateCount(el, workshopBrowseItems.length);
-      }
-    } catch (e) {
-    }
-  }
 
   function boot() {
     initParticles();
@@ -4016,8 +4002,6 @@ if (versionDisplay && creditsPopup) {
         } catch (e) {
         }
       }, 1200);
-      // Met à jour la stat "Maps Workshop" une fois les maps chargées.
-      setTimeout(refreshMapsStat, 3500);
     } catch (e) {
     }
   }

@@ -62,14 +62,6 @@
             <input type="range" class="home-volume-slider" id="homeVolumeSlider" min="0" max="100" value="10" title="Volume">
           </div>
 
-          <!-- Compteur de joueurs en ligne (sa propre position, sous la barre du haut) -->
-          <div class="online-counter" id="onlineCounter" title="Joueurs AlterBOIII en ligne"
-            style="position:absolute;top:70px;right:32px;z-index:5;display:-ms-flexbox;display:flex;-ms-flex-align:center;align-items:center;padding:6px 13px;border-radius:9px;background:rgba(0,0,0,0.4);border:1px solid rgba(242,196,17,0.25);font-family:'Rajdhani',sans-serif;">
-            <span class="online-dot" style="width:9px;height:9px;border-radius:50%;background:#3ba55d;box-shadow:0 0 8px #3ba55d;display:inline-block;margin-right:8px;"></span>
-            <span class="online-count" id="onlineCount" style="color:#f2c411;font-weight:700;font-size:15px;margin-right:5px;">--</span>
-            <span class="online-label" style="color:#cfc8b8;font-size:13px;">en ligne</span>
-          </div>
-
           <!-- Top bar: title + launch options -->
           <div class="home-topbar">
             <div class="home-brand">
@@ -101,21 +93,21 @@
             </div>
           </div>
 
-          <!-- Stats animées de la communauté -->
+          <!-- Stats communauté (joueurs + serveurs) -->
           <div class="home-stats" id="homeStats">
             <div class="home-stat">
-              <div class="home-stat-num" id="statPlayers" data-target="0">0</div>
+              <div class="home-stat-top">
+                <span class="home-stat-dot"></span>
+                <span class="home-stat-num" id="statPlayers" data-target="0" data-current="0">0</span>
+              </div>
               <div class="home-stat-label">Joueurs en ligne</div>
             </div>
             <div class="home-stat-sep"></div>
             <div class="home-stat">
-              <div class="home-stat-num" id="statServers" data-target="0">0</div>
+              <div class="home-stat-top">
+                <span class="home-stat-num" id="statServers" data-target="0" data-current="0">0</span>
+              </div>
               <div class="home-stat-label">Serveurs actifs</div>
-            </div>
-            <div class="home-stat-sep"></div>
-            <div class="home-stat">
-              <div class="home-stat-num" id="statMaps" data-target="0">0</div>
-              <div class="home-stat-label">Maps Workshop</div>
             </div>
           </div>
 
