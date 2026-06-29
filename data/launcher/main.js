@@ -3763,7 +3763,9 @@ function loadServersStatus() {
 
   try {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'https://master.iw4.zip/instance/?_=' + Date.now(), true);
+    // Proxy IKAAM (pas de CORS) : renvoie players, servers + list détaillée.
+    xhr.open('GET',
+             'https://ikaam.fr/COD/servers.php?_=' + Date.now(), true);
     xhr.timeout = 10000;
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return;
@@ -3775,22 +3777,21 @@ function loadServersStatus() {
       if (ok) {
         try {
           var data = JSON.parse(xhr.responseText);
-          for (var i = 0; i < data.length; i++) {
-            var inst = data[i];
-            var srvList = inst.servers || [];
-            for (var j = 0; j < srvList.length; j++) {
-              var sv = srvList[j];
-              if (sv && sv.game === 'T7') {
-                var c = parseInt(sv.clientnum, 10) || 0;
-                servers.push({
-                  name: sv.hostname || sv.name || 'Serveur AlterBO3',
-                  map: sv.map,
-                  clients: c,
-                  maxClients: sv.maxclientnum || sv.maxClients || 18
-                });
-                totalPlayers += c;
-              }
+          if (data && data.list && data.list.length) {
+            for (var i = 0; i < data.list.length; i++) {
+              var sv = data.list[i];
+              var c = parseInt(sv.clients, 10) || 0;
+              servers.push({
+                name: sv.name || 'Serveur AlterBO3',
+                map: sv.map,
+                clients: c,
+                maxClients: sv.maxClients || 18
+              });
+              totalPlayers += c;
             }
+          } else if (data && typeof data.players !== 'undefined') {
+            // Réponse valide mais liste vide : on garde le résumé.
+            totalPlayers = data.players;
           }
         } catch (e) {
           ok = false;
