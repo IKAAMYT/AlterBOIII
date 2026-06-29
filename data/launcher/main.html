@@ -78,7 +78,7 @@
           <!-- Stats communauté (joueurs + serveurs) — sous Options -->
           <div class="home-stats" id="homeStats">
             <div class="home-stat">
-              <span class="home-stat-dot"></span>
+              <span class="home-stat-dot" id="statDot"></span>
               <span class="home-stat-num" id="statPlayers" data-target="0" data-current="0">0</span>
               <span class="home-stat-label">Joueurs en ligne</span>
             </div>
@@ -1067,6 +1067,12 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Bandeau état de connexion (IKAAM) -->
+  <div class="conn-banner" id="connBanner">
+    <span class="conn-banner-ico">&#9888;</span>
+    <span class="conn-banner-text">Serveurs IKAAM injoignables — vérifie ta connexion. Le jeu reste jouable.</span>
   </div>
 
   <!-- Toasts (notifications IKAAM) -->

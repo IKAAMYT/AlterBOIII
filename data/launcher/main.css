@@ -164,12 +164,15 @@ a { color: #f2c411; text-decoration: none; }
   height: 100%;
   overflow-y: auto;
   padding: 0;
-  animation: pageIn .26s ease;
 }
-.page.active { display: block; }
+.page.active {
+  display: block;
+  -ms-animation: pageIn .32s cubic-bezier(.22,.7,.3,1) both;
+  animation: pageIn .32s cubic-bezier(.22,.7,.3,1) both;
+}
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px) scale(.995); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .page-scroll-inner { padding: 22px 44px 28px; max-width: 1080px; -webkit-box-sizing: border-box; box-sizing: border-box; width: 100%; }
 
@@ -1593,4 +1596,47 @@ cards
 .friend-copy-btn:hover {
   background: rgba(242,196,17,0.12);
   border-color: #f2c411;
+}
+
+/* ── Bandeau état de connexion (IKAAM) ── */
+.conn-banner {
+  position: fixed;
+  left: 50%;
+  top: -60px;
+  transform: translateX(-50%);
+  z-index: 99998;
+  display: -ms-flexbox; display: flex;
+  -ms-flex-align: center; align-items: center;
+  max-width: 90%;
+  padding: 9px 18px;
+  background: rgba(40,18,14,0.97);
+  border: 1px solid rgba(224,83,61,0.5);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+  color: #ffd9d0;
+  font-family: 'Rajdhani','Segoe UI',sans-serif;
+  font-size: 13px; font-weight: 500; letter-spacing: .2px;
+  opacity: 0;
+  transition: top .35s cubic-bezier(.2,.8,.3,1), opacity .35s ease;
+  pointer-events: none;
+}
+.conn-banner.visible {
+  top: 0;
+  opacity: 1;
+}
+.conn-banner-ico {
+  -ms-flex-negative: 0; flex-shrink: 0;
+  margin-right: 9px; color: #ff6f59; font-size: 14px;
+}
+
+/* ── Point stats rouge si serveur injoignable (IKAAM) ── */
+.home-stat-dot.offline {
+  background: #e0533d !important;
+  box-shadow: 0 0 9px #e0533d !important;
+  -ms-animation: pulseDotOff 2s ease-in-out infinite !important;
+  animation: pulseDotOff 2s ease-in-out infinite !important;
+}
+@keyframes pulseDotOff {
+  0%, 100% { opacity: 1; box-shadow: 0 0 9px #e0533d; }
+  50% { opacity: 0.45; box-shadow: 0 0 3px #e0533d; }
 }

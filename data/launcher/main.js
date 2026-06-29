@@ -300,6 +300,37 @@ function showToast(message, type, duration) {
 }
 window.showToast = showToast;
 
+/* ─────────────────────────────────────────────────────────────
+   État de connexion global (IKAAM)
+   setConnState(source, ok) — agrège plusieurs sources (stats,
+   workshop...). Le bandeau s'affiche si AU MOINS une source est
+   tombée, et disparaît dès que tout est de nouveau joignable.
+   ───────────────────────────────────────────────────────────── */
+var _connState = {};
+var _connBannerTimer = null;
+function setConnState(source, ok) {
+  _connState[source] = !!ok;
+  var anyDown = false;
+  for (var key in _connState) {
+    if (_connState.hasOwnProperty(key) && _connState[key] === false) {
+      anyDown = true;
+      break;
+    }
+  }
+  var banner = document.getElementById('connBanner');
+  if (!banner) return;
+  if (_connBannerTimer) { clearTimeout(_connBannerTimer); _connBannerTimer = null; }
+  if (anyDown) {
+    banner.className = 'conn-banner visible';
+  } else {
+    // Petit délai avant de masquer pour éviter le clignotement.
+    _connBannerTimer = setTimeout(function() {
+      banner.className = 'conn-banner';
+    }, 600);
+  }
+}
+window.setConnState = setConnState;
+
 enableClipboard(playerName);
 enableClipboard(workshopId);
 enableClipboard(workshopSearchInput);
@@ -424,6 +455,7 @@ function saveName() {
   if (name) {
     try {
       window.external.savePlayerName(name);
+      if (window.showToast) showToast('Pseudo enregistré', 'success', 2200);
     } catch (e) {
     }
   }
@@ -1254,6 +1286,22 @@ if (workshopSearchInput) {
   workshopSearchInput.onkeypress = function(e) {
     if (e.keyCode === 13 || e.key === 'Enter')
       workshopSearchBtn.click();
+  };
+  // Recherche instantanée côté client : filtre les maps déjà chargées
+  // en direct pendant la frappe (sans re-fetch serveur). Le bouton/Entrée
+  // garde la recherche serveur approfondie.
+  var _wsInstantTimer = null;
+  workshopSearchInput.oninput = function() {
+    if (_wsInstantTimer) clearTimeout(_wsInstantTimer);
+    _wsInstantTimer = setTimeout(function() {
+      var st = workshopSearchInput.value.replace(/^\s+|\s+$/g, '');
+      // On ne filtre en local que si on a déjà des items chargés.
+      if (workshopBrowseItems.length > 0) {
+        workshopBrowseSearchTerm = st;
+        workshopBrowseCurrentPage = 1;
+        renderWorkshopBrowse();
+      }
+    }, 180);
   };
 }
 
@@ -2647,10 +2695,11 @@ document.getElementById('playBtn').onclick = function() {
   try {
     var ex = getExternal();
     if (ex && ex.isGameRunning && ex.isGameRunning() === '1') {
-      showMessage('Game Running', 'Black Ops III is already running.');
+      if (window.showToast) showToast('Black Ops III est déjà lancé', 'info');
       return;
     }
     playBtn.disabled = true;
+    if (window.showToast) showToast('Lancement du jeu...', 'info', 2600);
     var opts = window.getSelectedLaunchOption();
 
     var selectedVersion = _selectedVersion || 'latest';
@@ -3522,7 +3571,7 @@ function renderFriendsList() {
     })(copyBtns[ci]);
   }
 
-  // Retirer un ami
+  // Retirer un ami (avec confirmation)
   var removeBtns = list.querySelectorAll('.friend-remove-btn');
   for (var ri = 0; ri < removeBtns.length; ri++) {
     (function(btn) {
@@ -3537,17 +3586,29 @@ function renderFriendsList() {
             break;
           }
         }
-        try {
-          var ex = getExternal();
-          if (ex && ex.removeFriend) {
-            ex.removeFriend(sid);
+        var label = removedName ? removedName : 'cet ami';
+        function doRemove() {
+          try {
+            var ex = getExternal();
+            if (ex && ex.removeFriend) {
+              ex.removeFriend(sid);
+            }
+          } catch (e) {
           }
-        } catch (e) {
+          _friendsData = _friendsData.filter(function(
+              f) { return String(f.steam_id) !== sid; });
+          renderFriendsList();
+          showToast((removedName ? removedName : 'Ami') + ' retiré', 'info');
         }
-        _friendsData = _friendsData.filter(function(
-            f) { return String(f.steam_id) !== sid; });
-        renderFriendsList();
-        showToast((removedName ? removedName : 'Ami') + ' retiré', 'info');
+        if (window.showConfirm) {
+          showConfirm('Retirer un ami',
+                      'Retirer <strong>' +
+                          label.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+                          '</strong> de ta liste d\'amis ?',
+                      doRemove);
+        } else {
+          doRemove();
+        }
       };
     })(removeBtns[ri]);
   }
@@ -4082,20 +4143,35 @@ if (versionDisplay && creditsPopup) {
       xhr.onreadystatechange = function() {
         if (xhr.readyState !== 4) return;
         var players = 0, servers = 0;
-        if (xhr.status >= 200 && xhr.status < 300) {
+        var ok = (xhr.status >= 200 && xhr.status < 300);
+        if (ok) {
           try {
             var d = JSON.parse(xhr.responseText);
             players = (d && typeof d.players !== 'undefined') ? d.players : 0;
             servers = (d && typeof d.servers !== 'undefined') ? d.servers : 0;
           } catch (e) {
+            ok = false;
           }
         }
         // Stats animées (joueurs + serveurs)
         animateCount(document.getElementById('statPlayers'), players);
         animateCount(document.getElementById('statServers'), servers);
+        // État de connexion + point vert/rouge
+        if (window.setConnState) setConnState('stats', ok);
+        var dot = document.getElementById('statDot');
+        if (dot) {
+          if (ok) dot.className = 'home-stat-dot';
+          else dot.className = 'home-stat-dot offline';
+        }
+      };
+      xhr.ontimeout = function() {
+        if (window.setConnState) setConnState('stats', false);
+        var dot = document.getElementById('statDot');
+        if (dot) dot.className = 'home-stat-dot offline';
       };
       xhr.send();
     } catch (e) {
+      if (window.setConnState) setConnState('stats', false);
     }
   }
 
