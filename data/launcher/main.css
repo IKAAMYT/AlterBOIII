@@ -1404,3 +1404,42 @@ cards
   width: 15px; height: 15px; border-radius: 50%;
   background: #f2c411; cursor: pointer; border: none;
 }
+
+/* ── Stats animées de la communauté (accueil) ── */
+.home-stats {
+  position: relative; z-index: 3;
+  display: -ms-flexbox; display: flex;
+  -ms-flex-pack: center; justify-content: center;
+  -ms-flex-align: center; align-items: center;
+  margin: 0 auto 18px; padding: 14px 26px;
+  max-width: 560px;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(242,196,17,0.20);
+  border-radius: 14px;
+  -ms-animation: homeFade 1.1s ease both; animation: homeFade 1.1s ease both;
+}
+.home-stat {
+  -ms-flex: 1; flex: 1;
+  text-align: center;
+  padding: 0 14px;
+}
+.home-stat-num {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  color: #f2c411;
+  line-height: 1.1;
+  text-shadow: 0 0 16px rgba(242,196,17,0.35);
+}
+.home-stat-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #cfc8b8;
+  margin-top: 3px;
+}
+.home-stat-sep {
+  width: 1px; height: 38px;
+  background: rgba(242,196,17,0.22);
+}

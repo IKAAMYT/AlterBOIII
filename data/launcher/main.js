@@ -3923,6 +3923,34 @@ if (versionDisplay && creditsPopup) {
   // AlterBO3 (IKAAM): fetch the number of online AlterBOIII players from our
   // PHP proxy (which queries the BOIII master server) and show it on the home
   // topbar. Refreshed every 60s. Pure UI — no exe change needed.
+  // Anime un compteur de sa valeur actuelle jusqu'à la cible (effet "qui monte").
+  function animateCount(el, target) {
+    if (!el) return;
+    target = parseInt(target, 10) || 0;
+    var start = parseInt(el.getAttribute('data-current'), 10) || 0;
+    if (start === target) {
+      el.textContent = target;
+      return;
+    }
+    var duration = 900;
+    var startTime = null;
+    function step(ts) {
+      if (!startTime) startTime = ts;
+      var p = Math.min((ts - startTime) / duration, 1);
+      // easing easeOutCubic
+      var eased = 1 - Math.pow(1 - p, 3);
+      var val = Math.round(start + (target - start) * eased);
+      el.textContent = val;
+      if (p < 1) {
+        requestAnimationFrame(step);
+      } else {
+        el.textContent = target;
+        el.setAttribute('data-current', target);
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
   function refreshOnlineCount() {
     try {
       var xhr = new XMLHttpRequest();
@@ -3931,21 +3959,35 @@ if (versionDisplay && creditsPopup) {
       xhr.timeout = 8000;
       xhr.onreadystatechange = function() {
         if (xhr.readyState !== 4) return;
-        var el = document.getElementById('onlineCount');
-        if (!el) return;
+        var players = 0, servers = 0;
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             var d = JSON.parse(xhr.responseText);
-            var n = (d && typeof d.players !== 'undefined') ? d.players : 0;
-            el.textContent = n;
+            players = (d && typeof d.players !== 'undefined') ? d.players : 0;
+            servers = (d && typeof d.servers !== 'undefined') ? d.servers : 0;
           } catch (e) {
-            el.textContent = '0';
           }
-        } else {
-          el.textContent = '0';
         }
+        // Petit compteur en haut
+        var el = document.getElementById('onlineCount');
+        if (el) el.textContent = players;
+        // Stats animées (joueurs + serveurs)
+        animateCount(document.getElementById('statPlayers'), players);
+        animateCount(document.getElementById('statServers'), servers);
       };
       xhr.send();
+    } catch (e) {
+    }
+  }
+
+  // Met à jour la stat "Maps Workshop" avec le nombre de maps chargées.
+  function refreshMapsStat() {
+    try {
+      var el = document.getElementById('statMaps');
+      if (el && typeof workshopBrowseItems !== 'undefined' &&
+          workshopBrowseItems && workshopBrowseItems.length) {
+        animateCount(el, workshopBrowseItems.length);
+      }
     } catch (e) {
     }
   }
@@ -3974,6 +4016,8 @@ if (versionDisplay && creditsPopup) {
         } catch (e) {
         }
       }, 1200);
+      // Met à jour la stat "Maps Workshop" une fois les maps chargées.
+      setTimeout(refreshMapsStat, 3500);
     } catch (e) {
     }
   }
