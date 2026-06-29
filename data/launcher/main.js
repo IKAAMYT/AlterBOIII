@@ -245,6 +245,61 @@ function getExternal() {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Toasts (IKAAM) — showToast(message, type, duration)
+   type: 'success' | 'error' | 'info' (défaut 'info')
+   Compatible MSHTML/IE (pas de fonctionnalités ES6).
+   ───────────────────────────────────────────────────────────── */
+function showToast(message, type, duration) {
+  var stack = document.getElementById('toastStack');
+  if (!stack) return;
+  type = type || 'info';
+  if (typeof duration !== 'number') duration = 3600;
+
+  var icons = { success: '\u2714', error: '\u26A0', info: '\u2139' };
+
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+
+  var ico = document.createElement('span');
+  ico.className = 'toast-ico';
+  ico.innerHTML = icons[type] || icons.info;
+
+  var msg = document.createElement('span');
+  msg.className = 'toast-msg';
+  msg.appendChild(document.createTextNode(String(message)));
+
+  var close = document.createElement('button');
+  close.className = 'toast-close';
+  close.type = 'button';
+  close.innerHTML = '&times;';
+
+  toast.appendChild(ico);
+  toast.appendChild(msg);
+  toast.appendChild(close);
+  stack.appendChild(toast);
+
+  var removed = false;
+  var timer = null;
+  function dismiss() {
+    if (removed) return;
+    removed = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+    toast.className = 'toast ' + type + ' leaving';
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 260);
+  }
+  close.onclick = dismiss;
+  // Pause auto-dismiss au survol
+  toast.onmouseover = function() { if (timer) { clearTimeout(timer); timer = null; } };
+  toast.onmouseout = function() { if (!removed) timer = setTimeout(dismiss, 1400); };
+
+  if (duration > 0) timer = setTimeout(dismiss, duration);
+  return dismiss;
+}
+window.showToast = showToast;
+
 enableClipboard(playerName);
 enableClipboard(workshopId);
 enableClipboard(workshopSearchInput);
@@ -3361,6 +3416,13 @@ if (workshopProgressFolder) {
 refreshModsGrid();
 
 var _friendsData = [];
+var _friendsFilter = '';
+
+function friendInitial(name) {
+  name = (name || '').replace(/^\s+/, '');
+  var ch = name.charAt(0);
+  return ch ? ch.toUpperCase() : '?';
+}
 
 function loadFriendsList() {
   try {
@@ -3386,28 +3448,50 @@ function renderFriendsList() {
   var countEl = document.getElementById('friendsCount');
   if (!list)
     return;
-  if (countEl)
-    countEl.textContent = _friendsData.length + ' friend' +
-                          (_friendsData.length !== 1 ? 's' : '');
 
-  if (_friendsData.length === 0) {
+  var total = _friendsData.length;
+  if (countEl)
+    countEl.textContent = total + ' ami' + (total !== 1 ? 's' : '');
+
+  // Filtre de recherche (nom ou Steam ID)
+  var q = _friendsFilter.toLowerCase();
+  var shown = [];
+  for (var k = 0; k < _friendsData.length; k++) {
+    var fr = _friendsData[k];
+    var n = (fr.name || '').toLowerCase();
+    var s = (fr.steam_id !== undefined ? String(fr.steam_id) : '').toLowerCase();
+    if (!q || n.indexOf(q) !== -1 || s.indexOf(q) !== -1) {
+      shown.push(fr);
+    }
+  }
+
+  if (total === 0) {
     list.innerHTML =
-        '<div class="friends-empty"><div class="friends-empty-icon">&#128100;</div><div class="friends-empty-text">No friends added yet</div></div>';
+        '<div class="friends-empty"><div class="friends-empty-icon">&#128100;</div><div class="friends-empty-text">Aucun ami ajouté pour le moment</div></div>';
+    return;
+  }
+  if (shown.length === 0) {
+    list.innerHTML =
+        '<div class="friends-empty"><div class="friends-empty-icon">&#128269;</div><div class="friends-empty-text">Aucun ami ne correspond à « ' +
+        _friendsFilter.replace(/</g, '&lt;').replace(/>/g, '&gt;') + ' »</div></div>';
     return;
   }
 
   var html = '';
-  for (var i = 0; i < _friendsData.length; i++) {
-    var f = _friendsData[i];
+  for (var i = 0; i < shown.length; i++) {
+    var f = shown[i];
     var sid = (f.steam_id !== undefined) ? String(f.steam_id) : '';
     var nm = f.name || 'Inconnu';
+    var safeNm = nm.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     html += '<div class="friend-item" data-steamid="' + sid + '">';
-    html += '<div class="friend-icon">&#128100;</div>';
+    html += '<div class="friend-icon">' + friendInitial(nm) + '</div>';
     html += '<div class="friend-info">';
-    html += '<div class="friend-name">' +
-            nm.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+    html += '<div class="friend-name">' + safeNm + '</div>';
     html += '<div class="friend-steamid">' + sid + '</div>';
     html += '</div>';
+    html +=
+        '<button type="button" class="friend-copy-btn" data-copy-sid="' + sid +
+        '" title="Copier le Steam ID">&#128203;</button>';
     html +=
         '<button type="button" class="friend-remove-btn" data-remove-sid="' +
         sid + '" title="Retirer">&times;</button>';
@@ -3415,6 +3499,30 @@ function renderFriendsList() {
   }
   list.innerHTML = html;
 
+  // Copier le Steam ID
+  var copyBtns = list.querySelectorAll('.friend-copy-btn');
+  for (var ci = 0; ci < copyBtns.length; ci++) {
+    (function(btn) {
+      btn.onclick = function() {
+        var sid = btn.getAttribute('data-copy-sid');
+        if (!sid) return;
+        var ok = false;
+        try {
+          if (window.clipboardData && window.clipboardData.setData) {
+            window.clipboardData.setData('Text', sid);
+            ok = true;
+          }
+        } catch (e) {}
+        if (ok) {
+          showToast('Steam ID copié', 'success');
+        } else {
+          showToast('Copie impossible sur ce système', 'error');
+        }
+      };
+    })(copyBtns[ci]);
+  }
+
+  // Retirer un ami
   var removeBtns = list.querySelectorAll('.friend-remove-btn');
   for (var ri = 0; ri < removeBtns.length; ri++) {
     (function(btn) {
@@ -3422,6 +3530,13 @@ function renderFriendsList() {
         var sid = btn.getAttribute('data-remove-sid');
         if (!sid)
           return;
+        var removedName = '';
+        for (var z = 0; z < _friendsData.length; z++) {
+          if (String(_friendsData[z].steam_id) === sid) {
+            removedName = _friendsData[z].name || '';
+            break;
+          }
+        }
         try {
           var ex = getExternal();
           if (ex && ex.removeFriend) {
@@ -3432,9 +3547,19 @@ function renderFriendsList() {
         _friendsData = _friendsData.filter(function(
             f) { return String(f.steam_id) !== sid; });
         renderFriendsList();
+        showToast((removedName ? removedName : 'Ami') + ' retiré', 'info');
       };
     })(removeBtns[ri]);
   }
+}
+
+// Barre de recherche de la liste d'amis
+var friendSearchInput = document.getElementById('friendSearchInput');
+if (friendSearchInput) {
+  friendSearchInput.oninput = function() {
+    _friendsFilter = friendSearchInput.value.replace(/^\s+|\s+$/g, '');
+    renderFriendsList();
+  };
 }
 
 var friendAddBtn = document.getElementById('friendAddBtn');
@@ -3449,13 +3574,11 @@ if (friendAddBtn) {
     var sid = sidInput.value.replace(/^\s+|\s+$/g, '');
 
     if (!name || !sid) {
-      showMessage('Add Friend',
-                  "Entre un nom ET un Steam ID.");
+      showToast('Entre un nom ET un Steam ID', 'error');
       return;
     }
     if (!/^\d{5,20}$/.test(sid)) {
-      showMessage('Add Friend',
-                  'Steam ID must be a numeric value (e.g. 76561198...).');
+      showToast('Le Steam ID doit être numérique (ex. 76561198...)', 'error');
       return;
     }
 
@@ -3464,23 +3587,22 @@ if (friendAddBtn) {
       if (ex && ex.addFriend) {
         var result = ex.addFriend(sid, name);
         if (result === 'duplicate') {
-          showMessage('Add Friend',
-                      'This Steam ID is already in your friends list.');
+          showToast('Ce Steam ID est déjà dans ta liste', 'error');
           return;
         } else if (result === 'error') {
-          showMessage('Add Friend',
-                      "Echec de l'ajout. Verifie les champs.");
+          showToast("Échec de l'ajout. Vérifie les champs.", 'error');
           return;
         }
       }
     } catch (e) {
-      showMessage('Add Friend', 'An error occurred while adding the friend.');
+      showToast("Une erreur est survenue lors de l'ajout", 'error');
       return;
     }
 
     nameInput.value = '';
     sidInput.value = '';
     loadFriendsList();
+    showToast(name + ' ajouté à tes amis', 'success');
   };
 }
 

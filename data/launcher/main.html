@@ -317,8 +317,7 @@
         <div class="friends-add-card">
           <div class="friends-add-label">Ajouter un ami</div>
           <p class="friends-add-sub">Entrez un nom et un Steam ID pour ajouter un ami</p>
-          <p class="friends-add-sub" style="font-size:0.75rem;opacity:0.5;margin-top:-6px;">&#9432; Friends will also be
-            auto-added when invited through Steam.</p>
+          <p class="friends-add-sub" style="font-size:0.75rem;opacity:0.5;margin-top:-6px;">&#9432; Les amis sont aussi ajoutés automatiquement quand ils t'invitent via Steam.</p>
           <div class="friends-add-row">
             <input type="text" id="friendNameInput" placeholder="Nom affiché..." autocomplete="off" maxlength="32">
             <input type="text" id="friendSteamIdInput" placeholder="Steam ID (ex. 76561198...)" autocomplete="off"
@@ -330,7 +329,11 @@
         <div class="friends-list-container">
           <div class="friends-list-header">
             <span class="friends-list-title">Liste d'amis</span>
-            <span class="friends-count" id="friendsCount">0 friends</span>
+            <span class="friends-count" id="friendsCount">0 ami</span>
+          </div>
+          <div class="friends-search-row">
+            <span class="friends-search-ico">&#128269;</span>
+            <input type="text" id="friendSearchInput" class="friends-search-input" placeholder="Rechercher un ami..." autocomplete="off" spellcheck="false">
           </div>
           <div class="friends-list-wrap">
             <div class="friends-list" id="friendsList"></div>
@@ -1065,6 +1068,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Toasts (notifications IKAAM) -->
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
   <script src="main.js"></script>
 </body>
