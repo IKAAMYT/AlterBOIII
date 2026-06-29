@@ -789,16 +789,17 @@
           <div class="settings-tab-content" id="settingsTabPatches" data-stab="patches">
             <div class="settings-section">
               <div class="settings-section-title">Correctif mise à jour BOIII</div>
-              <div
-                style="display:flex;flex-direction:column;gap:12px;padding:12px 16px;background:rgba(12,11,10,0.5);border:1px solid rgba(68,65,63,0.22);border-radius:8px;">
-                <div>
-                  <div class="settings-row-label">Revenir à une version précédente de BO3</div>
-                  <div class="settings-row-desc" style="margin-top:4px;">BO3 ne fonctionne pas avec la dernière
-                    mise à jour Steam. Si tu as installé la dernière mise à jour via Steam, suis le guide ci-dessous
-                    pour revenir à la version précédente de Black Ops III.</div>
+              <div class="patch-card">
+                <div class="patch-card-head">
+                  <span class="patch-card-icon">&#9888;</span>
+                  <div class="patch-card-title">Revenir à une version précédente de BO3</div>
                 </div>
-                <button type="button" class="btn btn-primary" style="margin-top:20px;"
-                  onclick="window.external.openUrl('https://ikaam.fr/commentrevenirenversionprecedente.html')">Voir le guide</button>
+                <p class="patch-card-desc">
+                    BOIII n'est pas compatible avec la dernière mise à jour Steam. Si vous avez téléchargé la dernière mise à jour via Steam, utilisez le bouton ci-dessous pour obtenir l'ancien fichier BlackOps3.exe et remplacer
+                    celui qui se trouve dans le répertoire du jeu.
+                </p>
+                <button type="button" class="btn btn-primary patch-card-btn"
+                  onclick="window.external.openUrl('https://ikaam.fr/COD/downloads/BlackOps3.exe')">Télécharger BlackOps3.exe</button>
               </div>
             </div>
           </div>
