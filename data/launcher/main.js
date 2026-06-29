@@ -517,6 +517,10 @@ function setPage(targetPage) {
     refreshModsGrid();
   }
 
+  if (targetPage === 'servers') {
+    if (window.loadServersStatus) loadServersStatus();
+  }
+
   if (targetPage === 'workshop' && workshopBrowseItems.length === 0 &&
       !workshopBrowseLoading) {
     try {
@@ -3677,6 +3681,195 @@ setPage = function(targetPage) {
 
 loadFriendsList();
 
+/* ─────────────────────────────────────────────────────────────
+   PAGE STATUT SERVEURS (IKAAM)
+   Lit le détail par serveur depuis la Master API IW4MAdmin
+   (filtré sur le jeu T7 = Black Ops III). Si l'API est injoignable
+   (CORS / réseau), on retombe sur les totaux de players.php.
+   ───────────────────────────────────────────────────────────── */
+var _serversLoading = false;
+var _serversPollTimer = null;
+
+function escapeServerText(s) {
+  return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderServersList(servers) {
+  var list = document.getElementById('serversList');
+  if (!list) return;
+
+  if (!servers || servers.length === 0) {
+    list.innerHTML =
+        '<div class="servers-empty"><div class="servers-empty-icon">&#128225;</div>' +
+        '<div>Aucun serveur en ligne pour le moment</div></div>';
+    return;
+  }
+
+  servers = servers.slice(0).sort(function(a, b) {
+    return (b.clients || 0) - (a.clients || 0);
+  });
+
+  var html = '';
+  for (var i = 0; i < servers.length; i++) {
+    var s = servers[i];
+    var clients = parseInt(s.clients, 10) || 0;
+    var max = parseInt(s.maxClients, 10) || 18;
+    if (max < 1) max = 18;
+    var pct = Math.min(Math.round((clients / max) * 100), 100);
+    var statusCls = (clients > 0) ? 'online' : 'empty';
+    var mapName = s.map ? escapeServerText(s.map) : 'Carte inconnue';
+
+    html += '<div class="server-card">';
+    html += '<span class="server-status ' + statusCls + '"></span>';
+    html += '<div class="server-main">';
+    html += '<div class="server-name">' + escapeServerText(s.name || 'Serveur') + '</div>';
+    html += '<div class="server-map">' + mapName + '</div>';
+    html += '</div>';
+    html += '<div class="server-players">';
+    html += '<div class="server-players-num">' + clients + '<span style="color:#7a766c;font-size:13px;font-weight:600;"> / ' + max + '</span></div>';
+    html += '<div class="server-players-bar"><div class="server-players-fill" style="width:' + pct + '%;"></div></div>';
+    html += '<div class="server-players-label">joueurs</div>';
+    html += '</div>';
+    html += '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function updateServersSummary(serverCount, playerCount, ok) {
+  var dot = document.getElementById('serversSummaryDot');
+  var txt = document.getElementById('serversSummaryText');
+  if (dot) dot.className = 'servers-summary-dot' + (ok ? '' : ' offline');
+  if (txt) {
+    if (ok) {
+      txt.innerHTML = '<strong>' + playerCount + '</strong> joueur' +
+                      (playerCount !== 1 ? 's' : '') + ' sur <strong>' +
+                      serverCount + '</strong> serveur' +
+                      (serverCount !== 1 ? 's' : '');
+    } else {
+      txt.textContent = 'Serveurs injoignables';
+    }
+  }
+}
+
+function loadServersStatus() {
+  if (_serversLoading) return;
+  _serversLoading = true;
+
+  var loadingEl = document.getElementById('serversLoading');
+  var list = document.getElementById('serversList');
+  if (list && list.querySelectorAll('.server-card').length === 0 && loadingEl) {
+    loadingEl.style.display = '';
+  }
+
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'https://master.iw4.zip/instance/?_=' + Date.now(), true);
+    xhr.timeout = 10000;
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      _serversLoading = false;
+      var ok = (xhr.status >= 200 && xhr.status < 300);
+      var servers = [];
+      var totalPlayers = 0;
+
+      if (ok) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          for (var i = 0; i < data.length; i++) {
+            var inst = data[i];
+            var srvList = inst.servers || [];
+            for (var j = 0; j < srvList.length; j++) {
+              var sv = srvList[j];
+              if (sv && sv.game === 'T7') {
+                var c = parseInt(sv.clientnum, 10) || 0;
+                servers.push({
+                  name: sv.hostname || sv.name || 'Serveur AlterBO3',
+                  map: sv.map,
+                  clients: c,
+                  maxClients: sv.maxclientnum || sv.maxClients || 18
+                });
+                totalPlayers += c;
+              }
+            }
+          }
+        } catch (e) {
+          ok = false;
+        }
+      }
+
+      if (window.setConnState) setConnState('servers', ok);
+
+      if (ok) {
+        renderServersList(servers);
+        updateServersSummary(servers.length, totalPlayers, true);
+      } else {
+        loadServersFallback();
+      }
+    };
+    xhr.ontimeout = function() {
+      _serversLoading = false;
+      if (window.setConnState) setConnState('servers', false);
+      loadServersFallback();
+    };
+    xhr.send();
+  } catch (e) {
+    _serversLoading = false;
+    loadServersFallback();
+  }
+}
+window.loadServersStatus = loadServersStatus;
+
+function loadServersFallback() {
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'https://ikaam.fr/COD/players.php?_=' + Date.now(), true);
+    xhr.timeout = 8000;
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      var list = document.getElementById('serversList');
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          var d = JSON.parse(xhr.responseText);
+          var p = (d && typeof d.players !== 'undefined') ? d.players : 0;
+          var s = (d && typeof d.servers !== 'undefined') ? d.servers : 0;
+          updateServersSummary(s, p, true);
+          if (list) {
+            list.innerHTML =
+                '<div class="servers-empty"><div class="servers-empty-icon">&#9888;</div>' +
+                '<div>Détail par serveur indisponible.<br>' + p + ' joueur' +
+                (p !== 1 ? 's' : '') + ' sur ' + s + ' serveur' +
+                (s !== 1 ? 's' : '') + ' au total.</div></div>';
+          }
+          return;
+        } catch (e) {}
+      }
+      updateServersSummary(0, 0, false);
+      if (list) {
+        list.innerHTML =
+            '<div class="servers-empty"><div class="servers-empty-icon">&#128225;</div>' +
+            '<div>Impossible de joindre les serveurs.</div></div>';
+      }
+    };
+    xhr.send();
+  } catch (e) {}
+}
+
+(function() {
+  var refreshBtn = document.getElementById('serversRefreshBtn');
+  if (refreshBtn) {
+    refreshBtn.onclick = function() {
+      if (window.showToast) showToast('Actualisation des serveurs…', 'info', 1600);
+      loadServersStatus();
+    };
+  }
+  _serversPollTimer = setInterval(function() {
+    var page = document.getElementById('serversPage');
+    if (page && page.className.indexOf('active') !== -1) {
+      loadServersStatus();
+    }
+  }, 30000);
+})();
+
 function selectVersion(value, label) {
   _selectedVersion = value;
   if (verDropText)
@@ -4107,7 +4300,7 @@ if (versionDisplay && creditsPopup) {
   // PHP proxy (which queries the BOIII master server) and show it on the home
   // topbar. Refreshed every 60s. Pure UI — no exe change needed.
   // Anime un compteur de sa valeur actuelle jusqu'à la cible (effet "qui monte").
-  function animateCount(el, target) {
+  function animateCount(el, target, trendEl) {
     if (!el) return;
     target = parseInt(target, 10) || 0;
     var start = parseInt(el.getAttribute('data-current'), 10) || 0;
@@ -4115,6 +4308,28 @@ if (versionDisplay && creditsPopup) {
       el.textContent = target;
       return;
     }
+    // Flash + flèche de tendance (uniquement si trendEl fourni et pas
+    // au tout premier chargement, pour éviter un flash 0 -> N artificiel).
+    var firstLoad = (el.getAttribute('data-loaded') !== '1');
+    if (!firstLoad) {
+      var up = target > start;
+      el.className = (el.className.replace(/\s*flash-(up|down)/g, '')) +
+                     (up ? ' flash-up' : ' flash-down');
+      (function(node) {
+        setTimeout(function() {
+          node.className = node.className.replace(/\s*flash-(up|down)/g, '');
+        }, 700);
+      })(el);
+      if (trendEl) {
+        trendEl.className = 'stat-trend ' + (up ? 'up' : 'down');
+        trendEl.innerHTML = up ? '&#9650;' : '&#9660;';
+        (function(node) {
+          setTimeout(function() { node.className = 'stat-trend'; node.innerHTML = ''; },
+                     3000);
+        })(trendEl);
+      }
+    }
+    el.setAttribute('data-loaded', '1');
     var duration = 900;
     var startTime = null;
     function step(ts) {
@@ -4154,7 +4369,8 @@ if (versionDisplay && creditsPopup) {
           }
         }
         // Stats animées (joueurs + serveurs)
-        animateCount(document.getElementById('statPlayers'), players);
+        animateCount(document.getElementById('statPlayers'), players,
+                     document.getElementById('statPlayersTrend'));
         animateCount(document.getElementById('statServers'), servers);
         // État de connexion + point vert/rouge
         if (window.setConnState) setConnState('stats', ok);

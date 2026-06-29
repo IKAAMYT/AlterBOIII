@@ -1681,3 +1681,131 @@ cards
   from { opacity: 0; transform: scale(.7); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+/* ── Flash + flèche de tendance du compteur joueurs (IKAAM) ── */
+.stat-trend {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  line-height: 1;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.stat-trend.up   { color: #4ade80; opacity: 1; -ms-animation: trendUp .4s ease both; animation: trendUp .4s ease both; }
+.stat-trend.down { color: #ff6f59; opacity: 1; -ms-animation: trendDown .4s ease both; animation: trendDown .4s ease both; }
+@keyframes trendUp   { from { transform: translateY(4px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes trendDown { from { transform: translateY(-4px); opacity: 0; } to { transform: none; opacity: 1; } }
+.home-stat-num.flash-up   { -ms-animation: flashUp .7s ease; animation: flashUp .7s ease; }
+.home-stat-num.flash-down { -ms-animation: flashDown .7s ease; animation: flashDown .7s ease; }
+@keyframes flashUp {
+  0% { text-shadow: 0 0 0 rgba(74,222,128,0); }
+  30% { text-shadow: 0 0 16px rgba(74,222,128,0.9); color: #8df0a8; }
+  100% { text-shadow: 0 0 14px rgba(242,196,17,0.35); }
+}
+@keyframes flashDown {
+  0% { text-shadow: 0 0 0 rgba(255,111,89,0); }
+  30% { text-shadow: 0 0 16px rgba(255,111,89,0.9); color: #ff9d8c; }
+  100% { text-shadow: 0 0 14px rgba(242,196,17,0.35); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   PAGE STATUT SERVEURS (IKAAM, drop-in)
+   ════════════════════════════════════════════════════════════ */
+.servers-toolbar {
+  display: -ms-flexbox; display: flex;
+  -ms-flex-align: center; align-items: center;
+  -ms-flex-pack: justify; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.servers-summary {
+  display: -ms-flexbox; display: flex;
+  -ms-flex-align: center; align-items: center;
+  font-family: 'Rajdhani','Segoe UI',sans-serif;
+  font-size: 14px; font-weight: 600; color: #c9c2b4;
+}
+.servers-summary-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #3ba55d; box-shadow: 0 0 8px #3ba55d;
+  display: inline-block; margin-right: 9px;
+  -ms-animation: pulseDot 2s ease-in-out infinite;
+  animation: pulseDot 2s ease-in-out infinite;
+}
+.servers-summary-dot.offline { background: #e0533d; box-shadow: 0 0 8px #e0533d; }
+.servers-summary strong { color: #f2c411; font-weight: 700; }
+
+.servers-list {
+  display: -ms-flexbox; display: flex;
+  -ms-flex-direction: column; flex-direction: column;
+}
+.server-card {
+  display: -ms-flexbox; display: flex;
+  -ms-flex-align: center; align-items: center;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  background: #1a1816;
+  border: 1px solid rgba(242,196,17,0.10);
+  border-radius: 12px;
+  transition: border-color .14s, background .14s, transform .1s;
+}
+.server-card:hover {
+  border-color: rgba(242,196,17,0.32);
+  background: #211e1a;
+}
+.server-status {
+  width: 10px; height: 10px; border-radius: 50%;
+  -ms-flex-negative: 0; flex-shrink: 0;
+  margin-right: 14px;
+}
+.server-status.online  { background: #3ba55d; box-shadow: 0 0 8px #3ba55d; }
+.server-status.empty   { background: #6b6a64; }
+.server-status.offline { background: #e0533d; box-shadow: 0 0 8px #e0533d; }
+.server-main { -ms-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
+.server-name {
+  font-family: 'Segoe UI Semibold','Segoe UI',Tahoma,sans-serif;
+  font-weight: 600; color: #f5f3ee; font-size: 14.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.server-map {
+  font-size: 12px; color: #968f81; margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.server-players {
+  -ms-flex-negative: 0; flex-shrink: 0;
+  text-align: right; margin-left: 16px;
+  min-width: 64px;
+}
+.server-players-num {
+  font-family: 'Rajdhani','Segoe UI',sans-serif;
+  font-weight: 700; font-size: 19px; color: #f2c411;
+  line-height: 1;
+}
+.server-players-bar {
+  width: 64px; height: 4px; margin-top: 6px;
+  background: rgba(242,196,17,0.12); border-radius: 3px;
+  overflow: hidden;
+}
+.server-players-fill {
+  height: 100%; background: #f2c411; border-radius: 3px;
+  -ms-transition: width .4s ease; transition: width .4s ease;
+}
+.server-players-label {
+  font-size: 9.5px; color: #968f81; margin-top: 4px;
+  text-transform: uppercase; letter-spacing: .6px;
+}
+.servers-loading {
+  text-align: center; padding: 50px 0; color: #968f81;
+  font-size: 13.5px;
+}
+.servers-loading-spin {
+  width: 30px; height: 30px; margin: 0 auto 14px;
+  border: 3px solid rgba(242,196,17,0.15);
+  border-top-color: #f2c411;
+  border-radius: 50%;
+  -ms-animation: spin .8s linear infinite;
+  animation: spin .8s linear infinite;
+}
+.servers-empty {
+  text-align: center; padding: 46px 0; color: #968f81;
+}
+.servers-empty-icon { font-size: 40px; opacity: .5; margin-bottom: 12px; }

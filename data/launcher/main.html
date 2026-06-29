@@ -27,6 +27,10 @@
           <span class="nav-icon">&#128218;</span>
           <span class="nav-label">Bibliothèque</span>
         </button>
+        <button type="button" class="nav-btn" data-page="servers" title="Serveurs">
+          <span class="nav-icon">&#128225;</span>
+          <span class="nav-label">Serveurs</span>
+        </button>
         <button type="button" class="nav-btn" data-page="friends" title="Amis">
           <span class="nav-icon">&#128101;</span>
           <span class="nav-label">Amis</span>
@@ -79,7 +83,7 @@
           <div class="home-stats" id="homeStats">
             <div class="home-stat">
               <span class="home-stat-dot" id="statDot"></span>
-              <span class="home-stat-num" id="statPlayers" data-target="0" data-current="0">0</span>
+              <span class="home-stat-num" id="statPlayers" data-target="0" data-current="0">0</span><span class="stat-trend" id="statPlayersTrend"></span>
               <span class="home-stat-label">Joueurs en ligne</span>
             </div>
             <div class="home-stat">
@@ -309,6 +313,30 @@
           <button type="button" class="btn btn-primary" id="libraryModalOpenBtn">Ouvrir le dossier</button>
         </div>
       </div>
+    </div>
+
+    <div id="serversPage" class="page">
+      <div class="page-scroll-inner">
+        <div class="page-header">
+          <h2 class="page-title">Serveurs</h2>
+          <p class="page-sub">État en temps réel des serveurs AlterBO3. Rejoins la partie qui te plaît.</p>
+        </div>
+
+        <div class="servers-toolbar">
+          <div class="servers-summary" id="serversSummary">
+            <span class="servers-summary-dot" id="serversSummaryDot"></span>
+            <span id="serversSummaryText">Chargement…</span>
+          </div>
+          <button type="button" class="btn" id="serversRefreshBtn" title="Rafraîchir">&#8635;&nbsp; Rafraîchir</button>
+        </div>
+
+        <div class="servers-list" id="serversList">
+          <div class="servers-loading" id="serversLoading">
+            <div class="servers-loading-spin"></div>
+            <div>Récupération des serveurs…</div>
+          </div>
+        </div>
+      </div><!-- end page-scroll-inner -->
     </div>
 
     <div id="friendsPage" class="page">
