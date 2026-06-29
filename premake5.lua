@@ -376,8 +376,6 @@ dependson({ "tlsdll" })
 
 links({ "common" })
 
-webview2.import()
-
 if not os.isfile("%{_MAIN_SCRIPT_DIR}/src/version.h") then
   if os.host() == "windows" then
     prebuildcommands({ "pushd %{_MAIN_SCRIPT_DIR}", "tools\\premake5.exe generate-buildinfo", "popd" })
