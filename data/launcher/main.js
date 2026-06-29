@@ -2539,6 +2539,14 @@ function showVerifyResults(changedFiles, message) {
 document.getElementById('verifyBtn').onclick =
     function() { showVerifyPopup(); };
 
+// Bouton « Vérifier les fichiers du jeu » visible dans Réglages > Maintenance
+(function() {
+  var vbtn = document.getElementById('verifyGameFilesBtn');
+  if (vbtn) {
+    vbtn.onclick = function() { showVerifyPopup(); };
+  }
+})();
+
 verifyCloseBtn.onclick = function() {
   try {
     var ex = getExternal();

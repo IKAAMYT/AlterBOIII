@@ -725,7 +725,7 @@ a { color: #f2c411; text-decoration: none; }
   max-width: none; max-height: none; width: auto;
 }
 .workshop-modal-content, .workshop-modal > div, .library-modal > div { max-width: 720px; }
-@keyframes popIn { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .popup-title, .msg-popup-title, .confirm-popup-title,
 #messagePopupTitle, #confirmPopupTitle, .workshop-modal-title, .library-modal-title {
@@ -803,10 +803,10 @@ a { color: #f2c411; text-decoration: none; }
 }
 .launch-dropdown-list { display: -ms-flexbox; display: flex; flex-direction: column; -ms-flex-direction: column; gap: 6px; padding: 4px 16px 18px; }
 .launch-option-card { display: -ms-flexbox; display: flex; align-items: center; -ms-flex-align: center; gap: 13px; padding: 14px 17px;
-  background: rgba(26,24,22,0.85); border: 1px solid rgba(242, 196, 17, 0.1); border-radius: 11px; cursor: pointer; transition: all .14s; }
+  background: rgba(26,24,22,0.85); border: 1px solid rgba(242, 196, 17, 0.1); border-radius: 11px; cursor: pointer; transition: border-color .14s, background .14s, transform .14s; }
 .launch-option-card:hover { border-color: rgba(242, 196, 17, 0.5); background: #221f1b; -ms-transform: translateX(2px); transform: translateX(2px); }
 .launch-option-card.active { border-color: #f2c411; background: #221f1b; box-shadow: 0 0 0 1px rgba(242,196,17,0.4) inset; }
-.launch-option-dot { width: 13px; height: 13px; min-width: 13px; max-width: 13px; min-height: 13px; border-radius: 50%; background: transparent; border: 2px solid rgba(242,196,17,0.4); box-sizing: border-box; -ms-flex: 0 0 13px; flex: 0 0 13px; display: inline-block; transition: all .14s; }
+.launch-option-dot { width: 13px; height: 13px; min-width: 13px; max-width: 13px; min-height: 13px; border-radius: 50%; background: transparent; border: 2px solid rgba(242,196,17,0.4); box-sizing: border-box; -ms-flex: 0 0 13px; flex: 0 0 13px; display: inline-block; transition: background .14s, border-color .14s, box-shadow .14s; }
 .launch-option-card.active .launch-option-dot { background: #f2c411; border-color: #f2c411; box-shadow: 0 0 8px rgba(242,196,17,0.7); }
 .launch-option-name { font-size: 14px; color: #c9c2b4; }
 .launch-option-card.active .launch-option-name { color: #f5f3ee; }
