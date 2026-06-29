@@ -44,6 +44,18 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.3.1
 
+      - name: Fetch WebView2 SDK
+        shell: pwsh
+        run: |
+          $ver = "1.0.2792.45"
+          $url = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$ver"
+          Invoke-WebRequest -Uri $url -OutFile webview2.zip
+          if (Test-Path deps/webview2) { Remove-Item -Recurse -Force deps/webview2 }
+          Expand-Archive -Path webview2.zip -DestinationPath deps/webview2 -Force
+          Remove-Item webview2.zip
+          if (-not (Test-Path "deps/webview2/build/native/include/WebView2.h")) { Write-Error "WebView2.h manquant"; exit 1 }
+          if (-not (Test-Path "deps/webview2/build/native/x64/WebView2LoaderStatic.lib")) { Write-Error "loader manquant"; exit 1 }
+
       - name: Generate project files
         run: tools/premake5 vs2022
 
