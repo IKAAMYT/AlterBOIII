@@ -118,8 +118,12 @@
                 </div>
 
                 <div class="home-links">
-                  <button type="button" class="home-link" id="discordBtn" onclick="window.external.openUrl('https://discord.gg/BdkJ5DukUm')" title="Discord">
-                    <span class="home-link-ic">&#128172;</span><span>Discord</span>
+                  <button type="button" class="home-link home-link-discord" id="discordBtn" onclick="window.external.openUrl('https://discord.gg/BdkJ5DukUm')" title="Rejoindre le Discord IKAAM">
+                    <span class="home-link-ic discord-glyph">&#128172;</span>
+                    <span class="discord-label">Discord</span>
+                    <span class="discord-online" id="discordOnline" style="display:none;">
+                      <span class="discord-online-dot"></span><span id="discordOnlineCount">0</span>
+                    </span>
                   </button>
                   <button type="button" class="home-link" onclick="window.external.openUrl('https://ikaam.fr/AlterCOD')" title="Site IKAAM">
                     <span class="home-link-ic">&#127760;</span><span>Site IKAAM</span>

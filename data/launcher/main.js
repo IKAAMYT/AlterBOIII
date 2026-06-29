@@ -4176,6 +4176,46 @@ if (versionDisplay && creditsPopup) {
   }
 
 
+  // AlterBO3 (IKAAM): compteur de membres Discord en ligne via le widget API.
+  // Nécessite que le widget serveur soit activé (Param. serveur > Widget).
+  // Si l'API échoue (widget off / hors-ligne), on masque simplement le badge.
+  function refreshDiscordOnline() {
+    try {
+      var guildId = '1212086421372928000';
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET',
+               'https://discord.com/api/guilds/' + guildId +
+                   '/widget.json?_=' + Date.now(), true);
+      xhr.timeout = 8000;
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState !== 4) return;
+        var wrap = document.getElementById('discordOnline');
+        var countEl = document.getElementById('discordOnlineCount');
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var d = JSON.parse(xhr.responseText);
+            var n = (d && typeof d.presence_count !== 'undefined')
+                        ? d.presence_count : null;
+            if (n !== null && wrap && countEl) {
+              countEl.textContent = n;
+              wrap.style.display = '';
+              return;
+            }
+          } catch (e) {
+          }
+        }
+        // Échec ou widget désactivé : on garde le bouton, sans le badge.
+        if (wrap) wrap.style.display = 'none';
+      };
+      xhr.ontimeout = function() {
+        var wrap = document.getElementById('discordOnline');
+        if (wrap) wrap.style.display = 'none';
+      };
+      xhr.send();
+    } catch (e) {
+    }
+  }
+
   function boot() {
     initParticles();
     initAudio();
@@ -4183,6 +4223,12 @@ if (versionDisplay && creditsPopup) {
     try {
       setTimeout(refreshOnlineCount, 800);
       setInterval(refreshOnlineCount, 60000);
+    } catch (e) {
+    }
+    // Compteur Discord en ligne : au boot puis toutes les 2 min.
+    try {
+      setTimeout(refreshDiscordOnline, 1200);
+      setInterval(refreshDiscordOnline, 120000);
     } catch (e) {
     }
     // AlterBO3 (IKAAM): refresh the latest Workshop maps automatically at
