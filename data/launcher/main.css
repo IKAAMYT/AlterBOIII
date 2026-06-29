@@ -1206,8 +1206,10 @@ cards
   display: -ms-flexbox; display: flex;
   -ms-flex-align: center; align-items: center;
   -ms-flex-pack: justify; justify-content: space-between;
-  padding: 22px 30px;
+  padding: 18px 30px;
 }
+.home-brand { -ms-flex: 0 0 auto; flex: 0 0 auto; }
+.home-topbar .gear-btn { -ms-flex: 0 0 auto; flex: 0 0 auto; }
 .home-brand {
   font-family: 'Segoe UI Black','Arial Black','Malgun Gothic','Segoe UI',Tahoma,sans-serif;
   font-size: 30px; letter-spacing: 0.5px;
@@ -1405,58 +1407,65 @@ cards
   background: #f2c411; cursor: pointer; border: none;
 }
 
-/* ── Stats communauté (accueil) ── */
+/* ── Stats communauté (accueil, dans la topbar) ── */
 .home-stats {
-  position: relative; z-index: 3;
   display: -ms-inline-flexbox; display: inline-flex;
   -ms-flex-align: center; align-items: center;
   -ms-flex-pack: center; justify-content: center;
-  margin: 0 auto 16px; padding: 12px 30px;
-  background: rgba(8,7,6,0.55);
-  border: 1px solid rgba(242,196,17,0.22);
-  border-radius: 16px;
-  box-shadow: 0 6px 26px rgba(0,0,0,0.4), 0 0 30px rgba(242,196,17,0.06);
+  -ms-flex: 0 0 auto; flex: 0 0 auto;
+  padding: 9px 22px;
+  background: rgba(8,7,6,0.62);
+  border: 1px solid rgba(242,196,17,0.20);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.45), 0 0 22px rgba(242,196,17,0.05), inset 0 1px 0 rgba(255,255,255,0.04);
   -ms-animation: homeFade 1.1s ease both; animation: homeFade 1.1s ease both;
+  white-space: nowrap;
 }
 .home-stat {
-  text-align: center;
-  padding: 0 26px;
-  min-width: 120px;
-}
-.home-stat-top {
   display: -ms-flexbox; display: flex;
   -ms-flex-align: center; align-items: center;
-  -ms-flex-pack: center; justify-content: center;
-  height: 38px;
+  padding: 0 16px;
 }
 .home-stat-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: #3ba55d; box-shadow: 0 0 10px #3ba55d;
-  display: inline-block; margin-right: 9px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #3ba55d; box-shadow: 0 0 9px #3ba55d;
+  display: inline-block; margin-right: 9px; -ms-flex-negative: 0; flex-shrink: 0;
   -ms-animation: pulseDot 2s ease-in-out infinite;
   animation: pulseDot 2s ease-in-out infinite;
 }
 @keyframes pulseDot {
-  0%, 100% { opacity: 1; box-shadow: 0 0 10px #3ba55d; }
-  50% { opacity: 0.55; box-shadow: 0 0 4px #3ba55d; }
+  0%, 100% { opacity: 1; box-shadow: 0 0 9px #3ba55d; }
+  50% { opacity: 0.55; box-shadow: 0 0 3px #3ba55d; }
 }
 .home-stat-num {
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
-  font-size: 32px;
+  font-size: 26px;
   color: #f2c411;
   line-height: 1;
-  text-shadow: 0 0 18px rgba(242,196,17,0.4);
+  text-shadow: 0 0 16px rgba(242,196,17,0.38);
+  margin-right: 10px;
 }
 .home-stat-label {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 11.5px;
-  letter-spacing: 1.5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
   color: #b8b1a3;
-  margin-top: 6px;
+  line-height: 1.15;
+  max-width: 70px;
+  white-space: normal;
 }
 .home-stat-sep {
-  width: 1px; height: 42px;
+  width: 1px; height: 30px;
   background: rgba(242,196,17,0.20);
+  -ms-flex-negative: 0; flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .home-stats { padding: 7px 14px; }
+  .home-stat { padding: 0 11px; }
+  .home-stat-num { font-size: 22px; margin-right: 8px; }
+  .home-stat-label { font-size: 9.5px; max-width: 60px; }
 }
