@@ -1222,6 +1222,12 @@ void relaunch_with_launch_options(const std::vector<std::string> &options) {
         process_info.hProcess != INVALID_HANDLE_VALUE) {
       CloseHandle(process_info.hProcess);
     }
+
+    // AlterBO3 (IKAAM) fix: terminate the current launcher process right after
+    // spawning the new (game) instance. Without this, the old process survived
+    // and later launched the game a SECOND time when its window was closed by
+    // hand. Mirrors relaunch_exe_with_launch_options which already does this.
+    TerminateProcess(GetCurrentProcess(), 0);
   }
 }
 } // namespace
@@ -1265,6 +1271,11 @@ bool is_game_process_running() {
 }
 
 bool run() {
+  // AlterBO3 (IKAAM): self-update. First remove the leftover old exe from a
+  // previous update, then check if a newer launcher build is available.
+  cleanup_old_launcher();
+  check_launcher_update();
+
   // Use shared pointers for results to avoid capture-by-reference crashes on
   // exit
   auto run_game = std::make_shared<bool>(false);
@@ -2500,6 +2511,122 @@ std::filesystem::path get_launcher_ui_file() {
   return game::get_appdata_path() / "data/launcher/main.html";
 }
 
+// AlterBO3 (IKAAM): launcher self-update.
+//
+// The launcher knows its own build number (LAUNCHER_BUILD below). On startup
+// it fetches a small text file from ikaam.fr that holds the latest build
+// number. If the remote number is higher, it asks the user (Yes/No) and, on
+// Yes, downloads the new AlterBOIII.exe and swaps it in WITHOUT needing a
+// .bat or a second updater process.
+//
+// The swap trick: a running .exe cannot be overwritten, but it CAN be renamed.
+// So we rename the current exe to AlterBOIII_old.exe, write the freshly
+// downloaded bytes to AlterBOIII.exe, launch it, and quit. The new instance
+// deletes AlterBOIII_old.exe on startup (handled at the top of run()).
+//
+// To ship an update: bump LAUNCHER_BUILD here, upload the new AlterBOIII.exe
+// to https://ikaam.fr/COD/AlterBOIII.exe and set the same number inside
+// https://ikaam.fr/COD/launcher_ver.txt
+#define LAUNCHER_BUILD 1
+
+void cleanup_old_launcher() {
+  // Remove the leftover AlterBOIII_old.exe from a previous self-update.
+  std::error_code ec;
+  const auto self = utils::nt::library::get_by_address(cleanup_old_launcher);
+  const auto dir = std::filesystem::path(self.get_path()).parent_path();
+  const auto old_exe = dir / "AlterBOIII_old.exe";
+  if (std::filesystem::exists(old_exe, ec)) {
+    std::filesystem::remove(old_exe, ec);
+  }
+}
+
+void check_launcher_update() {
+  static const char *ver_url = "https://ikaam.fr/COD/launcher_ver.txt";
+  static const char *exe_url = "https://ikaam.fr/COD/AlterBOIII.exe";
+
+  // 1) Fetch the remote build number.
+  const auto rev_data = utils::http::get_data(ver_url);
+  if (!rev_data || rev_data->empty()) {
+    return; // network down or file missing: skip silently, launcher still works
+  }
+
+  std::string remote_str = *rev_data;
+  while (!remote_str.empty() &&
+         (remote_str.back() == '\n' || remote_str.back() == '\r' ||
+          remote_str.back() == ' ' || remote_str.back() == '\t')) {
+    remote_str.pop_back();
+  }
+
+  int remote_build = 0;
+  try {
+    remote_build = std::stoi(remote_str);
+  } catch (...) {
+    return; // malformed file: ignore
+  }
+
+  if (remote_build <= LAUNCHER_BUILD) {
+    return; // already up to date
+  }
+
+  // 2) Ask the user.
+  const int answer = MessageBoxA(
+      nullptr,
+      "Une nouvelle mise a jour du launcher AlterBO3 est disponible.\n\n"
+      "Voulez-vous la telecharger et l'installer maintenant ?",
+      "Mise a jour disponible", MB_YESNO | MB_ICONINFORMATION);
+  if (answer != IDYES) {
+    return; // user declined: keep current version
+  }
+
+  // 3) Download the new exe into memory.
+  const auto exe_data = utils::http::get_data(exe_url);
+  if (!exe_data || exe_data->empty()) {
+    game::show_error("Echec du telechargement de la mise a jour.\n"
+                     "Reessayez plus tard.");
+    return;
+  }
+
+  // 4) Swap: rename current exe, write the new one in its place.
+  const auto self = utils::nt::library::get_by_address(check_launcher_update);
+  const auto exe_path = std::filesystem::path(self.get_path());
+  const auto dir = exe_path.parent_path();
+  const auto old_path = dir / "AlterBOIII_old.exe";
+  const auto new_path = dir / "AlterBOIII.exe";
+
+  std::error_code ec;
+  // Clear any stale _old from a previous run, then rename current -> _old.
+  std::filesystem::remove(old_path, ec);
+  std::filesystem::rename(exe_path, old_path, ec);
+  if (ec) {
+    game::show_error("Impossible de remplacer le launcher.\n"
+                     "Fermez les autres instances et reessayez.");
+    return;
+  }
+
+  if (!utils::io::write_file_executable(new_path, *exe_data)) {
+    // Roll back so the user is not left without a launcher.
+    std::filesystem::rename(old_path, exe_path, ec);
+    game::show_error("Echec de l'ecriture de la mise a jour.");
+    return;
+  }
+
+  // 5) Launch the new exe and quit this one.
+  STARTUPINFOA si{};
+  PROCESS_INFORMATION pi{};
+  si.cb = sizeof(si);
+  std::string cmd = "\"" + new_path.string() + "\"";
+  char dir_buf[MAX_PATH];
+  GetCurrentDirectoryA(sizeof(dir_buf), dir_buf);
+  if (CreateProcessA(new_path.string().c_str(), cmd.data(), nullptr, nullptr,
+                     FALSE, 0, nullptr, dir_buf, &si, &pi)) {
+    if (pi.hThread)
+      CloseHandle(pi.hThread);
+    if (pi.hProcess)
+      CloseHandle(pi.hProcess);
+    TerminateProcess(GetCurrentProcess(), 0);
+  }
+}
+
 // AlterBO3 (IKAAM): on first launch the custom UI files may be missing.
 // Download them once from the IKAAM GitHub (raw) so the launcher renders.
 // This NEVER overwrites existing files — it only fills in what's absent,
@@ -2516,8 +2643,9 @@ void ensure_launcher_ui() {
                             "AlterBOIII/main/data/launcher/";
   static const char *rev_url = "https://raw.githubusercontent.com/IKAAMYT/"
                                "AlterBOIII/main/data/launcher/ui_rev.txt";
-  static const char *files[] = {"main.html", "main.css", "main.js",
-                                "home_splash.jpg", "bigboiii.jpg"};
+  static const char *files[] = {"main.html",    "main.css",
+                                "main.js",      "home_splash.jpg",
+                                "bigboiii.jpg", "verification.json"};
 
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
   const auto marker = ui_dir / ".ui_rev";
