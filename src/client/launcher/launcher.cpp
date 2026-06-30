@@ -2551,6 +2551,14 @@ void cleanup_old_launcher() {
 }
 
 void check_launcher_update() {
+  // Anti-loop guard: the freshly updated exe is relaunched with this flag so
+  // it does NOT immediately check again. Without it, if the server still serves
+  // the same build (or the user forgot to bump the exe), the popup would loop
+  // forever.
+  if (utils::flags::has_flag("noupdatecheck")) {
+    return;
+  }
+
   static const char *ver_url = "https://ikaam.fr/COD/launcher_ver.txt";
   static const char *exe_url = "https://ikaam.fr/COD/AlterBOIII.exe";
 
@@ -2596,6 +2604,19 @@ void check_launcher_update() {
     return;
   }
 
+  // 3b) Sanity check: a real Windows .exe starts with the "MZ" magic bytes.
+  // If the server returned an HTML error page (404/403) instead of the file,
+  // this guard prevents overwriting the launcher with garbage (which would
+  // make the update popup loop forever).
+  if (exe_data->size() < 2 || (*exe_data)[0] != 'M' || (*exe_data)[1] != 'Z') {
+    game::show_error(
+        "La mise a jour telechargee est invalide (fichier introuvable "
+        "sur le serveur ou corrompu).\n\n"
+        "Verifiez que AlterBOIII.exe est bien present a l'adresse "
+        "configuree, puis reessayez.");
+    return;
+  }
+
   // 4) Swap: rename current exe, write the new one in its place.
   const auto self = utils::nt::library::get_by_address(check_launcher_update);
   const auto exe_path = std::filesystem::path(self.get_path());
@@ -2620,11 +2641,12 @@ void check_launcher_update() {
     return;
   }
 
-  // 5) Launch the new exe and quit this one.
+  // 5) Launch the new exe and quit this one. The -noupdatecheck flag stops the
+  // new instance from re-checking immediately (anti-loop safety).
   STARTUPINFOA si{};
   PROCESS_INFORMATION pi{};
   si.cb = sizeof(si);
-  std::string cmd = "\"" + new_path.string() + "\"";
+  std::string cmd = "\"" + new_path.string() + "\" \"-noupdatecheck\"";
   char dir_buf[MAX_PATH];
   GetCurrentDirectoryA(sizeof(dir_buf), dir_buf);
   if (CreateProcessA(new_path.string().c_str(), cmd.data(), nullptr, nullptr,
