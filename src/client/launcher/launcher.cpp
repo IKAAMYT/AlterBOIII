@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 1
+#define LAUNCHER_BUILD 2
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
