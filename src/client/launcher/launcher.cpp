@@ -31,6 +31,11 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
+// AlterBO3 (IKAAM): launcher build number for the self-update system.
+// Bump this each release and set the same number in launcher_ver.txt on
+// ikaam.fr. Defined here (top of file) so it can also be shown in the title.
+#define LAUNCHER_BUILD 1
+
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
 
@@ -165,7 +170,7 @@ std::string compute_file_xxh3(const std::filesystem::path &file_path) {
 
 void verify_game_thread(const std::string &modes_csv) {
   verify_cancel_requested = false;
-  set_verify_status("Preparing verification...", 0.0, "");
+  set_verify_status("Preparation de la verification...", 0.0, "");
 
   try {
 
@@ -214,7 +219,7 @@ void verify_game_thread(const std::string &modes_csv) {
       return;
     }
 
-    set_verify_status("Loading manifest...", 0.0, "Mode: " + mode_label);
+    set_verify_status("Chargement du manifeste...", 0.0, "Mode: " + mode_label);
     std::ifstream mf(manifest_path, std::ios::binary);
     std::string manifest_str((std::istreambuf_iterator<char>(mf)),
                              std::istreambuf_iterator<char>());
@@ -223,14 +228,16 @@ void verify_game_thread(const std::string &modes_csv) {
     rapidjson::Document manifest;
     if (manifest.Parse(manifest_str.c_str()).HasParseError() ||
         !manifest.IsObject()) {
-      set_verify_status("Failed to parse verification.json manifest", 0.0, "");
+      set_verify_status("Echec de lecture du manifeste verification.json", 0.0,
+                        "");
       verify_running = false;
       return;
     }
 
     auto files_it = manifest.FindMember("files");
     if (files_it == manifest.MemberEnd() || !files_it->value.IsArray()) {
-      set_verify_status("Invalid manifest: no files array", 0.0, "");
+      set_verify_status("Manifeste invalide : aucune liste de fichiers", 0.0,
+                        "");
       verify_running = false;
       return;
     }
@@ -286,7 +293,7 @@ void verify_game_thread(const std::string &modes_csv) {
     };
     std::vector<manifest_entry> files_to_check;
 
-    set_verify_status("Filtering manifest files...", 0.0,
+    set_verify_status("Filtrage des fichiers du manifeste...", 0.0,
                       "Mode: " + mode_label);
 
     const auto &files_array = files_it->value;
@@ -367,7 +374,7 @@ void verify_game_thread(const std::string &modes_csv) {
 
     for (std::uint32_t i = 0; i < total; i++) {
       if (verify_cancel_requested) {
-        set_verify_status("Cancelled", 0.0, "");
+        set_verify_status("Annule", 0.0, "");
         verify_running = false;
         return;
       }
@@ -379,7 +386,7 @@ void verify_game_thread(const std::string &modes_csv) {
       auto slash = fname.rfind('/');
       if (slash != std::string::npos)
         fname = fname.substr(slash + 1);
-      set_verify_status("Verifying (" + mode_label + ")...", pct,
+      set_verify_status("Verification (" + mode_label + ")...", pct,
                         fname + " (" + std::to_string(i + 1) + "/" +
                             std::to_string(total) + ")");
 
@@ -447,29 +454,32 @@ void verify_game_thread(const std::string &modes_csv) {
     const std::uint32_t warn_total =
         warn_missing_count + warn_size_count + warn_hash_count;
 
-    std::string result_msg = mode_label + ": Verified " +
-                             std::to_string(total) +
-                             " files: " + std::to_string(ok_count) + " OK";
+    std::string result_msg =
+        mode_label + " : " + std::to_string(total) +
+        " fichiers verifies : " + std::to_string(ok_count) + " OK";
     if (error_total > 0) {
-      result_msg += " | ERRORS:";
+      result_msg += " | ERREURS :";
       if (missing_count > 0)
-        result_msg += " " + std::to_string(missing_count) + " missing";
+        result_msg += " " + std::to_string(missing_count) + " manquant(s)";
       if (size_mismatch_count > 0)
-        result_msg += " " + std::to_string(size_mismatch_count) + " wrong size";
+        result_msg +=
+            " " + std::to_string(size_mismatch_count) + " taille incorrecte";
       if (hash_mismatch_count > 0)
-        result_msg += " " + std::to_string(hash_mismatch_count) + " corrupt";
+        result_msg +=
+            " " + std::to_string(hash_mismatch_count) + " corrompu(s)";
     }
     if (warn_total > 0) {
-      result_msg += " | Optional (DLC):";
+      result_msg += " | Optionnel (DLC) :";
       if (warn_missing_count > 0)
-        result_msg += " " + std::to_string(warn_missing_count) + " missing";
+        result_msg += " " + std::to_string(warn_missing_count) + " manquant(s)";
       if (warn_size_count > 0)
-        result_msg += " " + std::to_string(warn_size_count) + " wrong size";
+        result_msg +=
+            " " + std::to_string(warn_size_count) + " taille incorrecte";
       if (warn_hash_count > 0)
-        result_msg += " " + std::to_string(warn_hash_count) + " corrupt";
+        result_msg += " " + std::to_string(warn_hash_count) + " corrompu(s)";
     }
     if (error_total == 0 && warn_total == 0)
-      result_msg += " - all good!";
+      result_msg += " - tout est bon !";
 
     std::vector<std::string> comp_issues;
     for (const auto &[comp_key, cs] : comp_stats) {
@@ -506,7 +516,7 @@ void verify_game_thread(const std::string &modes_csv) {
     set_verify_status(result_msg, 100.0, "Done");
 
   } catch (...) {
-    set_verify_status("Verification failed (try again)", 0.0, "");
+    set_verify_status("Echec de la verification (reessayez)", 0.0, "");
   }
   verify_running = false;
 }
@@ -1281,7 +1291,8 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window("AlterBO3", 1260, 680);
+  html_window window(utils::string::va("AlterBO3 (build %d)", LAUNCHER_BUILD),
+                     1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
@@ -2524,10 +2535,9 @@ std::filesystem::path get_launcher_ui_file() {
 // downloaded bytes to AlterBOIII.exe, launch it, and quit. The new instance
 // deletes AlterBOIII_old.exe on startup (handled at the top of run()).
 //
-// To ship an update: bump LAUNCHER_BUILD here, upload the new AlterBOIII.exe
-// to https://ikaam.fr/COD/AlterBOIII.exe and set the same number inside
-// https://ikaam.fr/COD/launcher_ver.txt
-#define LAUNCHER_BUILD 1
+// To ship an update: bump LAUNCHER_BUILD (top of this file), upload the new
+// AlterBOIII.exe to https://ikaam.fr/COD/AlterBOIII.exe and set the same number
+// inside https://ikaam.fr/COD/launcher_ver.txt
 
 void cleanup_old_launcher() {
   // Remove the leftover AlterBOIII_old.exe from a previous self-update.
