@@ -2553,11 +2553,6 @@ document.getElementById('verifyBtn').onclick =
   if (vbtn) {
     vbtn.onclick = function() { showVerifyPopup(); };
   }
-  // Même bouton sur la page d'accueil
-  var hvbtn = document.getElementById('homeVerifyBtn');
-  if (hvbtn) {
-    hvbtn.onclick = function() { showVerifyPopup(); };
-  }
 })();
 
 verifyCloseBtn.onclick = function() {
