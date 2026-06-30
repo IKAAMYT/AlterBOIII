@@ -1624,9 +1624,9 @@ function pollWorkshopStatus() {
           if (isDone) {
             if (msgEl)
               msgEl.style.color = 'rgba(34,197,94,0.9)';
-            showMessage('Download Complete',
+            showMessage('Téléchargement terminé',
                         status.details ||
-                            'Workshop item installed successfully.');
+                            'La map Workshop a été installée avec succès.');
           } else if (isCanceled) {
             if (msgEl)
               msgEl.style.color = 'rgba(250,204,21,0.9)';
@@ -1640,7 +1640,7 @@ function pollWorkshopStatus() {
           } else {
             if (msgEl)
               msgEl.style.color = 'rgba(239,68,68,0.9)';
-            showMessage('Workshop Error',
+            showMessage('Erreur Workshop',
                         status.message +
                             (status.details ? '\n' + status.details : ''));
           }
@@ -2295,7 +2295,7 @@ document.getElementById('checkUpdatesBtn').onclick = function() {
           }
           if (toUpdate.length === 0) {
             document.getElementById('checkUpdatesBtn').disabled = false;
-            showMessage('Updates', 'All items are up to date!');
+            showMessage('Mises à jour', 'Tous les éléments sont à jour !');
             return;
           }
           workshopProgress.style.display = 'block';
@@ -2552,6 +2552,11 @@ document.getElementById('verifyBtn').onclick =
   var vbtn = document.getElementById('verifyGameFilesBtn');
   if (vbtn) {
     vbtn.onclick = function() { showVerifyPopup(); };
+  }
+  // Même bouton sur la page d'accueil
+  var hvbtn = document.getElementById('homeVerifyBtn');
+  if (hvbtn) {
+    hvbtn.onclick = function() { showVerifyPopup(); };
   }
 })();
 
