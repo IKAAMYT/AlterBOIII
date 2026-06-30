@@ -932,16 +932,20 @@ a { color: #f2c411; text-decoration: none; }
   padding: 20px 24px 12px; }
 .popup-header { border-bottom: 1px solid rgba(242, 196, 17, 0.10); }
 .popup-backdrop { position: absolute; top:0; right:0; bottom:0; left:0; background: transparent; }
-/* AlterBO3 (IKAAM) fix: center the inner popup box inside the backdrop.
-   Without flex centering here, margin:auto on the child popup drifts it to
-   a side (the verify popup was sticking to the right edge). */
+/* AlterBO3 (IKAAM) fix: center the inner popup box inside the backdrop AND
+   anchor the backdrop to the whole window (position:fixed) instead of the
+   content area. Without fixed, position:absolute confined the popup to the
+   content zone and pushed it to the right of the sidebar. */
 .popup-backdrop.active,
 #verifyPopup.active, #messagePopup.active, #confirmPopup.active,
 #creditsPopup.active, #manageInstallPopup.active {
+  position: fixed !important;
+  top: 0 !important; right: 0 !important; bottom: 0 !important; left: 0 !important;
   display: -ms-flexbox !important; display: flex !important;
   -ms-flex-align: center; align-items: center;
   -ms-flex-pack: center; justify-content: center;
   padding: 24px;
+  z-index: 1000;
 }
 
 .gear-btn-label { font-size: 13.5px; }
