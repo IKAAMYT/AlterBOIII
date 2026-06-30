@@ -695,16 +695,6 @@ function loadWorkshopSearch(query) {
   }
 }
 
-// Détecte si le nouvel exe (avec workshopGetBrowseState) est présent.
-function hasNewBrowseApi() {
-  try {
-    var ex = getExternal();
-    return !!(ex && ex.workshopGetBrowseState);
-  } catch (e) {
-    return false;
-  }
-}
-
 // Lit l'état unifié browse/search depuis le C++ (workshopGetBrowseState).
 // Renvoie {items, loading, complete, error, source, query} ou null.
 function getWorkshopBrowseState() {
@@ -722,30 +712,6 @@ function getWorkshopBrowseState() {
   }
 }
 
-// Fallback ancien exe : lit le tableau brut via workshopGetBrowseData.
-function getWorkshopBrowseDataLegacy() {
-  try {
-    var ex = getExternal();
-    if (!ex || !ex.workshopGetBrowseData) return null;
-    var dj = ex.workshopGetBrowseData();
-    if (!dj) return null;
-    var d = typeof dj === 'string' ? JSON.parse(dj) : dj;
-    return Array.isArray(d) ? d : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function isBrowseLoadingLegacy() {
-  try {
-    var ex = getExternal();
-    if (ex && ex.workshopIsBrowseLoading)
-      return ex.workshopIsBrowseLoading() === 'true';
-  } catch (e) {
-  }
-  return false;
-}
-
 function pollWorkshopBrowseResults(isSearchMode) {
   if (_workshopBrowsePollInterval) {
     clearInterval(_workshopBrowsePollInterval);
@@ -754,39 +720,9 @@ function pollWorkshopBrowseResults(isSearchMode) {
   var pollCount = 0;
   var maxPolls = 600;
   var hasShownCachedData = workshopBrowseItems.length > 0;
-  var useNewApi = hasNewBrowseApi();
   var pollInterval = setInterval(function() {
     pollCount++;
     _workshopBrowsePollInterval = pollInterval;
-
-    // ── Mode compatibilité ancien exe (pas de workshopGetBrowseState) ──
-    if (!useNewApi) {
-      if (pollCount > maxPolls) {
-        clearInterval(pollInterval);
-        _workshopBrowsePollInterval = null;
-        workshopBrowseLoading = false;
-        if (workshopBrowseItems.length === 0)
-          showErrorOrCache('Chargement trop long.');
-        return;
-      }
-      if (!isBrowseLoadingLegacy()) {
-        clearInterval(pollInterval);
-        _workshopBrowsePollInterval = null;
-        workshopBrowseLoading = false;
-        var legacyItems = getWorkshopBrowseDataLegacy();
-        if (legacyItems && legacyItems.length > 0) {
-          workshopBrowseItems = legacyItems;
-          if (!isSearchMode) saveWorkshopCache(workshopBrowseItems);
-          workshopBrowseCurrentPage = 1;
-          renderWorkshopBrowse();
-        } else if (workshopBrowseItems.length === 0) {
-          showErrorOrCache(isSearchMode
-                               ? 'Aucun résultat pour ta recherche.'
-                               : 'Aucune map Workshop trouvée.');
-        }
-      }
-      return;
-    }
 
     // Timeout de sécurité.
     if (pollCount > maxPolls) {
@@ -4096,21 +4032,7 @@ _versionsData['beta'] = {
 };
 addVersionOption('beta', 'Beta (Experimental)');
 
-var creditsPopup = document.getElementById('creditsPopup');
-var versionDisplay = document.getElementById('versionDisplay');
-if (versionDisplay && creditsPopup) {
-  versionDisplay.onclick = function() { creditsPopup.classList.add('active'); };
-  var creditsClose = creditsPopup.querySelector('.popup-close');
-  if (creditsClose) {
-    creditsClose.onclick =
-        function() { creditsPopup.classList.remove('active'); };
-  }
-  creditsPopup.onclick = function(e) {
-    if (e.target === creditsPopup) {
-      creditsPopup.classList.remove('active');
-    }
-  };
-}
+// Crédits : désormais affichés directement dans la sidebar (plus de popup).
 
 /* ============================================================
    AlterBO3 (IKAAM) — Mod downloader
