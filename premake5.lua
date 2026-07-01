@@ -158,6 +158,12 @@ newaction({
       proc = assert(io.popen("git describe --tags --abbrev=0"))
       local tagName = proc:read("*l")
 
+      -- AlterBO3 (IKAAM): force the displayed product version. The auto-generated
+      -- version came from the latest git tag (showing 5.0.0). We override it here
+      -- so the launcher and in-game branding always read "2.0.0". To change the
+      -- shown version later, edit the value below.
+      tagName = "2.0.0"
+
       -- get current branch name
       proc = assert(io.popen("git branch --show-current"))
       local branchName = proc:read("*l")
@@ -375,6 +381,8 @@ resincludedirs({ "$(ProjectDir)src" })
 dependson({ "tlsdll" })
 
 links({ "common" })
+
+webview2.import()
 
 if not os.isfile("%{_MAIN_SCRIPT_DIR}/src/version.h") then
   if os.host() == "windows" then
