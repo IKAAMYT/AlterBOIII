@@ -233,7 +233,13 @@ LUI.createMenu.GameSettingsFlyoutMPCustom = function(controller)
     "S",
     function(element, menu, controller, model)
       if not IsLAN() and not IsPlayerAGuest(controller) and IsPlayerAllowedToPlayOnline(controller) then
-        GoBackAndOpenOverlayOnParent(self, "Social_Main", controller)
+        -- AlterBO3 (IKAAM): le menu social natif "Social_Main" crashe (services
+        -- Live/Demonware morts). On ouvre notre menu custom AlterSocialMenu.
+        if LUI.createMenu.AlterSocialMenu then
+          LUI.FlowManager.RequestAddMenu(controller, "AlterSocialMenu", true, nil)
+        else
+          GoBackAndOpenOverlayOnParent(self, "Social_Main", controller)
+        end
         return true
       else
       end
