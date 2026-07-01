@@ -1,739 +1,284 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
-#include "friends.hpp"
+#include "../steam.hpp"
 
-#include "game/game.hpp"
-#include "game/utils.hpp"
-#include "network.hpp"
-#include "party.hpp"
-#include "scheduler.hpp"
-#include "steam/steam.hpp"
-#include "steam_proxy.hpp"
-#include "workshop.hpp"
-#include "name.hpp"
-
-#include <utils/io.hpp>
+#include <utils/nt.hpp>
 #include <utils/string.hpp>
-#include <utils/concurrency.hpp>
-#include <utils/http.hpp>
 
-#include <rapidjson/document.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
+#include "component/name.hpp"
+#include "component/chat.hpp"
+#include "component/friends.hpp"
+#include "component/steam_proxy.hpp"
 
-namespace friends {
-namespace {
-constexpr const char *FRIENDS_FILE = "boiii_players/user/friends.json";
-constexpr int MAX_FRIENDS = 200;
+namespace steam {
+const char *friends::GetPersonaName() {
+  const char *n = name::get_player_name();
+  return n ? n : "Unknown";
+}
 
-std::mutex public_ip_mutex;
-std::string cached_public_ip;
-std::atomic_bool public_ip_fetched{false};
+unsigned long long friends::SetPersonaName(const char *pchPersonaName) {
+  return 0;
+}
 
-// Helper to find VPN/Virtual LAN IPs (Radmin, Hamachi)
-std::string get_preferred_local_ip() {
-  ULONG outBufLen = 15000;
-  std::vector<unsigned char> buffer(outBufLen);
-  PIP_ADAPTER_INFO pAdapterInfo =
-      reinterpret_cast<IP_ADAPTER_INFO *>(buffer.data());
+int friends::GetPersonaState() { return 1; }
 
-  // Retry with larger buffer if needed
-  if (GetAdaptersInfo(pAdapterInfo, &outBufLen) == ERROR_BUFFER_OVERFLOW) {
-    buffer.resize(outBufLen);
-    pAdapterInfo = reinterpret_cast<IP_ADAPTER_INFO *>(buffer.data());
+int friends::GetFriendCount(int eFriendFlags) {
+  return ::friends::get_friend_count();
+}
+
+steam_id friends::GetFriendByIndex(int iFriend, int iFriendFlags) {
+  auto entry = ::friends::get_friend_by_index(iFriend);
+  steam_id id{};
+  id.bits = entry.steam_id;
+  return id;
+}
+
+int friends::GetFriendRelationship(steam_id steamIDFriend) {
+  return ::friends::is_friend(steamIDFriend.bits) ? 3 : 0;
+}
+
+int friends::GetFriendPersonaState(steam_id steamIDFriend) {
+  auto all = ::friends::get_friends();
+  for (const auto &f : all) {
+    if (f.steam_id == steamIDFriend.bits)
+      return static_cast<int>(f.state);
   }
+  return 0;
+}
 
-  if (GetAdaptersInfo(pAdapterInfo, &outBufLen) != NO_ERROR) {
-    return "";
-  }
-
-  std::string radmin_ip;
-  std::string hamachi_ip;
-  std::string other_vpn_ip; // e.g. ZeroTier often uses managed ranges, but we
-                            // can detect 10.x if needed
-
-  PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
-  while (pAdapter) {
-    const std::string ip = pAdapter->IpAddressList.IpAddress.String;
-    if (ip != "0.0.0.0" && !ip.empty()) {
-      // Radmin VPN usually uses 26.x.x.x
-      if (ip.starts_with("26.")) {
-        radmin_ip = ip;
-      }
-      // Hamachi usually uses 25.x.x.x
-      else if (ip.starts_with("25.")) {
-        hamachi_ip = ip;
-      }
+const char *friends::GetFriendPersonaName(steam_id steamIDFriend) {
+  static thread_local std::string name_buf;
+  auto all = ::friends::get_friends();
+  for (const auto &f : all) {
+    if (f.steam_id == steamIDFriend.bits && !f.name.empty()) {
+      name_buf = f.name;
+      return name_buf.c_str();
     }
-    pAdapter = pAdapter->Next;
+  }
+  // Fallback: never return nullptr — the in-game social menu dereferences the
+  // name pointer directly and a null here crashes the game.
+  const char *fallback = chat::get_client_name(steamIDFriend.bits);
+  return fallback ? fallback : "Player";
+}
+
+struct FriendGameInfo_t {
+  uint64_t m_gameID;
+  uint32_t m_unGameIP;
+  uint16_t m_usGamePort;
+  uint16_t m_usQueryPort;
+  uint64_t m_steamIDLobby;
+};
+
+bool friends::GetFriendGamePlayed(steam_id steamIDFriend,
+                                  void *pFriendGameInfo) {
+  // Only report "in game" if we actually have a server address for this friend.
+  // Wrapped defensively: the in-game social menu iterates every friend and a
+  // bad write here corrupts game memory and crashes the menu.
+  bool in_game = false;
+  try {
+    in_game = !::friends::get_presence_server(steamIDFriend.bits).empty();
+  } catch (...) {
+    in_game = false;
   }
 
-  // Priority: Radmin > Hamachi
-  if (!radmin_ip.empty())
-    return radmin_ip;
-  if (!hamachi_ip.empty())
-    return hamachi_ip;
+  if (!in_game) {
+    return false;
+  }
 
+  if (pFriendGameInfo) {
+    auto *info = static_cast<FriendGameInfo_t *>(pFriendGameInfo);
+    info->m_gameID = 311210; // Black Ops 3 AppID
+    info->m_unGameIP = 0;
+    info->m_usGamePort = 0;
+    info->m_usQueryPort = 0;
+    info->m_steamIDLobby = 0;
+  }
+
+  return true;
+}
+
+const char *friends::GetFriendPersonaNameHistory(steam_id steamIDFriend,
+                                                 int iPersonaName) {
   return "";
 }
 
-void fetch_public_ip() {
-  try {
-    std::optional<std::string> resp =
-        utils::http::get_data("https://api.ipify.org", {}, {}, 1);
-    if (resp.has_value() && !resp->empty()) {
-      std::lock_guard lock(public_ip_mutex);
-      cached_public_ip = *resp;
-      public_ip_fetched.store(true);
-    }
-  } catch (...) {
-  }
+bool friends::HasFriend(steam_id steamIDFriend, int eFriendFlags) {
+  return ::friends::is_friend(steamIDFriend.bits);
 }
 
-struct friend_state {
-  std::vector<friend_entry> list;
-};
+int friends::GetClanCount() { return 0; }
 
-utils::concurrency::container<friend_state> friends_data;
+steam_id friends::GetClanByIndex(int iClan) { return steam_id(); }
 
-std::mutex invite_mutex;
-std::string pending_invite_connect;
+const char *friends::GetClanName(steam_id steamIDClan) { return "3arc"; }
 
-void save_friends() {
-  friends_data.access([](const friend_state &state) {
-    rapidjson::StringBuffer buf;
-    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-    w.StartArray();
-    for (const friend_entry &f : state.list) {
-      w.StartObject();
-      w.Key("steam_id");
-      w.Uint64(f.steam_id);
-      w.Key("name");
-      w.String(f.name.c_str());
-      w.EndObject();
-    }
-    w.EndArray();
-    utils::io::write_file(FRIENDS_FILE,
-                          std::string(buf.GetString(), buf.GetSize()));
-  });
+const char *friends::GetClanTag(steam_id steamIDClan) {
+  return this->GetClanName(steamIDClan);
 }
 
-void load_friends() {
-  if (!utils::io::file_exists(FRIENDS_FILE))
-    return;
-
-  std::string data;
-  if (!utils::io::read_file(FRIENDS_FILE, &data) || data.empty())
-    return;
-
-  rapidjson::Document doc;
-  if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray())
-    return;
-
-  friends_data.access([&doc](friend_state &state) {
-    state.list.clear();
-
-    for (auto &item : doc.GetArray()) {
-      if (!item.IsObject())
-        continue;
-
-      friend_entry entry{};
-
-      auto si = item.FindMember("steam_id");
-      if (si != item.MemberEnd()) {
-        if (si->value.IsUint64())
-          entry.steam_id = si->value.GetUint64();
-        else if (si->value.IsString())
-          entry.steam_id = std::strtoull(si->value.GetString(), nullptr, 10);
-      }
-
-      // backwards compat with old "xuid" field
-      if (entry.steam_id == 0) {
-        auto xi = item.FindMember("xuid");
-        if (xi != item.MemberEnd()) {
-          if (xi->value.IsUint64())
-            entry.steam_id = xi->value.GetUint64();
-          else if (xi->value.IsString())
-            entry.steam_id = std::strtoull(xi->value.GetString(), nullptr, 10);
-        }
-      }
-
-      if (entry.steam_id == 0)
-        continue;
-
-      auto ni = item.FindMember("name");
-      if (ni != item.MemberEnd() && ni->value.IsString())
-        entry.name = ni->value.GetString();
-      else
-        entry.name = "Unknown";
-
-      entry.state = status::offline;
-
-      bool exists = false;
-      for (const friend_entry &e : state.list) {
-        if (e.steam_id == entry.steam_id) {
-          exists = true;
-          break;
-        }
-      }
-      if (!exists)
-        state.list.push_back(std::move(entry));
-    }
-  });
-}
-
-// Resolves the address other players can use to connect to us
-std::string get_own_connect_address() {
-  uint16_t local_port = party::get_local_port();
-  const std::string vpn_ip = get_preferred_local_ip();
-
-  // If we found a Radmin/Hamachi IP, prioritize it immediately
-  if (!vpn_ip.empty()) {
-    return utils::string::va("%s:%u", vpn_ip.c_str(),
-                             static_cast<unsigned>(local_port));
-  }
-
-  if (game::com::Com_IsInGame()) {
-    game::net::netadr_t connected = party::get_connected_server();
-
-    if (connected.type == game::net::NA_LOOPBACK) {
-      if (public_ip_fetched.load()) {
-        std::lock_guard lock(public_ip_mutex);
-        if (!cached_public_ip.empty()) {
-          return utils::string::va("%s:%u", cached_public_ip.c_str(),
-                                   static_cast<unsigned>(local_port));
-        }
-      }
-    } else if ((connected.type == game::net::NA_IP ||
-                connected.type == game::net::NA_RAWIP) &&
-               connected.port >= 1024 && connected.ipv4.a != 127 &&
-               connected.addr != 0) {
-      bool is_private = (connected.ipv4.a == 10) ||
-                        (connected.ipv4.a == 172 && connected.ipv4.b >= 16 &&
-                         connected.ipv4.b <= 31) ||
-                        (connected.ipv4.a == 192 && connected.ipv4.b == 168);
-
-      if (is_private && public_ip_fetched.load()) {
-        std::lock_guard lock(public_ip_mutex);
-        if (!cached_public_ip.empty()) {
-          return utils::string::va("%s:%u", cached_public_ip.c_str(),
-                                   connected.port);
-        }
-      }
-
-      return utils::string::va("%u.%u.%u.%u:%u", connected.ipv4.a,
-                               connected.ipv4.b, connected.ipv4.c,
-                               connected.ipv4.d, connected.port);
-    }
-  }
-
-  if (public_ip_fetched.load()) {
-    std::lock_guard lock(public_ip_mutex);
-    if (!cached_public_ip.empty()) {
-      return utils::string::va("%s:%u", cached_public_ip.c_str(),
-                               static_cast<unsigned>(local_port));
-    }
-  }
-
-  std::string local_ip;
-  SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock != INVALID_SOCKET) {
-    sockaddr_in target{};
-    target.sin_family = AF_INET;
-    target.sin_port = htons(53);
-    inet_pton(AF_INET, "8.8.8.8", &target.sin_addr);
-
-    if (connect(sock, reinterpret_cast<sockaddr *>(&target), sizeof(target)) ==
-        0) {
-      sockaddr_in local{};
-      int len = sizeof(local);
-      getsockname(sock, reinterpret_cast<sockaddr *>(&local), &len);
-      char buf[INET_ADDRSTRLEN]{};
-      inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf));
-      local_ip = buf;
-    }
-    closesocket(sock);
-  }
-
-  if (local_ip.empty())
-    return "";
-  return utils::string::va("%s:%u", local_ip.c_str(),
-                           static_cast<unsigned>(local_port));
-}
-} // namespace
-
-void add_friend(game::XUID steam_id, const std::string &fname) {
-  if (steam_id == 0)
-    return;
-
-  friends_data.access([&](friend_state &state) {
-    for (auto &e : state.list) {
-      if (e.steam_id == steam_id) {
-        if (!fname.empty() && fname != "Unknown")
-          e.name = fname;
-        return;
-      }
-    }
-    if (static_cast<int>(state.list.size()) >= MAX_FRIENDS)
-      return;
-
-    friend_entry entry{};
-    entry.steam_id = steam_id;
-    entry.name = fname.empty() ? "Unknown" : fname;
-    entry.state = status::offline;
-    state.list.push_back(std::move(entry));
-  });
-  save_friends();
-}
-
-void remove_friend(game::XUID steam_id) {
-  friends_data.access([&](friend_state &state) {
-    std::erase_if(state.list, [steam_id](const friend_entry &e) {
-      return e.steam_id == steam_id;
-    });
-  });
-  save_friends();
-}
-
-bool is_friend(game::XUID steam_id) {
-  bool found = false;
-  friends_data.access([&](const friend_state &state) {
-    for (const friend_entry &e : state.list)
-      if (e.steam_id == steam_id) {
-        found = true;
-        break;
-      }
-  });
-  return found;
-}
-
-int get_friend_count() {
-  int count = 0;
-  friends_data.access([&](const friend_state &state) {
-    count = static_cast<int>(state.list.size());
-  });
-  return count;
-}
-
-friend_entry get_friend_by_index(int index) {
-  friend_entry result{};
-  friends_data.access([&](const friend_state &state) {
-    if (index >= 0 && index < static_cast<int>(state.list.size()))
-      result = state.list[index];
-  });
-  return result;
-}
-
-std::vector<friend_entry> get_friends() {
-  std::vector<friend_entry> result;
-  friends_data.access([&](const friend_state &state) { result = state.list; });
-  return result;
-}
-
-bool invite_to_game(game::XUID steam_id) {
-  const std::string connect_str = get_own_connect_address();
-  if (connect_str.empty())
-    return false;
-
-  const std::string mapname = game::get_dvar_string("mapname");
-  const std::string gametype = game::get_dvar_string("g_gametype");
-  game::eModes playmode = game::com::Com_SessionMode_GetMode();
-  const std::string mod_id = workshop::get_mod_publisher_id();
-  game::XUID own_steam_id = steam_proxy::get_own_steam_id();
-  std::string own_name = name::get_player_name();
-  if (own_name.empty())
-    own_name = "Player";
-
-  // enriched format: addr|map|gametype|mode|mod|sender_id|sender_name
-  const char *enriched = utils::string::va(
-      "%s|%s|%s|%d|%s|%llu|%s", connect_str.c_str(), mapname.c_str(),
-      gametype.c_str(), static_cast<int32_t>(playmode), mod_id.c_str(),
-      own_steam_id, own_name.c_str());
-
-  steam_proxy::set_rich_presence("connect", connect_str);
-  steam_proxy::set_rich_presence("boiii_game_info", enriched);
-
-  if (!is_friend(steam_id)) {
-    std::string target_name = steam_proxy::get_steam_friend_name(steam_id);
-    if (target_name.empty())
-      target_name = "Friend";
-    add_friend(steam_id, target_name);
-  } else {
-    // Update name if we have a better one from Steam
-    const std::string target_name =
-        steam_proxy::get_steam_friend_name(steam_id);
-    if (!target_name.empty())
-      add_friend(steam_id, target_name);
-  }
-
-  try {
-    steam_proxy::invite_friend(steam_id, enriched);
-    return true;
-  } catch (...) {
-  }
+bool friends::GetClanActivityCounts(steam_id steamID, int *pnOnline,
+                                    int *pnInGame, int *pnChatting) {
   return false;
 }
 
-std::string get_presence_server(game::XUID steam_id) {
-  std::string result;
-  friends_data.access([&](const friend_state &state) {
-    for (const friend_entry &e : state.list) {
-      if (e.steam_id == steam_id) {
-        result = e.server_address;
-        break;
-      }
-    }
-  });
-  return result;
+unsigned long long friends::DownloadClanActivityCounts(steam_id groupIDs[],
+                                                       int nIds) {
+  return 0;
 }
 
-bool has_pending_invite() {
-  std::lock_guard lock(invite_mutex);
-  return !pending_invite_connect.empty();
+int friends::GetFriendCountFromSource(steam_id steamIDSource) { return 0; }
+
+steam_id friends::GetFriendFromSourceByIndex(steam_id steamIDSource,
+                                             int iFriend) {
+  return steam_id();
 }
 
-std::string consume_pending_invite() {
-  std::lock_guard lock(invite_mutex);
-  const std::string result = std::move(pending_invite_connect);
-  pending_invite_connect.clear();
-  return result;
+bool friends::IsUserInSource(steam_id steamIDUser, steam_id steamIDSource) {
+  return false;
 }
 
-std::vector<friend_server_info> get_friend_server_addresses() {
-  std::vector<friend_server_info> result;
-  std::unordered_set<game::XUID> seen_ids;
+void friends::SetInGameVoiceSpeaking(steam_id steamIDUser, bool bSpeaking) {}
 
-  std::vector<friend_entry> all_friends;
-  friends_data.access(
-      [&](const friend_state &state) { all_friends = state.list; });
+void friends::ActivateGameOverlay(const char *pchDialog) {}
 
-  for (const friend_entry &entry : all_friends) {
-    if (entry.steam_id == 0 || seen_ids.count(entry.steam_id))
-      continue;
-    seen_ids.insert(entry.steam_id);
+void friends::ActivateGameOverlayToUser(const char *pchDialog,
+                                        steam_id steamID) {}
 
-    steam_proxy::request_friend_rich_presence(entry.steam_id);
-    std::string addr =
-        steam_proxy::get_friend_rich_presence(entry.steam_id, "connect");
+void friends::ActivateGameOverlayToWebPage(const char *pchURL) {}
 
-    if (addr.empty() && !entry.server_address.empty())
-      addr = entry.server_address;
+void friends::ActivateGameOverlayToStore(unsigned int nAppID,
+                                         unsigned int eFlag) {}
 
-    // green online and red offline
-    const std::string color_prefix = addr.empty() ? "^1" : "^3";
-    result.push_back({entry.steam_id, addr, color_prefix + entry.name});
+void friends::SetPlayedWith(steam_id steamIDUserPlayedWith) {}
+
+void friends::ActivateGameOverlayInviteDialog(steam_id steamIDLobby) {}
+
+int friends::GetSmallFriendAvatar(steam_id steamIDFriend) { return 0; }
+
+int friends::GetMediumFriendAvatar(steam_id steamIDFriend) { return 0; }
+
+int friends::GetLargeFriendAvatar(steam_id steamIDFriend) { return 0; }
+
+bool friends::RequestUserInformation(steam_id steamIDUser,
+                                     bool bRequireNameOnly) {
+  return false;
+}
+
+unsigned long long friends::RequestClanOfficerList(steam_id steamIDClan) {
+  return 0;
+}
+
+steam_id friends::GetClanOwner(steam_id steamIDClan) { return steam_id(); }
+
+int friends::GetClanOfficerCount(steam_id steamIDClan) { return 0; }
+
+steam_id friends::GetClanOfficerByIndex(steam_id steamIDClan, int iOfficer) {
+  return steam_id();
+}
+
+int friends::GetUserRestrictions() { return 0; }
+
+bool friends::SetRichPresence(const char *pchKey, const char *pchValue) {
+  steam_proxy::set_rich_presence(pchKey ? pchKey : "",
+                                 pchValue ? pchValue : "");
+  return true;
+}
+
+void friends::ClearRichPresence() { steam_proxy::clear_rich_presence(); }
+
+const char *friends::GetFriendRichPresence(steam_id steamIDFriend,
+                                           const char *pchKey) {
+  static thread_local std::string rp_buf;
+  try {
+    rp_buf = steam_proxy::get_friend_rich_presence(steamIDFriend.bits,
+                                                   pchKey ? pchKey : "");
+  } catch (...) {
+    rp_buf.clear();
   }
-
-  return result;
+  return rp_buf.c_str();
 }
 
-std::string get_friend_game_info_by_address(const std::string &address) {
-  if (address.empty())
-    return "";
+int friends::GetFriendRichPresenceKeyCount(steam_id steamIDFriend) { return 0; }
 
-  game::net::netadr_t target = network::address_from_string(address);
-
-  std::vector<friend_entry> all_friends;
-  friends_data.access(
-      [&](const friend_state &state) { all_friends = state.list; });
-
-  for (const friend_entry &entry : all_friends) {
-    if (entry.steam_id == 0)
-      continue;
-
-    steam_proxy::request_friend_rich_presence(entry.steam_id);
-    const std::string game_info = steam_proxy::get_friend_rich_presence(
-        entry.steam_id, "boiii_game_info");
-    if (game_info.empty())
-      continue;
-
-    const std::vector<std::string> parts = utils::string::split(game_info, '|');
-    if (parts.empty())
-      continue;
-
-    // Check if the address in the RP data matches the requested address
-    if (parts[0] == address)
-      return game_info;
-
-    // Also try matching resolved addresses
-    if (target.type != game::net::NA_BAD) {
-      game::net::netadr_t friend_addr = network::address_from_string(parts[0]);
-      if (friend_addr.type != game::net::NA_BAD &&
-          network::are_addresses_equal(friend_addr, target))
-        return game_info;
-    }
-  }
-
+const char *friends::GetFriendRichPresenceKeyByIndex(steam_id steamIDFriend,
+                                                     int iKey) {
+  // Key count is 0, so the game should never call this. Return an empty string
+  // (never nullptr) in case it does, to avoid a null dereference.
   return "";
 }
 
-bool connect_to_friend(game::XUID steam_id) {
-  if (steam_id == 0)
-    return false;
+void friends::RequestFriendRichPresence(steam_id steamIDFriend) {}
 
-  // Check if friend is in our list and has a server address
-  std::string addr_str;
-  friends_data.access([&](const friend_state &state) {
-    for (const friend_entry &e : state.list) {
-      if (e.steam_id == steam_id && !e.server_address.empty()) {
-        addr_str = e.server_address;
-        break;
-      }
-    }
-  });
+bool friends::InviteUserToGame(steam_id steamIDFriend,
+                               const char *pchConnectString) {
+  return ::friends::invite_to_game(steamIDFriend.bits);
+}
 
-  // Also try rich presence
-  if (addr_str.empty()) {
-    steam_proxy::request_friend_rich_presence(steam_id);
-    addr_str = steam_proxy::get_friend_rich_presence(steam_id, "connect");
-  }
+int friends::GetCoplayFriendCount() { return 0; }
 
-  if (addr_str.empty()) {
-    // Friend is not in-game / not reachable
-    scheduler::once(
-        [] {
-          game::ui::UI_OpenErrorPopupWithMessage(
-              0, game::errorCode::UI,
-              "Friend is not online or not in a joinable game.");
-        },
-        scheduler::main);
-    return false;
-  }
+steam_id friends::GetCoplayFriend(int iCoplayFriend) { return steam_id(); }
 
-  // Try enriched game info for proper mode/map connection
-  const std::string game_info =
-      steam_proxy::get_friend_rich_presence(steam_id, "boiii_game_info");
-  if (!game_info.empty()) {
-    const std::vector<std::string> parts = utils::string::split(game_info, '|');
-    if (parts.size() >= 4) {
-      const std::string connect_addr = parts[0];
-      const std::string mapname = parts[1];
-      const std::string gametype = parts[2];
-      game::eModes mode =
-          static_cast<game::eModes>(std::atoi(parts[3].c_str()));
-      const std::string mod_id = parts.size() >= 5 ? parts[4] : "";
+int friends::GetFriendCoplayTime(steam_id steamIDFriend) { return 0; }
 
-      game::net::netadr_t target = network::address_from_string(connect_addr);
-      if (target.type != game::net::NA_BAD && !mapname.empty() &&
-          !gametype.empty()) {
-        game::com::Com_SessionMode_SetGameMode(
-            game::eGameModes::MATCHMAKING_PLAYLIST);
-        const std::string usermap_id =
-            workshop::get_usermap_publisher_id(mapname);
-        party::connect_to_lobby_with_mode(target, mode, mapname, gametype,
-                                          usermap_id, mod_id);
-        return true;
-      }
-    }
-  }
+unsigned int friends::GetFriendCoplayGame(steam_id steamIDFriend) { return 0; }
 
-  // Fallback: raw connect
-  const game::net::netadr_t fallback_addr =
-      network::address_from_string(addr_str);
-  if (fallback_addr.type != game::net::NA_BAD) {
-    const char *sanitized = utils::string::va(
-        "%i.%i.%i.%i:%hu", fallback_addr.ipv4.a, fallback_addr.ipv4.b,
-        fallback_addr.ipv4.c, fallback_addr.ipv4.d, fallback_addr.port);
-    game::cbuf::Cbuf_AddText(0, utils::string::va("connect %s\n", sanitized));
-    return true;
-  }
+unsigned long long friends::JoinClanChatRoom(steam_id steamIDClan) { return 0; }
 
+bool friends::LeaveClanChatRoom(steam_id steamIDClan) { return false; }
+
+int friends::GetClanChatMemberCount(steam_id steamIDClan) { return 0; }
+
+steam_id friends::GetChatMemberByIndex(steam_id steamIDClan, int iUser) {
+  return steam_id();
+}
+
+bool friends::SendClanChatMessage(steam_id steamIDClanChat,
+                                  const char *pchText) {
   return false;
 }
 
-struct component final : client_component {
-  void post_unpack() override {
-    load_friends();
+int friends::GetClanChatMessage(steam_id steamIDClanChat, int iMessage,
+                                void *prgchText, int cchTextMax,
+                                unsigned int *peChatEntryType,
+                                steam_id *pSteamIDChatter) {
+  return 0;
+}
 
-    scheduler::once([] { fetch_public_ip(); }, scheduler::async, 2000ms);
+bool friends::IsClanChatAdmin(steam_id steamIDClanChat, steam_id steamIDUser) {
+  return false;
+}
 
-    // AlterBO3 (IKAAM): try to advertise our brand in the Steam rich presence.
-    // Steam shows the *game name* (Black Ops III) from the AppID and that can't
-    // be changed, but we can publish extra rich-presence keys. We set a couple
-    // of common display keys so that, where Steam honours them, our brand line
-    // ("AlterBOIII par IKAAM") shows under the game name. If Steam ignores the
-    // token for this AppID, nothing breaks — the game name simply stays alone.
-    scheduler::loop(
-        [] {
-          steam_proxy::set_rich_presence("steam_display", "#StatusFull");
-          steam_proxy::set_rich_presence("status", "AlterBOIII par IKAAM");
-          steam_proxy::set_rich_presence("StatusFull", "AlterBOIII par IKAAM");
-        },
-        scheduler::async, 15s);
+bool friends::IsClanChatWindowOpenInSteam(steam_id steamIDClanChat) {
+  return false;
+}
 
-    // Poll for incoming Steam invites via callback 337
-    scheduler::loop(
-        [] {
-          try {
-            game::XUID friend_id = 0;
-            std::string invite =
-                steam_proxy::get_pending_game_invite(&friend_id);
-            if (invite.empty())
-              return;
+bool friends::OpenClanChatWindowInSteam(steam_id steamIDClanChat) {
+  return false;
+}
 
-            // Try to get enriched game info from sender's RP
-            if (friend_id != 0) {
-              steam_proxy::request_friend_rich_presence(friend_id);
-              const std::string game_info =
-                  steam_proxy::get_friend_rich_presence(friend_id,
-                                                        "boiii_game_info");
-              if (!game_info.empty())
-                invite = game_info;
-            }
+bool friends::CloseClanChatWindowInSteam(steam_id steamIDClanChat) {
+  return false;
+}
 
-            // Auto-add sender as friend
-            game::XUID sender_steam_id = friend_id;
-            std::string sender_name;
+bool friends::SetListenForFriendsMessages(bool bInterceptEnabled) {
+  return false;
+}
 
-            const std::vector<std::string> parts =
-                utils::string::split(invite, '|');
-            if (parts.size() >= 7) {
-              game::XUID parsed_id =
-                  std::strtoull(parts[5].c_str(), nullptr, 10);
-              if (parsed_id != 0)
-                sender_steam_id = parsed_id;
-              sender_name = parts[6];
-            }
+bool friends::ReplyToFriendMessage(steam_id steamIDFriend,
+                                   const char *pchMsgToSend) {
+  return false;
+}
 
-            if (sender_steam_id != 0) {
-              if (sender_name.empty())
-                sender_name =
-                    steam_proxy::get_steam_friend_name(sender_steam_id);
-              if (sender_name.empty())
-                sender_name = "Friend";
-              add_friend(sender_steam_id, sender_name);
-            }
+int friends::GetFriendMessage(steam_id steamIDFriend, int iMessageID,
+                              void *pvData, int cubData,
+                              unsigned int *peChatEntryType) {
+  return 0;
+}
 
-            std::lock_guard lock(invite_mutex);
-            pending_invite_connect = invite;
-          } catch (...) {
-          }
-        },
-        scheduler::async, 2000ms);
+unsigned long long friends::GetFollowerCount(steam_id steamID) { return 0; }
 
-    // Process accepted invites and joins connect to the host's server
-    scheduler::loop(
-        [] {
-          if (!has_pending_invite())
-            return;
-          const std::string invite_data = consume_pending_invite();
-          if (invite_data.empty())
-            return;
+unsigned long long friends::IsFollowing(steam_id steamID) { return 0; }
 
-          steam_proxy::clear_invite_presence();
-
-          const std::vector<std::string> parts =
-              utils::string::split(invite_data, '|');
-          if (parts.size() >= 4) {
-            const std::string addr_str = parts[0];
-            const std::string mapname = parts[1];
-            const std::string gametype = parts[2];
-            game::eModes mode =
-                static_cast<game::eModes>(std::atoi(parts[3].c_str()));
-            const std::string mod_id = parts.size() >= 5 ? parts[4] : "";
-
-            game::net::netadr_t target = network::address_from_string(addr_str);
-            if (target.type != game::net::NA_BAD && !mapname.empty() &&
-                !gametype.empty()) {
-              game::com::Com_SessionMode_SetGameMode(
-                  game::eGameModes::MATCHMAKING_PLAYLIST);
-              const std::string usermap_id =
-                  workshop::get_usermap_publisher_id(mapname);
-              party::connect_to_lobby_with_mode(target, mode, mapname, gametype,
-                                                usermap_id, mod_id);
-              return;
-            }
-          }
-
-          const game::net::netadr_t fallback_addr =
-              network::address_from_string(invite_data);
-          if (fallback_addr.type != game::net::NA_BAD) {
-            const char *sanitized = utils::string::va(
-                "%i.%i.%i.%i:%hu", fallback_addr.ipv4.a, fallback_addr.ipv4.b,
-                fallback_addr.ipv4.c, fallback_addr.ipv4.d, fallback_addr.port);
-            game::cbuf::Cbuf_AddText(
-                0, utils::string::va("connect %s\n", sanitized));
-          }
-        },
-        scheduler::main, 1000ms);
-
-    // Publish our rich presence so friends can see us and join
-    scheduler::loop(
-        [] {
-          try {
-            const std::string addr = get_own_connect_address();
-            steam_proxy::set_rich_presence("connect", addr);
-
-            if (!addr.empty() && game::com::Com_IsInGame()) {
-              const std::string mapname = game::get_dvar_string("mapname");
-              const std::string gametype = game::get_dvar_string("g_gametype");
-              game::eModes playmode = game::com::Com_SessionMode_GetMode();
-              const std::string mod_id = workshop::get_mod_publisher_id();
-              game::XUID own_steam_id = steam_proxy::get_own_steam_id();
-              std::string own_name = name::get_player_name();
-              if (own_name.empty())
-                own_name = "Player";
-
-              const char *enriched = utils::string::va(
-                  "%s|%s|%s|%d|%s|%llu|%s", addr.c_str(), mapname.c_str(),
-                  gametype.c_str(), static_cast<int32_t>(playmode),
-                  mod_id.c_str(), own_steam_id, own_name.c_str());
-              steam_proxy::set_rich_presence("boiii_game_info", enriched);
-            } else {
-              steam_proxy::set_rich_presence("boiii_game_info", "");
-            }
-
-            steam_proxy::set_rich_presence(
-                "status", game::com::Com_IsInGame() ? "In Game" : "Online");
-          } catch (...) {
-          }
-        },
-        scheduler::main, 10000ms);
-
-    // Refresh friend online status via their rich presence
-    scheduler::loop(
-        [] {
-          try {
-            friends_data.access([](friend_state &state) {
-              for (auto &f : state.list) {
-                steam_proxy::request_friend_rich_presence(f.steam_id);
-                const std::string connect_rp =
-                    steam_proxy::get_friend_rich_presence(f.steam_id,
-                                                          "connect");
-                const std::string status_rp =
-                    steam_proxy::get_friend_rich_presence(f.steam_id, "status");
-
-                // Try to update friend's name from their enriched RP
-                const std::string game_info_rp =
-                    steam_proxy::get_friend_rich_presence(f.steam_id,
-                                                          "boiii_game_info");
-                if (!game_info_rp.empty()) {
-                  const std::vector<std::string> rp_parts =
-                      utils::string::split(game_info_rp, '|');
-                  if (rp_parts.size() >= 7 && !rp_parts[6].empty()) {
-                    f.name = rp_parts[6];
-                  }
-                }
-
-                if (!connect_rp.empty()) {
-                  f.state = status::in_game;
-                  f.server_address = connect_rp;
-                } else if (!status_rp.empty()) {
-                  f.state = status::online;
-                  f.server_address.clear();
-                } else {
-                  f.state = status::offline;
-                  f.server_address.clear();
-                }
-              }
-            });
-            save_friends();
-          } catch (...) {
-          }
-        },
-        scheduler::async, 15000ms);
-  }
-};
-} // namespace friends
-
-REGISTER_COMPONENT(friends::component)
+unsigned long long friends::EnumerateFollowingList(unsigned int unStartIndex) {
+  return 0;
+}
+} // namespace steam
