@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 4
+#define LAUNCHER_BUILD 5
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -1291,8 +1291,7 @@ bool run() {
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
 
-  html_window window(utils::string::va("AlterBO3 (build %d)", LAUNCHER_BUILD),
-                     1260, 680);
+  html_window window("AlterBO3", 1260, 680);
 
   window.get_html_frame()->register_callback(
       "getVersion",
