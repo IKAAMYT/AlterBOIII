@@ -10,7 +10,10 @@
 #include "component/steam_proxy.hpp"
 
 namespace steam {
-const char *friends::GetPersonaName() { return name::get_player_name(); }
+const char *friends::GetPersonaName() {
+  const char *n = name::get_player_name();
+  return n ? n : "Unknown";
+}
 
 unsigned long long friends::SetPersonaName(const char *pchPersonaName) {
   return 0;
@@ -51,7 +54,10 @@ const char *friends::GetFriendPersonaName(steam_id steamIDFriend) {
       return name_buf.c_str();
     }
   }
-  return chat::get_client_name(steamIDFriend.bits);
+  // Fallback: never return nullptr — the in-game social menu dereferences the
+  // name pointer directly and a null here crashes the game.
+  const char *fallback = chat::get_client_name(steamIDFriend.bits);
+  return fallback ? fallback : "Player";
 }
 
 struct FriendGameInfo_t {
@@ -64,7 +70,17 @@ struct FriendGameInfo_t {
 
 bool friends::GetFriendGamePlayed(steam_id steamIDFriend,
                                   void *pFriendGameInfo) {
-  if (::friends::get_presence_server(steamIDFriend.bits).empty()) {
+  // Only report "in game" if we actually have a server address for this friend.
+  // Wrapped defensively: the in-game social menu iterates every friend and a
+  // bad write here corrupts game memory and crashes the menu.
+  bool in_game = false;
+  try {
+    in_game = !::friends::get_presence_server(steamIDFriend.bits).empty();
+  } catch (...) {
+    in_game = false;
+  }
+
+  if (!in_game) {
     return false;
   }
 
@@ -172,8 +188,12 @@ void friends::ClearRichPresence() { steam_proxy::clear_rich_presence(); }
 const char *friends::GetFriendRichPresence(steam_id steamIDFriend,
                                            const char *pchKey) {
   static thread_local std::string rp_buf;
-  rp_buf = steam_proxy::get_friend_rich_presence(steamIDFriend.bits,
-                                                 pchKey ? pchKey : "");
+  try {
+    rp_buf = steam_proxy::get_friend_rich_presence(steamIDFriend.bits,
+                                                   pchKey ? pchKey : "");
+  } catch (...) {
+    rp_buf.clear();
+  }
   return rp_buf.c_str();
 }
 
@@ -181,7 +201,9 @@ int friends::GetFriendRichPresenceKeyCount(steam_id steamIDFriend) { return 0; }
 
 const char *friends::GetFriendRichPresenceKeyByIndex(steam_id steamIDFriend,
                                                      int iKey) {
-  return "a";
+  // Key count is 0, so the game should never call this. Return an empty string
+  // (never nullptr) in case it does, to avoid a null dereference.
+  return "";
 }
 
 void friends::RequestFriendRichPresence(steam_id steamIDFriend) {}
