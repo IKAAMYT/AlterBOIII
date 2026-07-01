@@ -227,7 +227,9 @@ void file_updater::update_file(const file_info &file) const {
                           file.name == "alterbo3.exe";
   const bool is_our_ui =
       file.name.find("data/launcher/") != std::string::npos ||
-      file.name.find("data\\launcher\\") != std::string::npos;
+      file.name.find("data\\launcher\\") != std::string::npos ||
+      file.name.find("data/ui_scripts/") != std::string::npos ||
+      file.name.find("data\\ui_scripts\\") != std::string::npos;
   if (is_our_exe || is_our_ui) {
     OutputDebugStringA(
         ("Skipping protected file: " + file.name + "\n").c_str());
@@ -335,7 +337,9 @@ file_updater::get_outdated_files(const std::vector<file_info> &files) const {
                             info.name == "AlterBOIII.exe";
     const bool is_our_ui =
         info.name.find("data/launcher/") != std::string::npos ||
-        info.name.find("data\\launcher\\") != std::string::npos;
+        info.name.find("data\\launcher\\") != std::string::npos ||
+        info.name.find("data/ui_scripts/") != std::string::npos ||
+        info.name.find("data\\ui_scripts\\") != std::string::npos;
     if (is_our_exe || is_our_ui) {
       continue;
     }
@@ -414,7 +418,9 @@ bool file_updater::is_outdated_file(const file_info &file) const {
   // by the upstream update server. These files are part of our reskin, so we
   // always treat them as up-to-date regardless of the remote hash.
   if (file.name.find("data/launcher/") != std::string::npos ||
-      file.name.find("data\\launcher\\") != std::string::npos) {
+      file.name.find("data\\launcher\\") != std::string::npos ||
+      file.name.find("data/ui_scripts/") != std::string::npos ||
+      file.name.find("data\\ui_scripts\\") != std::string::npos) {
     return false;
   }
 
@@ -602,9 +608,13 @@ void file_updater::cleanup_data_directory(
   for (auto &file : existing_files) {
     // AlterBO3 (IKAAM): never delete anything inside data/launcher — the
     // custom UI (and any extra assets we add) must survive update cleanup.
+    // Same protection for data/ui_scripts: our custom in-game menus (e.g. the
+    // custom social menu) live there and must NOT be wiped by the updater.
     const auto file_str = file.string();
     if (file_str.find("data/launcher") != std::string::npos ||
-        file_str.find("data\\launcher") != std::string::npos) {
+        file_str.find("data\\launcher") != std::string::npos ||
+        file_str.find("data/ui_scripts") != std::string::npos ||
+        file_str.find("data\\ui_scripts") != std::string::npos) {
       continue;
     }
 
