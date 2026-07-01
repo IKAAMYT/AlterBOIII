@@ -1,8 +1,10 @@
--- AlterBO3 (IKAAM) — Menu Social custom (version stylisee)
+-- AlterBO3 (IKAAM) — Menu Social custom (version stylisee + scroll)
 --
 -- Remplace le menu social natif "Social_Main" (qui crashe : services Live morts)
 -- par notre propre menu LUI. Lit la liste d'amis via les fonctions natives du
 -- client (game.getfriendcount / game.getfriend / game.connecttofriend).
+--
+-- Charge automatiquement depuis data/ui_scripts/ (drop-in, pas de recompilation).
 
 if Engine.GetCurrentMap() ~= "core_frontend" then
   return
@@ -14,9 +16,16 @@ end
 
 local ACCENT = { 0.949, 0.769, 0.067 }
 local COL_TEXT = { 0.96, 0.95, 0.93 }
-local COL_DIM = { 0.62, 0.60, 0.55 }
+local COL_DIM = { 0.62, 0.6, 0.55 }
 local FONT_TITLE = "fonts/RefrigeratorDeluxe-Regular.ttf"
 local FONT_BODY = "fonts/default.ttf"
+
+-- Zone de liste (coordonnees verticales de la fenetre visible)
+local LIST_TOP = 150
+local LIST_BOTTOM = 660
+local CARD_HEIGHT = 56
+local CARD_GAP = 8
+local ROW_STEP = CARD_HEIGHT + CARD_GAP
 
 local function stateInfo(state)
   if state == 2 then
@@ -33,17 +42,17 @@ local function safeFont(element, font)
   end)
 end
 
-local function makeFriendCard(parent, controller, friend, top)
+local function makeFriendCard(controller, friend, top)
   local card = LUI.UIElement.new()
-  card:setLeftRight(true, false, 60, 720)
-  card:setTopBottom(true, false, top, top + 56)
+  card:setLeftRight(true, false, 0, 660)
+  card:setTopBottom(true, false, top, top + CARD_HEIGHT)
   card:makeFocusable()
   card:setHandleMouse(true)
 
   local bg = LUI.UIImage.new()
   bg:setLeftRight(true, true, 0, 0)
   bg:setTopBottom(true, true, 0, 0)
-  bg:setRGB(0.10, 0.095, 0.08)
+  bg:setRGB(0.1, 0.095, 0.08)
   bg:setAlpha(0.85)
   card:addElement(bg)
 
@@ -57,14 +66,14 @@ local function makeFriendCard(parent, controller, friend, top)
   local label, dotColor = stateInfo(friend.status)
 
   local dot = LUI.UIImage.new()
-  dot:setLeftRight(true, false, 22, 34)
-  dot:setTopBottom(true, false, 22, 34)
+  dot:setLeftRight(true, false, 22, 32)
+  dot:setTopBottom(true, false, 23, 33)
   dot:setRGB(dotColor[1], dotColor[2], dotColor[3])
   card:addElement(dot)
 
   local nameText = LUI.UIText.new()
-  nameText:setLeftRight(true, false, 52, 460)
-  nameText:setTopBottom(true, false, 10, 36)
+  nameText:setLeftRight(true, false, 48, 420)
+  nameText:setTopBottom(true, false, 14, 42)
   nameText:setText(friend.name or "?")
   safeFont(nameText, FONT_BODY)
   nameText:setRGB(COL_TEXT[1], COL_TEXT[2], COL_TEXT[3])
@@ -72,30 +81,19 @@ local function makeFriendCard(parent, controller, friend, top)
   card:addElement(nameText)
 
   local stateText = LUI.UIText.new()
-  stateText:setLeftRight(true, false, 480, 640)
-  stateText:setTopBottom(true, false, 14, 36)
+  stateText:setLeftRight(false, true, -260, -20)
+  stateText:setTopBottom(true, false, 16, 42)
   stateText:setText(label)
   safeFont(stateText, FONT_BODY)
   stateText:setRGB(dotColor[1], dotColor[2], dotColor[3])
-  stateText:setAlignment(LUI.Alignment.Left)
+  stateText:setAlignment(LUI.Alignment.Right)
   card:addElement(stateText)
-
-  if friend.status == 2 then
-    local joinHint = LUI.UIText.new()
-    joinHint:setLeftRight(false, true, -180, -16)
-    joinHint:setTopBottom(true, false, 16, 36)
-    joinHint:setText("Cliquer pour rejoindre")
-    safeFont(joinHint, FONT_BODY)
-    joinHint:setRGB(ACCENT[1], ACCENT[2], ACCENT[3])
-    joinHint:setAlignment(LUI.Alignment.Right)
-    card:addElement(joinHint)
-  end
 
   card:registerEventHandler("mouseenter", function()
     bg:setRGB(0.16, 0.15, 0.12)
   end)
   card:registerEventHandler("mouseleave", function()
-    bg:setRGB(0.10, 0.095, 0.08)
+    bg:setRGB(0.1, 0.095, 0.08)
   end)
 
   if CoD.isPC then
@@ -108,7 +106,6 @@ local function makeFriendCard(parent, controller, friend, top)
     end)
   end
 
-  parent:addElement(card)
   return card
 end
 
@@ -194,16 +191,88 @@ LUI.createMenu.AlterSocialMenu = function(controller)
     hint:setAlignment(LUI.Alignment.Left)
     self:addElement(hint)
   else
-    local top = 150
+    -- Fenetre de liste clippee (masque le debordement) + conteneur scrollable
+    local viewport = LUI.UIElement.new()
+    viewport:setLeftRight(true, false, 60, 740)
+    viewport:setTopBottom(true, false, LIST_TOP, LIST_BOTTOM)
+    viewport:setUseStencil(true)
+    self:addElement(viewport)
+
+    local content = LUI.UIElement.new()
+    content:setLeftRight(true, false, 0, 680)
+    content:setTopBottom(true, false, 0, count * ROW_STEP)
+    viewport:addElement(content)
+
+    local top = 0
     for i = 0, count - 1 do
       local friend = nil
       pcall(function()
         friend = game.getfriend(i)
       end)
       if friend then
-        makeFriendCard(self, controller, friend, top)
-        top = top + 64
+        content:addElement(makeFriendCard(controller, friend, top))
+        top = top + ROW_STEP
       end
+    end
+
+    -- Etat de scroll
+    local viewHeight = LIST_BOTTOM - LIST_TOP
+    local contentHeight = count * ROW_STEP
+    local maxScroll = math.max(0, contentHeight - viewHeight)
+    self.scrollOffset = 0
+
+    local function applyScroll()
+      content:setTopBottom(true, false, -self.scrollOffset, -self.scrollOffset + contentHeight)
+    end
+
+    local function scrollBy(delta)
+      self.scrollOffset = self.scrollOffset + delta
+      if self.scrollOffset < 0 then
+        self.scrollOffset = 0
+      end
+      if self.scrollOffset > maxScroll then
+        self.scrollOffset = maxScroll
+      end
+      applyScroll()
+    end
+
+    -- Molette souris
+    self:registerEventHandler("scrollup", function()
+      scrollBy(-ROW_STEP)
+      return true
+    end)
+    self:registerEventHandler("scrolldown", function()
+      scrollBy(ROW_STEP)
+      return true
+    end)
+    -- Certaines versions nomment l'event differemment
+    self:registerEventHandler("mousewheel", function(element, event)
+      if event and event.delta then
+        scrollBy(event.delta > 0 and -ROW_STEP or ROW_STEP)
+      end
+      return true
+    end)
+
+    -- Fleches haut / bas (clavier / manette)
+    self:AddButtonCallbackFunction(self, controller, Enum.LUIButton.LUI_KEY_UP, nil, function()
+      scrollBy(-ROW_STEP)
+      return true
+    end, nil, false)
+    self:AddButtonCallbackFunction(self, controller, Enum.LUIButton.LUI_KEY_DOWN, nil, function()
+      scrollBy(ROW_STEP)
+      return true
+    end, nil, false)
+
+    -- Indicateur de scroll (petite barre a droite) si contenu deborde
+    if maxScroll > 0 then
+      local hint = LUI.UIText.new()
+      hint:setLeftRight(false, true, -260, -60)
+      hint:setTopBottom(true, false, 112, 138)
+      hint:setText("Molette / fleches pour defiler")
+      safeFont(hint, FONT_BODY)
+      hint:setRGB(COL_DIM[1], COL_DIM[2], COL_DIM[3])
+      hint:setAlignment(LUI.Alignment.Right)
+      self:addElement(hint)
     end
   end
 
