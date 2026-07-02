@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 6
+#define LAUNCHER_BUILD 5
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -43,6 +43,159 @@ namespace launcher {
 namespace {
 std::string human_readable_size(std::uint64_t bytes);
 std::filesystem::path get_steam_workshop_path();
+
+// AlterCOD OAuth (IKAAM): opens a tiny local HTTP server on a free port, opens
+// the forum authorization page in the browser, waits for the browser to hit
+// http://localhost:PORT/callback?code=XXX, then exchanges that code for the
+// account token via the forum. Returns "token|pseudo" on success, "" on
+// failure/timeout. Blocking, with a ~120s timeout. Uses winsock (already linked
+// via std_include.hpp / ws2_32.lib).
+std::string run_oauth_login() {
+  // 1. Create a listening socket on a loopback port chosen by the OS.
+  WSADATA wsa;
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    return "";
+  }
+
+  SOCKET server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (server == INVALID_SOCKET) {
+    WSACleanup();
+    return "";
+  }
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // 127.0.0.1 only
+  addr.sin_port = 0;                             // let the OS pick a free port
+
+  if (bind(server, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) ==
+      SOCKET_ERROR) {
+    closesocket(server);
+    WSACleanup();
+    return "";
+  }
+
+  // Read back which port we got.
+  int addrlen = sizeof(addr);
+  if (getsockname(server, reinterpret_cast<sockaddr *>(&addr), &addrlen) ==
+      SOCKET_ERROR) {
+    closesocket(server);
+    WSACleanup();
+    return "";
+  }
+  const int port = ntohs(addr.sin_port);
+
+  if (listen(server, 1) == SOCKET_ERROR) {
+    closesocket(server);
+    WSACleanup();
+    return "";
+  }
+
+  // 2. Open the authorization page in the default browser.
+  const std::string auth_url =
+      "https://ikaam.fr/forum/oauth.php?port=" + std::to_string(port);
+  ShellExecuteA(nullptr, "open", auth_url.c_str(), nullptr, nullptr,
+                SW_SHOWNORMAL);
+
+  // 3. Wait for the browser to hit /callback?code=XXX (timeout ~120s).
+  DWORD timeout_ms = 120000;
+  setsockopt(server, SOL_SOCKET, SO_RCVTIMEO,
+             reinterpret_cast<const char *>(&timeout_ms), sizeof(timeout_ms));
+
+  std::string code;
+  const auto start = std::chrono::steady_clock::now();
+  while (true) {
+    if (std::chrono::steady_clock::now() - start > std::chrono::seconds(120)) {
+      break;
+    }
+
+    SOCKET client = accept(server, nullptr, nullptr);
+    if (client == INVALID_SOCKET) {
+      break; // timeout or error
+    }
+
+    // Read the HTTP request line.
+    char buffer[4096]{};
+    const int received = recv(client, buffer, sizeof(buffer) - 1, 0);
+    if (received > 0) {
+      const std::string request(buffer, received);
+      // Look for: GET /callback?code=XXXX HTTP/1.1
+      const auto code_pos = request.find("code=");
+      if (request.find("/callback") != std::string::npos &&
+          code_pos != std::string::npos) {
+        auto start_c = code_pos + 5;
+        auto end_c = request.find_first_of(" &\r\n", start_c);
+        if (end_c == std::string::npos) {
+          end_c = request.size();
+        }
+        code = request.substr(start_c, end_c - start_c);
+      }
+    }
+
+    // Respond with a friendly page so the browser shows something nice.
+    const std::string body =
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<title>AlterBO3</title><style>body{background:#0b0a08;color:#f5f3ee;"
+        "font-family:sans-serif;display:flex;align-items:center;"
+        "justify-content:center;height:100vh;margin:0}"
+        ".c{text-align:center}.m{width:64px;height:64px;border-radius:16px;"
+        "background:linear-gradient(135deg,#f2c411,#9a7c00);margin:0 auto 16px;"
+        "display:flex;align-items:center;justify-content:center;color:#0b0a08;"
+        "font-weight:700;font-size:34px}h1{color:#f2c411}</style></head>"
+        "<body><div class='c'><div class='m'>A</div>"
+        "<h1>Connecte !</h1><p>Tu peux retourner sur le launcher AlterBO3.</p>"
+        "</div></body></html>";
+    const std::string response =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: " +
+        std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+    send(client, response.c_str(), static_cast<int>(response.size()), 0);
+    closesocket(client);
+
+    if (!code.empty()) {
+      break; // got the code, stop listening
+    }
+  }
+
+  closesocket(server);
+  WSACleanup();
+
+  if (code.empty()) {
+    return "";
+  }
+
+  // 4. Exchange the code for the account token via the forum.
+  const std::string exchange_url = "https://ikaam.fr/forum/oauth.php";
+  const std::string exchange_body = "action=exchange&code=" + code;
+  try {
+    const auto resp = utils::http::post_data(exchange_url, exchange_body, 10);
+    if (!resp.has_value()) {
+      return "";
+    }
+    rapidjson::Document doc;
+    doc.Parse(resp.value().c_str());
+    if (doc.HasParseError() || !doc.IsObject()) {
+      return "";
+    }
+    auto ok_it = doc.FindMember("ok");
+    if (ok_it == doc.MemberEnd() || !ok_it->value.IsBool() ||
+        !ok_it->value.GetBool()) {
+      return "";
+    }
+    auto tok_it = doc.FindMember("token");
+    auto pse_it = doc.FindMember("pseudo");
+    if (tok_it == doc.MemberEnd() || !tok_it->value.IsString()) {
+      return "";
+    }
+    std::string token = tok_it->value.GetString();
+    std::string pseudo = (pse_it != doc.MemberEnd() && pse_it->value.IsString())
+                             ? pse_it->value.GetString()
+                             : "";
+    return token + "|" + pseudo;
+  } catch (...) {
+    return "";
+  }
+}
 
 std::string sanitize_player_name(const std::string &name) {
   std::string result;
@@ -1835,6 +1988,19 @@ bool run() {
         } catch (...) {
           return CComVariant("");
         }
+      });
+
+  // AlterCOD OAuth login (IKAAM): the JS calls this when the user clicks
+  // "Se connecter avec le forum". It runs the full OAuth flow (local server +
+  // browser + code exchange) and returns "token|pseudo" on success, "" on
+  // failure. This is a blocking call that can take a while (the user has to
+  // authorize in the browser), so we run it inline but it only fires on an
+  // explicit button click.
+  window.get_html_frame()->register_callback(
+      "startOAuthLogin",
+      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+        const auto result = run_oauth_login();
+        return CComVariant(result.c_str());
       });
 
   window.get_html_frame()->register_callback(
