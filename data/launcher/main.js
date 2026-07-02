@@ -3534,7 +3534,13 @@ function friendsApi(action, data, cb) {
       if (xhr.readyState !== 4) return;
       var res = null;
       try { res = JSON.parse(xhr.responseText); } catch (e) {}
-      if (!res) res = { ok: false, error: 'Serveur injoignable.' };
+      if (!res) {
+        // DIAGNOSTIC : affiche ce que MSHTML a vraiment recu
+        var diag = 'HTTP=' + xhr.status + ' len=' +
+          (xhr.responseText ? xhr.responseText.length : 0) +
+          ' body=' + (xhr.responseText ? xhr.responseText.substring(0, 60) : '(vide)');
+        res = { ok: false, error: 'Injoignable [' + diag + ']' };
+      }
       cb(res);
     };
     xhr.ontimeout = function() {
