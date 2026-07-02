@@ -541,6 +541,68 @@ bool connect_to_friend(game::XUID steam_id) {
   return false;
 }
 
+// ── AlterCOD heartbeat (IKAAM) ──
+// Reads the session written by the launcher (token + pseudo) from
+// boiii_players/user/altercod_session.json, and periodically POSTs our
+// presence (token + current server address) to the friends API so friends
+// see us as "in game". Fails silently if not logged in or offline.
+constexpr const char *ALTERCOD_SESSION_FILE =
+    "boiii_players/user/altercod_session.json";
+constexpr const char *ALTERCOD_API =
+    "https://ikaam.fr/amis/api.php?action=heartbeat";
+
+std::string altercod_read_token() {
+  std::string data;
+  if (!utils::io::read_file(ALTERCOD_SESSION_FILE, &data)) {
+    return {};
+  }
+  try {
+    rapidjson::Document doc;
+    doc.Parse(data.c_str());
+    if (doc.HasParseError() || !doc.IsObject()) {
+      return {};
+    }
+    auto it = doc.FindMember("token");
+    if (it != doc.MemberEnd() && it->value.IsString()) {
+      return it->value.GetString();
+    }
+  } catch (...) {
+  }
+  return {};
+}
+
+void altercod_send_heartbeat() {
+  const std::string token = altercod_read_token();
+  if (token.empty()) {
+    return; // not logged in via the launcher: nothing to do
+  }
+
+  // Current server address only when actually in a game.
+  std::string server;
+  try {
+    if (game::com::Com_IsInGame()) {
+      server = get_own_connect_address();
+    }
+  } catch (...) {
+    server.clear();
+  }
+
+  // Build a minimal JSON body. Escape via rapidjson to stay safe.
+  rapidjson::Document doc;
+  doc.SetObject();
+  auto &al = doc.GetAllocator();
+  doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(), al);
+  doc.AddMember("server", rapidjson::Value(server.c_str(), al).Move(), al);
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  doc.Accept(writer);
+
+  try {
+    utils::http::post_data(ALTERCOD_API, buffer.GetString(), 5);
+  } catch (...) {
+  }
+}
+
 struct component final : client_component {
   void post_unpack() override {
     load_friends();
@@ -560,6 +622,12 @@ struct component final : client_component {
           steam_proxy::set_rich_presence("StatusFull", "AlterBOIII par IKAAM");
         },
         scheduler::async, 15s);
+
+    // AlterCOD heartbeat: advertise our presence (in game + server) to friends.
+    // First beat after 5s (let the session file settle), then every 60s.
+    scheduler::once([] { altercod_send_heartbeat(); }, scheduler::async,
+                    5000ms);
+    scheduler::loop([] { altercod_send_heartbeat(); }, scheduler::async, 60s);
 
     // Poll for incoming Steam invites via callback 337
     scheduler::loop(
