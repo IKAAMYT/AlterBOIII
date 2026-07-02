@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 7
+#define LAUNCHER_BUILD 6
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -1813,10 +1813,28 @@ bool run() {
         // Basic safety: only allow our own API host.
         if (url.find("https://ikaam.fr/amis/") != 0)
           return CComVariant("");
-        const auto response = utils::http::get_data(url);
-        if (!response.has_value())
+
+        // Split "endpoint?query" so we can POST the query as the body. We use
+        // post_data (not get_data) because get_data sets CURLOPT_FAILONERROR
+        // and throws on non-2xx, and requests an octet-stream Accept header
+        // meant for binary downloads. post_data is throw-free, returns the body
+        // on 200, and our PHP API accepts params via GET or POST identically.
+        std::string endpoint = url;
+        std::string body;
+        const auto qpos = url.find('?');
+        if (qpos != std::string::npos) {
+          endpoint = url.substr(0, qpos);
+          body = url.substr(qpos + 1);
+        }
+
+        try {
+          const auto response = utils::http::post_data(endpoint, body, 10);
+          if (!response.has_value())
+            return CComVariant("");
+          return CComVariant(response.value().c_str());
+        } catch (...) {
           return CComVariant("");
-        return CComVariant(response.value().c_str());
+        }
       });
 
   window.get_html_frame()->register_callback(
