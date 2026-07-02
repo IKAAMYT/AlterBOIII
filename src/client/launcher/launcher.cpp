@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 6
+#define LAUNCHER_BUILD 5
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -1757,6 +1757,48 @@ bool run() {
 
   const auto friends_file =
       std::filesystem::path("boiii_players") / "user" / "friends.json";
+
+  // AlterCOD session bridge (IKAAM): the launcher stores the friends account
+  // token in localStorage, which the game cannot read. This callback writes it
+  // to boiii_players/user/altercod_session.json so the in-game heartbeat can
+  // pick it up. Called on login (with token) and logout (empty clears it).
+  const auto altercod_session_file =
+      std::filesystem::path("boiii_players") / "user" / "altercod_session.json";
+
+  window.get_html_frame()->register_callback(
+      "saveFriendsSession",
+      [altercod_session_file](
+          const std::vector<html_argument> &params) -> CComVariant {
+        std::string token = params.size() > 0 && params[0].is_string()
+                                ? params[0].get_string()
+                                : "";
+        std::string pseudo = params.size() > 1 && params[1].is_string()
+                                 ? params[1].get_string()
+                                 : "";
+
+        std::error_code ec;
+        std::filesystem::create_directories(altercod_session_file.parent_path(),
+                                            ec);
+
+        if (token.empty()) {
+          // Logout: remove the session file.
+          std::filesystem::remove(altercod_session_file, ec);
+          return CComVariant("ok");
+        }
+
+        rapidjson::Document doc;
+        doc.SetObject();
+        auto &al = doc.GetAllocator();
+        doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(), al);
+        doc.AddMember("pseudo", rapidjson::Value(pseudo.c_str(), al).Move(),
+                      al);
+        rapidjson::StringBuffer buf;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+        doc.Accept(writer);
+
+        utils::io::write_file(altercod_session_file.string(), buf.GetString());
+        return CComVariant("ok");
+      });
 
   window.get_html_frame()->register_callback(
       "readFriends",
