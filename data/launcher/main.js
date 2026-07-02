@@ -3516,10 +3516,20 @@ function pseudoToLocalId(pseudo) {
 
 function friendsApi(action, data, cb) {
   try {
+    data = data || {};
+    if (_friendsToken) data.token = _friendsToken;
+    // MSHTML (le moteur IE du launcher) bloque les requetes POST cross-domain
+    // depuis une page locale. On passe donc tout en GET (comme players.php qui
+    // fonctionne). Les valeurs sont encodees dans l'URL.
+    var qs = 'action=' + encodeURIComponent(action) + '&_=' + Date.now();
+    for (var k in data) {
+      if (data.hasOwnProperty(k)) {
+        qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
+      }
+    }
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', FRIENDS_API + '?action=' + action, true);
+    xhr.open('GET', FRIENDS_API + '?' + qs, true);
     xhr.timeout = 10000;
-    try { xhr.setRequestHeader('Content-Type', 'application/json'); } catch (e) {}
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return;
       var res = null;
@@ -3530,9 +3540,7 @@ function friendsApi(action, data, cb) {
     xhr.ontimeout = function() {
       cb({ ok: false, error: 'Delai depasse (serveur injoignable).' });
     };
-    data = data || {};
-    if (_friendsToken) data.token = _friendsToken;
-    xhr.send(JSON.stringify(data));
+    xhr.send();
   } catch (e) {
     cb({ ok: false, error: 'Erreur reseau.' });
   }
