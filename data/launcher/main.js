@@ -3552,6 +3552,14 @@ function friendsSaveSession(token, pseudo) {
     localStorage.setItem('altercod_friends_token', _friendsToken);
     localStorage.setItem('altercod_friends_pseudo', _friendsPseudo);
   } catch (e) {}
+  // Pont vers le jeu : ecrit le token dans un fichier que le heartbeat
+  // en jeu peut lire (le jeu ne peut pas acceder a localStorage).
+  try {
+    var ex = getExternal();
+    if (ex && ex.saveFriendsSession) {
+      ex.saveFriendsSession(_friendsToken, _friendsPseudo);
+    }
+  } catch (e) {}
 }
 
 // ── Bascule des etats connecte / deconnecte ──
@@ -3901,6 +3909,13 @@ setInterval(function() {
 // ── Initialisation ──
 friendsLoadSession();
 if (_friendsToken) {
+  // Re-ecrit le fichier session pour le heartbeat en jeu
+  try {
+    var _ex = getExternal();
+    if (_ex && _ex.saveFriendsSession) {
+      _ex.saveFriendsSession(_friendsToken, _friendsPseudo);
+    }
+  } catch (e) {}
   friendsSetLoggedInUI(true);
   loadFriendsData();
 } else {
