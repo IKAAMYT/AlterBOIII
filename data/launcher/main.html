@@ -360,32 +360,66 @@
       <div class="page-scroll-inner">
         <div class="page-header">
           <h2 class="page-title">Amis</h2>
-          <p class="page-sub">Gérez votre liste d'amis. Ajoutez des amis via leur Steam ID pour les voir ici.</p>
+          <p class="page-sub">Cr&eacute;e ton compte AlterCOD, ajoute des amis par pseudo et retrouve-les en jeu.</p>
         </div>
 
-        <div class="friends-add-card">
-          <div class="friends-add-label">Ajouter un ami</div>
-          <p class="friends-add-sub">Entrez un nom et un Steam ID pour ajouter un ami</p>
-          <p class="friends-add-sub" style="font-size:0.75rem;opacity:0.5;margin-top:-6px;">&#9432; Les amis sont aussi ajoutés automatiquement quand ils t'invitent via Steam.</p>
-          <div class="friends-add-row">
-            <input type="text" id="friendNameInput" placeholder="Nom affiché..." autocomplete="off" maxlength="32">
-            <input type="text" id="friendSteamIdInput" placeholder="Steam ID (ex. 76561198...)" autocomplete="off"
-              maxlength="20">
-            <button type="button" class="btn btn-primary" id="friendAddBtn">Ajouter</button>
+        <!-- ETAT DECONNECTE : inscription / connexion -->
+        <div id="friendsAuth" class="friends-auth">
+          <div class="friends-auth-tabs">
+            <button type="button" class="friends-auth-tab active" id="tabLogin">Connexion</button>
+            <button type="button" class="friends-auth-tab" id="tabRegister">Inscription</button>
+          </div>
+
+          <div class="friends-auth-form">
+            <input type="text" id="authPseudo" class="friends-input" placeholder="Pseudo" autocomplete="off" maxlength="20" spellcheck="false">
+            <input type="password" id="authPassword" class="friends-input" placeholder="Mot de passe" autocomplete="off" maxlength="64">
+            <div class="friends-auth-hint" id="authPseudoHint"></div>
+            <button type="button" class="btn btn-primary btn-full" id="authSubmit">Se connecter</button>
+            <div class="friends-auth-msg" id="authMsg"></div>
           </div>
         </div>
 
-        <div class="friends-list-container">
-          <div class="friends-list-header">
-            <span class="friends-list-title">Liste d'amis</span>
-            <span class="friends-count" id="friendsCount">0 ami</span>
+        <!-- ETAT CONNECTE : gestion des amis -->
+        <div id="friendsMain" class="friends-main" style="display:none;">
+          <div class="friends-me">
+            <span class="friends-me-dot"></span>
+            <span class="friends-me-label">Connect&eacute; en tant que</span>
+            <span class="friends-me-name" id="friendsMeName">-</span>
+            <button type="button" class="friends-logout" id="friendsLogout" title="Se d&eacute;connecter">Se d&eacute;connecter</button>
           </div>
-          <div class="friends-search-row">
-            <span class="friends-search-ico">&#128269;</span>
-            <input type="text" id="friendSearchInput" class="friends-search-input" placeholder="Rechercher un ami..." autocomplete="off" spellcheck="false">
+
+          <div class="friends-add-card">
+            <div class="friends-add-label">Ajouter un ami</div>
+            <p class="friends-add-sub">Entre le pseudo de la personne pour lui envoyer une demande.</p>
+            <div class="friends-add-row">
+              <input type="text" id="friendAddPseudo" placeholder="Pseudo de l'ami..." autocomplete="off" maxlength="20" spellcheck="false">
+              <button type="button" class="btn btn-primary" id="friendAddBtn">Envoyer</button>
+            </div>
+            <div class="friends-add-msg" id="friendAddMsg"></div>
           </div>
-          <div class="friends-list-wrap">
-            <div class="friends-list" id="friendsList"></div>
+
+          <!-- Demandes recues -->
+          <div class="friends-requests" id="friendsRequests" style="display:none;">
+            <div class="friends-list-header">
+              <span class="friends-list-title">Demandes re&ccedil;ues</span>
+              <span class="friends-count" id="requestsCount">0</span>
+            </div>
+            <div class="friends-req-list" id="friendsReqList"></div>
+          </div>
+
+          <div class="friends-list-container">
+            <div class="friends-list-header">
+              <span class="friends-list-title">Mes amis</span>
+              <span class="friends-count" id="friendsCount">0 ami</span>
+              <button type="button" class="friends-refresh" id="friendsRefresh" title="Actualiser">&#8635;</button>
+            </div>
+            <div class="friends-search-row">
+              <span class="friends-search-ico">&#128269;</span>
+              <input type="text" id="friendSearchInput" class="friends-search-input" placeholder="Rechercher un ami..." autocomplete="off" spellcheck="false">
+            </div>
+            <div class="friends-list-wrap">
+              <div class="friends-list" id="friendsList"></div>
+            </div>
           </div>
         </div>
       </div><!-- end page-scroll-inner -->

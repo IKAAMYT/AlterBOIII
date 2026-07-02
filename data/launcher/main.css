@@ -1906,3 +1906,150 @@ cards
   color: #f5f3ee;
   background: rgba(33,30,26,0.8);
 }
+
+/* ── Systeme d'amis avec comptes (IKAAM) ── */
+.friends-auth {
+  max-width: 420px;
+  margin: 30px auto;
+  background: rgba(20,18,16,0.6);
+  border: 1px solid rgba(242,196,17,0.18);
+  border-radius: 16px;
+  padding: 24px;
+}
+.friends-auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.friends-auth-tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(242,196,17,0.2);
+  border-radius: 10px;
+  color: #968f81;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.friends-auth-tab.active {
+  background: rgba(242,196,17,0.12);
+  border-color: rgba(242,196,17,0.5);
+  color: #f2c411;
+}
+.friends-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.friends-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(10,9,8,0.7);
+  border: 1px solid rgba(242,196,17,0.2);
+  border-radius: 10px;
+  color: #f5f3ee;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.friends-input:focus {
+  outline: none;
+  border-color: rgba(242,196,17,0.55);
+}
+.btn-full { width: 100%; }
+.friends-auth-hint {
+  font-size: 12px;
+  min-height: 16px;
+  color: #968f81;
+}
+.friends-auth-hint.ok { color: #5fce7f; }
+.friends-auth-hint.no { color: #e0655f; }
+.friends-auth-msg {
+  font-size: 13px;
+  min-height: 18px;
+  text-align: center;
+}
+.friends-auth-msg.ok { color: #5fce7f; }
+.friends-auth-msg.no { color: #e0655f; }
+
+.friends-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(20,18,16,0.6);
+  border: 1px solid rgba(242,196,17,0.18);
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+.friends-me-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #5fce7f;
+  box-shadow: 0 0 8px rgba(95,206,127,0.6);
+}
+.friends-me-label { color: #968f81; font-size: 13px; }
+.friends-me-name { color: #f2c411; font-weight: 700; font-size: 14px; }
+.friends-logout {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(224,101,95,0.35);
+  color: #e0655f;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.friends-logout:hover { background: rgba(224,101,95,0.12); }
+
+.friends-add-msg {
+  font-size: 12.5px;
+  min-height: 16px;
+  margin-top: 8px;
+}
+.friends-add-msg.ok { color: #5fce7f; }
+.friends-add-msg.no { color: #e0655f; }
+
+.friends-requests {
+  margin-bottom: 18px;
+  background: rgba(242,196,17,0.05);
+  border: 1px solid rgba(242,196,17,0.2);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.friends-req-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.friends-req-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(10,9,8,0.5);
+  border-radius: 10px;
+}
+.friends-req-name { color: #f5f3ee; font-size: 13.5px; flex: 1; }
+.friends-req-actions { display: flex; gap: 6px; }
+.friends-req-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.friends-req-btn:hover { opacity: 0.85; }
+.friends-req-accept { background: #5fce7f; color: #0a2814; }
+.friends-req-refuse { background: rgba(224,101,95,0.2); color: #e0655f; }
+
+.friends-refresh {
+  margin-left: 8px;
+  background: transparent;
+  border: none;
+  color: #968f81;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color .15s;
+}
+.friends-refresh:hover { color: #f2c411; }

@@ -3484,8 +3484,19 @@ if (workshopProgressFolder) {
 
 refreshModsGrid();
 
+/* ─────────────────────────────────────────────────────────────
+   SYSTEME D'AMIS AVEC COMPTES (IKAAM)
+   Comptes pseudo+mdp sur https://ikaam.fr/amis/api.php
+   Demandes d'amis, acceptation, presence, sync vers friends.json
+   local (pour le menu social en jeu). ES5 uniquement (MSHTML).
+   ───────────────────────────────────────────────────────────── */
+
+var FRIENDS_API = 'https://ikaam.fr/amis/api.php';
 var _friendsData = [];
 var _friendsFilter = '';
+var _friendsToken = '';
+var _friendsPseudo = '';
+var _friendsHeartbeatTimer = null;
 
 function friendInitial(name) {
   name = (name || '').replace(/^\s+/, '');
@@ -3493,209 +3504,408 @@ function friendInitial(name) {
   return ch ? ch.toUpperCase() : '?';
 }
 
-function loadFriendsList() {
-  try {
-    var ex = getExternal();
-    if (ex && ex.readFriends) {
-      var raw = ex.readFriends();
-      if (raw && typeof raw === 'string' && raw.length > 0) {
-        _friendsData = JSON.parse(raw);
-        if (!Array.isArray(_friendsData))
-          _friendsData = [];
-      } else {
-        _friendsData = [];
-      }
-    }
-  } catch (e) {
-    _friendsData = [];
+// ID stable derive du pseudo (pour sync friends.json local / menu en jeu).
+function pseudoToLocalId(pseudo) {
+  var h = 5381;
+  pseudo = (pseudo || '').toLowerCase();
+  for (var i = 0; i < pseudo.length; i++) {
+    h = ((h * 33) + pseudo.charCodeAt(i)) % 900719925474;
   }
-  renderFriendsList();
+  return '99' + String(h);
 }
 
+function friendsApi(action, data, cb) {
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', FRIENDS_API + '?action=' + action, true);
+    xhr.timeout = 10000;
+    try { xhr.setRequestHeader('Content-Type', 'application/json'); } catch (e) {}
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      var res = null;
+      try { res = JSON.parse(xhr.responseText); } catch (e) {}
+      if (!res) res = { ok: false, error: 'Serveur injoignable.' };
+      cb(res);
+    };
+    xhr.ontimeout = function() {
+      cb({ ok: false, error: 'Delai depasse (serveur injoignable).' });
+    };
+    data = data || {};
+    if (_friendsToken) data.token = _friendsToken;
+    xhr.send(JSON.stringify(data));
+  } catch (e) {
+    cb({ ok: false, error: 'Erreur reseau.' });
+  }
+}
+
+// ── Persistance de session ──
+function friendsLoadSession() {
+  try {
+    _friendsToken = localStorage.getItem('altercod_friends_token') || '';
+    _friendsPseudo = localStorage.getItem('altercod_friends_pseudo') || '';
+  } catch (e) {}
+}
+function friendsSaveSession(token, pseudo) {
+  _friendsToken = token || '';
+  _friendsPseudo = pseudo || '';
+  try {
+    localStorage.setItem('altercod_friends_token', _friendsToken);
+    localStorage.setItem('altercod_friends_pseudo', _friendsPseudo);
+  } catch (e) {}
+}
+
+// ── Bascule des etats connecte / deconnecte ──
+function friendsSetLoggedInUI(loggedIn) {
+  var auth = document.getElementById('friendsAuth');
+  var main = document.getElementById('friendsMain');
+  if (auth) auth.style.display = loggedIn ? 'none' : '';
+  if (main) main.style.display = loggedIn ? '' : 'none';
+  var me = document.getElementById('friendsMeName');
+  if (me) me.textContent = _friendsPseudo || '-';
+  if (loggedIn) {
+    friendsStartHeartbeat();
+  } else {
+    friendsStopHeartbeat();
+  }
+}
+
+// ── Heartbeat presence (launcher = en ligne) ──
+function friendsStartHeartbeat() {
+  friendsStopHeartbeat();
+  var beat = function() {
+    if (!_friendsToken) return;
+    friendsApi('heartbeat', { server: '' }, function() {});
+  };
+  beat();
+  _friendsHeartbeatTimer = setInterval(beat, 60000);
+}
+function friendsStopHeartbeat() {
+  if (_friendsHeartbeatTimer) {
+    clearInterval(_friendsHeartbeatTimer);
+    _friendsHeartbeatTimer = null;
+  }
+}
+
+// ── Onglets Connexion / Inscription ──
+var _authMode = 'login';
+function setAuthMode(mode) {
+  _authMode = mode;
+  var tl = document.getElementById('tabLogin');
+  var tr = document.getElementById('tabRegister');
+  var btn = document.getElementById('authSubmit');
+  if (tl) tl.className = 'friends-auth-tab' + (mode === 'login' ? ' active' : '');
+  if (tr) tr.className = 'friends-auth-tab' + (mode === 'register' ? ' active' : '');
+  if (btn) btn.textContent = (mode === 'login') ? 'Se connecter' : 'Creer mon compte';
+  var hint = document.getElementById('authPseudoHint');
+  if (hint) { hint.textContent = ''; hint.className = 'friends-auth-hint'; }
+  friendsAuthMsg('', '');
+}
+var tabLoginBtn = document.getElementById('tabLogin');
+var tabRegisterBtn = document.getElementById('tabRegister');
+if (tabLoginBtn) tabLoginBtn.onclick = function() { setAuthMode('login'); };
+if (tabRegisterBtn) tabRegisterBtn.onclick = function() { setAuthMode('register'); };
+
+function friendsAuthMsg(text, kind) {
+  var el = document.getElementById('authMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'friends-auth-msg' + (kind ? ' ' + kind : '');
+}
+
+// Verification live du pseudo (inscription)
+var _pseudoCheckTimer = null;
+var authPseudoInput = document.getElementById('authPseudo');
+if (authPseudoInput) {
+  authPseudoInput.oninput = function() {
+    if (_authMode !== 'register') return;
+    var hint = document.getElementById('authPseudoHint');
+    var val = authPseudoInput.value.replace(/^\s+|\s+$/g, '');
+    if (_pseudoCheckTimer) clearTimeout(_pseudoCheckTimer);
+    if (!hint) return;
+    if (val.length < 3) {
+      hint.textContent = '';
+      hint.className = 'friends-auth-hint';
+      return;
+    }
+    hint.textContent = 'Verification...';
+    hint.className = 'friends-auth-hint';
+    _pseudoCheckTimer = setTimeout(function() {
+      friendsApi('check_pseudo', { pseudo: val }, function(res) {
+        if (!hint) return;
+        if (res.ok && res.available) {
+          hint.textContent = 'Pseudo disponible !';
+          hint.className = 'friends-auth-hint ok';
+        } else if (res.ok) {
+          hint.textContent = 'Ce pseudo est deja pris.';
+          hint.className = 'friends-auth-hint no';
+        } else {
+          hint.textContent = '';
+        }
+      });
+    }, 450);
+  };
+}
+
+// Soumission connexion / inscription
+var authSubmitBtn = document.getElementById('authSubmit');
+if (authSubmitBtn) {
+  authSubmitBtn.onclick = function() {
+    var pseudo = (document.getElementById('authPseudo').value || '').replace(/^\s+|\s+$/g, '');
+    var pass = document.getElementById('authPassword').value || '';
+    if (pseudo.length < 3) { friendsAuthMsg('Pseudo trop court (3 caracteres minimum).', 'no'); return; }
+    if (pass.length < 4) { friendsAuthMsg('Mot de passe trop court (4 caracteres minimum).', 'no'); return; }
+    authSubmitBtn.disabled = true;
+    friendsAuthMsg((_authMode === 'login') ? 'Connexion...' : 'Creation du compte...', '');
+    friendsApi(_authMode === 'login' ? 'login' : 'register', { pseudo: pseudo, password: pass }, function(res) {
+      authSubmitBtn.disabled = false;
+      if (res.ok && res.token) {
+        friendsSaveSession(res.token, res.pseudo || pseudo);
+        friendsAuthMsg('', '');
+        friendsSetLoggedInUI(true);
+        loadFriendsData();
+        if (typeof showToast === 'function') {
+          showToast(_authMode === 'login' ? 'Connecte en tant que ' + _friendsPseudo : 'Compte cree, bienvenue ' + _friendsPseudo + ' !', 'success');
+        }
+      } else {
+        friendsAuthMsg(res.error || 'Erreur.', 'no');
+      }
+    });
+  };
+}
+
+// ── Deconnexion ──
+var friendsLogoutBtn = document.getElementById('friendsLogout');
+if (friendsLogoutBtn) {
+  friendsLogoutBtn.onclick = function() {
+    friendsApi('logout', {}, function() {});
+    friendsSaveSession('', '');
+    friendsSetLoggedInUI(false);
+  };
+}
+
+// ── Ajout d'ami par pseudo ──
+function friendsAddMsg(text, kind) {
+  var el = document.getElementById('friendAddMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'friends-add-msg' + (kind ? ' ' + kind : '');
+}
+var friendAddBtn = document.getElementById('friendAddBtn');
+if (friendAddBtn) {
+  friendAddBtn.onclick = function() {
+    var input = document.getElementById('friendAddPseudo');
+    var pseudo = (input.value || '').replace(/^\s+|\s+$/g, '');
+    if (pseudo.length < 3) { friendsAddMsg('Entre un pseudo valide.', 'no'); return; }
+    friendAddBtn.disabled = true;
+    friendsApi('add', { pseudo: pseudo }, function(res) {
+      friendAddBtn.disabled = false;
+      if (res.ok) {
+        friendsAddMsg(res.message || 'Demande envoyee !', 'ok');
+        input.value = '';
+        loadFriendsData();
+      } else {
+        friendsAddMsg(res.error || 'Erreur.', 'no');
+      }
+    });
+  };
+}
+
+// ── Chargement liste amis + demandes ──
+function loadFriendsData() {
+  if (!_friendsToken) return;
+  friendsApi('list', {}, function(res) {
+    if (!res.ok) {
+      if (res.error && res.error.indexOf('authentifie') !== -1) {
+        // Token expire : retour a la connexion
+        friendsSaveSession('', '');
+        friendsSetLoggedInUI(false);
+      }
+      return;
+    }
+    _friendsData = res.friends || [];
+    renderFriendsList();
+    renderFriendRequests(res.incoming || [], res.outgoing || []);
+    syncFriendsToLocal(_friendsData);
+  });
+}
+
+// Sync vers friends.json local (le menu social en jeu lit ce fichier)
+function syncFriendsToLocal(friends) {
+  try {
+    var ex = getExternal();
+    if (!ex || !ex.addFriend) return;
+    for (var i = 0; i < friends.length; i++) {
+      var f = friends[i];
+      try { ex.addFriend(pseudoToLocalId(f.pseudo), f.pseudo); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+// ── Rendu des demandes recues ──
+function renderFriendRequests(incoming, outgoing) {
+  var box = document.getElementById('friendsRequests');
+  var list = document.getElementById('friendsReqList');
+  var count = document.getElementById('requestsCount');
+  if (!box || !list) return;
+  list.innerHTML = '';
+  if (!incoming || incoming.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = '';
+  if (count) count.textContent = String(incoming.length);
+  for (var i = 0; i < incoming.length; i++) {
+    (function(pseudo) {
+      var item = document.createElement('div');
+      item.className = 'friends-req-item';
+      var name = document.createElement('span');
+      name.className = 'friends-req-name';
+      name.textContent = pseudo + ' veut devenir ton ami';
+      var actions = document.createElement('div');
+      actions.className = 'friends-req-actions';
+      var acceptBtn = document.createElement('button');
+      acceptBtn.className = 'friends-req-btn friends-req-accept';
+      acceptBtn.textContent = 'Accepter';
+      acceptBtn.onclick = function() {
+        friendsApi('accept', { pseudo: pseudo }, function(res) {
+          if (res.ok && typeof showToast === 'function') showToast(pseudo + ' est maintenant ton ami !', 'success');
+          loadFriendsData();
+        });
+      };
+      var refuseBtn = document.createElement('button');
+      refuseBtn.className = 'friends-req-btn friends-req-refuse';
+      refuseBtn.textContent = 'Refuser';
+      refuseBtn.onclick = function() {
+        friendsApi('remove', { pseudo: pseudo }, function() { loadFriendsData(); });
+      };
+      actions.appendChild(acceptBtn);
+      actions.appendChild(refuseBtn);
+      item.appendChild(name);
+      item.appendChild(actions);
+      list.appendChild(item);
+    })(incoming[i]);
+  }
+}
+
+// ── Rendu de la liste d'amis ──
 function renderFriendsList() {
   var list = document.getElementById('friendsList');
   var countEl = document.getElementById('friendsCount');
-  if (!list)
-    return;
+  if (!list) return;
+  list.innerHTML = '';
 
-  var total = _friendsData.length;
-  if (countEl)
-    countEl.textContent = total + ' ami' + (total !== 1 ? 's' : '');
-
-  // Filtre de recherche (nom ou Steam ID)
-  var q = _friendsFilter.toLowerCase();
   var shown = [];
-  for (var k = 0; k < _friendsData.length; k++) {
-    var fr = _friendsData[k];
-    var n = (fr.name || '').toLowerCase();
-    var s = (fr.steam_id !== undefined ? String(fr.steam_id) : '').toLowerCase();
-    if (!q || n.indexOf(q) !== -1 || s.indexOf(q) !== -1) {
-      shown.push(fr);
-    }
+  for (var i = 0; i < _friendsData.length; i++) {
+    var f = _friendsData[i];
+    if (_friendsFilter && f.pseudo.toLowerCase().indexOf(_friendsFilter) === -1) continue;
+    shown.push(f);
   }
 
-  if (total === 0) {
-    list.innerHTML =
-        '<div class="friends-empty"><div class="friends-empty-icon">&#128100;</div><div class="friends-empty-text">Aucun ami ajouté pour le moment</div></div>';
-    return;
+  if (countEl) {
+    var n = _friendsData.length;
+    countEl.textContent = n + (n > 1 ? ' amis' : ' ami');
   }
+
   if (shown.length === 0) {
-    list.innerHTML =
-        '<div class="friends-empty"><div class="friends-empty-icon">&#128269;</div><div class="friends-empty-text">Aucun ami ne correspond à « ' +
-        _friendsFilter.replace(/</g, '&lt;').replace(/>/g, '&gt;') + ' »</div></div>';
+    var empty = document.createElement('div');
+    empty.style.cssText = 'padding:24px;text-align:center;color:#968f81;font-size:13px;';
+    empty.textContent = _friendsData.length === 0
+      ? 'Aucun ami pour le moment. Envoie une demande avec le pseudo !'
+      : 'Aucun resultat pour cette recherche.';
+    list.appendChild(empty);
     return;
   }
 
-  var html = '';
-  for (var i = 0; i < shown.length; i++) {
-    var f = shown[i];
-    var sid = (f.steam_id !== undefined) ? String(f.steam_id) : '';
-    var nm = f.name || 'Inconnu';
-    var safeNm = nm.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html += '<div class="friend-item" data-steamid="' + sid + '">';
-    html += '<div class="friend-icon">' + friendInitial(nm) + '</div>';
-    html += '<div class="friend-info">';
-    html += '<div class="friend-name">' + safeNm + '</div>';
-    html += '<div class="friend-steamid">' + sid + '</div>';
-    html += '</div>';
-    html +=
-        '<button type="button" class="friend-copy-btn" data-copy-sid="' + sid +
-        '" title="Copier le Steam ID">&#128203;</button>';
-    html +=
-        '<button type="button" class="friend-remove-btn" data-remove-sid="' +
-        sid + '" title="Retirer">&times;</button>';
-    html += '</div>';
-  }
-  list.innerHTML = html;
+  for (var j = 0; j < shown.length; j++) {
+    (function(f) {
+      var item = document.createElement('div');
+      item.className = 'friend-item';
+      item.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(20,18,16,0.5);border:1px solid rgba(242,196,17,0.12);border-radius:12px;margin-bottom:8px;';
 
-  // Copier le Steam ID
-  var copyBtns = list.querySelectorAll('.friend-copy-btn');
-  for (var ci = 0; ci < copyBtns.length; ci++) {
-    (function(btn) {
-      btn.onclick = function() {
-        var sid = btn.getAttribute('data-copy-sid');
-        if (!sid) return;
-        var ok = false;
-        try {
-          if (window.clipboardData && window.clipboardData.setData) {
-            window.clipboardData.setData('Text', sid);
-            ok = true;
-          }
-        } catch (e) {}
-        if (ok) {
-          showToast('Steam ID copié', 'success');
-        } else {
-          showToast('Copie impossible sur ce système', 'error');
-        }
-      };
-    })(copyBtns[ci]);
-  }
+      var avatar = document.createElement('div');
+      avatar.style.cssText = 'width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#f2c411,#9a7c00);color:#0a0908;display:-ms-flexbox;display:flex;-ms-flex-align:center;align-items:center;-ms-flex-pack:center;justify-content:center;font-weight:700;font-size:15px;-ms-flex-negative:0;flex-shrink:0;';
+      avatar.textContent = friendInitial(f.pseudo);
 
-  // Retirer un ami (avec confirmation)
-  var removeBtns = list.querySelectorAll('.friend-remove-btn');
-  for (var ri = 0; ri < removeBtns.length; ri++) {
-    (function(btn) {
-      btn.onclick = function() {
-        var sid = btn.getAttribute('data-remove-sid');
-        if (!sid)
-          return;
-        var removedName = '';
-        for (var z = 0; z < _friendsData.length; z++) {
-          if (String(_friendsData[z].steam_id) === sid) {
-            removedName = _friendsData[z].name || '';
-            break;
-          }
-        }
-        var label = removedName ? removedName : 'cet ami';
-        function doRemove() {
-          try {
-            var ex = getExternal();
-            if (ex && ex.removeFriend) {
-              ex.removeFriend(sid);
-            }
-          } catch (e) {
-          }
-          _friendsData = _friendsData.filter(function(
-              f) { return String(f.steam_id) !== sid; });
-          renderFriendsList();
-          showToast((removedName ? removedName : 'Ami') + ' retiré', 'info');
-        }
-        if (window.showConfirm) {
-          showConfirm('Retirer un ami',
-                      'Retirer <strong>' +
-                          label.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
-                          '</strong> de ta liste d\'amis ?',
-                      doRemove);
-        } else {
-          doRemove();
-        }
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0;';
+      var nm = document.createElement('div');
+      nm.style.cssText = 'color:#f5f3ee;font-size:14px;font-weight:600;';
+      nm.textContent = f.pseudo;
+      info.appendChild(nm);
+
+      var st = document.createElement('div');
+      var stText = 'Hors ligne';
+      var stColor = '#736f66';
+      if (f.status === 2) { stText = 'En partie' + (f.server ? ' — ' + f.server : ''); stColor = '#5fce7f'; }
+      else if (f.status === 1) { stText = 'En ligne'; stColor = '#6fb8e8'; }
+      st.style.cssText = 'font-size:12px;color:' + stColor + ';';
+      st.textContent = stText;
+      info.appendChild(st);
+
+      var dot = document.createElement('span');
+      dot.style.cssText = 'width:10px;height:10px;border-radius:50%;-ms-flex-negative:0;flex-shrink:0;background:' + stColor + ';';
+
+      var removeBtn = document.createElement('button');
+      removeBtn.textContent = 'Retirer';
+      removeBtn.style.cssText = 'background:transparent;border:1px solid rgba(224,101,95,0.3);color:#e0655f;border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer;';
+      removeBtn.onclick = function() {
+        friendsApi('remove', { pseudo: f.pseudo }, function() { loadFriendsData(); });
       };
-    })(removeBtns[ri]);
+
+      item.appendChild(dot);
+      item.appendChild(avatar);
+      item.appendChild(info);
+      item.appendChild(removeBtn);
+      list.appendChild(item);
+    })(shown[j]);
   }
 }
 
-// Barre de recherche de la liste d'amis
+// ── Recherche ──
 var friendSearchInput = document.getElementById('friendSearchInput');
 if (friendSearchInput) {
   friendSearchInput.oninput = function() {
-    _friendsFilter = friendSearchInput.value.replace(/^\s+|\s+$/g, '');
+    _friendsFilter = (friendSearchInput.value || '').toLowerCase();
     renderFriendsList();
   };
 }
 
-var friendAddBtn = document.getElementById('friendAddBtn');
-if (friendAddBtn) {
-  friendAddBtn.onclick = function() {
-    var nameInput = document.getElementById('friendNameInput');
-    var sidInput = document.getElementById('friendSteamIdInput');
-    if (!nameInput || !sidInput)
-      return;
-
-    var name = nameInput.value.replace(/^\s+|\s+$/g, '');
-    var sid = sidInput.value.replace(/^\s+|\s+$/g, '');
-
-    if (!name || !sid) {
-      showToast('Entre un nom ET un Steam ID', 'error');
-      return;
-    }
-    if (!/^\d{5,20}$/.test(sid)) {
-      showToast('Le Steam ID doit être numérique (ex. 76561198...)', 'error');
-      return;
-    }
-
-    try {
-      var ex = getExternal();
-      if (ex && ex.addFriend) {
-        var result = ex.addFriend(sid, name);
-        if (result === 'duplicate') {
-          showToast('Ce Steam ID est déjà dans ta liste', 'error');
-          return;
-        } else if (result === 'error') {
-          showToast("Échec de l'ajout. Vérifie les champs.", 'error');
-          return;
-        }
-      }
-    } catch (e) {
-      showToast("Une erreur est survenue lors de l'ajout", 'error');
-      return;
-    }
-
-    nameInput.value = '';
-    sidInput.value = '';
-    loadFriendsList();
-    showToast(name + ' ajouté à tes amis', 'success');
-  };
+// ── Bouton actualiser ──
+var friendsRefreshBtn = document.getElementById('friendsRefresh');
+if (friendsRefreshBtn) {
+  friendsRefreshBtn.onclick = function() { loadFriendsData(); };
 }
 
-var origSetPage = setPage;
+// Compat : l'ancien nom loadFriendsList est utilise ailleurs (setPage)
+function loadFriendsList() {
+  loadFriendsData();
+}
+
+// Rafraichit la page Amis quand on l'ouvre + auto-refresh 30s si active
+var origSetPageFriends = setPage;
 setPage = function(targetPage) {
-  origSetPage(targetPage);
-  if (targetPage === 'friends') {
-    loadFriendsList();
+  origSetPageFriends(targetPage);
+  if (targetPage === 'friends' && _friendsToken) {
+    loadFriendsData();
   }
 };
+setInterval(function() {
+  try {
+    var page = document.getElementById('friendsPage');
+    if (page && page.className.indexOf('active') !== -1 && _friendsToken) {
+      loadFriendsData();
+    }
+  } catch (e) {}
+}, 30000);
 
-loadFriendsList();
+// ── Initialisation ──
+friendsLoadSession();
+if (_friendsToken) {
+  friendsSetLoggedInUI(true);
+  loadFriendsData();
+} else {
+  friendsSetLoggedInUI(false);
+}
 
 /* ─────────────────────────────────────────────────────────────
    PAGE STATUT SERVEURS (IKAAM)
