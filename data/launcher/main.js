@@ -3518,30 +3518,39 @@ function friendsApi(action, data, cb) {
   try {
     data = data || {};
     if (_friendsToken) data.token = _friendsToken;
-    // MSHTML (le moteur IE du launcher) bloque les requetes POST cross-domain
-    // depuis une page locale. On passe donc tout en GET (comme players.php qui
-    // fonctionne). Les valeurs sont encodees dans l'URL.
     var qs = 'action=' + encodeURIComponent(action) + '&_=' + Date.now();
     for (var k in data) {
       if (data.hasOwnProperty(k)) {
         qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
       }
     }
+    var url = FRIENDS_API + '?' + qs;
+
+    // MSHTML bloque les XHR cross-zone vers l'API (status 0). On passe donc par
+    // le C++ (curl natif), comme l'auto-updater. Le callback renvoie le corps
+    // brut de la reponse (ou "" en cas d'echec).
+    var ex = getExternal();
+    if (ex && ex.friendsApiGet) {
+      // Appel synchrone cote C++ (curl). Rapide, pas de blocage UI notable.
+      var raw = '';
+      try { raw = ex.friendsApiGet(url); } catch (e) { raw = ''; }
+      var res = null;
+      try { res = JSON.parse(raw); } catch (e) {}
+      if (!res) res = { ok: false, error: 'Serveur injoignable.' };
+      cb(res);
+      return;
+    }
+
+    // Fallback XHR (si le callback C++ n'existe pas encore dans cet exe).
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', FRIENDS_API + '?' + qs, true);
+    xhr.open('GET', url, true);
     xhr.timeout = 10000;
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return;
-      var res = null;
-      try { res = JSON.parse(xhr.responseText); } catch (e) {}
-      if (!res) {
-        // DIAGNOSTIC : affiche ce que MSHTML a vraiment recu
-        var diag = 'HTTP=' + xhr.status + ' len=' +
-          (xhr.responseText ? xhr.responseText.length : 0) +
-          ' body=' + (xhr.responseText ? xhr.responseText.substring(0, 60) : '(vide)');
-        res = { ok: false, error: 'Injoignable [' + diag + ']' };
-      }
-      cb(res);
+      var res2 = null;
+      try { res2 = JSON.parse(xhr.responseText); } catch (e) {}
+      if (!res2) res2 = { ok: false, error: 'Serveur injoignable.' };
+      cb(res2);
     };
     xhr.ontimeout = function() {
       cb({ ok: false, error: 'Delai depasse (serveur injoignable).' });
