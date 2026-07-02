@@ -365,6 +365,11 @@
 
         <!-- ETAT DECONNECTE : inscription / connexion -->
         <div id="friendsAuth" class="friends-auth">
+          <!-- Connexion via le forum (OAuth) — methode recommandee -->
+          <button type="button" class="btn btn-primary btn-full" id="oauthBtn" style="margin-bottom:8px">Se connecter avec le forum</button>
+          <div class="friends-auth-msg" id="oauthMsg" style="margin-bottom:14px"></div>
+          <div style="text-align:center;color:#736f66;font-size:12px;margin-bottom:14px">&mdash; ou connexion directe &mdash;</div>
+
           <div class="friends-auth-tabs">
             <button type="button" class="friends-auth-tab active" id="tabLogin">Connexion</button>
             <button type="button" class="friends-auth-tab" id="tabRegister">Inscription</button>

@@ -3930,6 +3930,41 @@ setInterval(function() {
   } catch (e) {}
 }, 30000);
 
+// ── Connexion via le forum (OAuth) ──
+// Contourne le blocage MSHTML : toute l'auth se passe dans le navigateur.
+// Le C++ ouvre un serveur local, ouvre le navigateur, capte le code, et
+// renvoie "token|pseudo".
+var oauthBtn = document.getElementById('oauthBtn');
+if (oauthBtn) {
+  oauthBtn.onclick = function() {
+    var msg = document.getElementById('oauthMsg');
+    var ex = getExternal();
+    if (!ex || !ex.startOAuthLogin) {
+      if (msg) { msg.textContent = 'Fonction indisponible (mets a jour le launcher).'; msg.className = 'friends-auth-msg no'; }
+      return;
+    }
+    oauthBtn.disabled = true;
+    if (msg) { msg.textContent = 'Ouverture du navigateur... autorise la connexion puis reviens ici.'; msg.className = 'friends-auth-msg'; }
+    // Appel bloquant cote C++ (le temps que l'utilisateur autorise).
+    var result = '';
+    try { result = ex.startOAuthLogin(); } catch (e) { result = ''; }
+    oauthBtn.disabled = false;
+    if (result && result.indexOf('|') !== -1) {
+      var parts = result.split('|');
+      var tok = parts[0], pseudo = parts[1] || '';
+      if (tok) {
+        friendsSaveSession(tok, pseudo);
+        friendsSetLoggedInUI(true);
+        loadFriendsData();
+        if (typeof showToast === 'function') showToast('Connecte en tant que ' + pseudo + ' !', 'success');
+        if (msg) msg.textContent = '';
+        return;
+      }
+    }
+    if (msg) { msg.textContent = 'Connexion annulee ou echouee. Reessaie.'; msg.className = 'friends-auth-msg no'; }
+  };
+}
+
 // ── Initialisation ──
 friendsLoadSession();
 if (_friendsToken) {
