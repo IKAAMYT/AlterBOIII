@@ -3531,7 +3531,8 @@ function friendsApi(action, data, cb) {
     // brut de la reponse (ou "" en cas d'echec).
     var ex = getExternal();
     if (ex && ex.friendsApiGet) {
-      // Appel synchrone cote C++ (curl). Rapide, pas de blocage UI notable.
+      // Appel synchrone cote C++ (curl via post_data). MSHTML bloque les XHR
+      // cross-zone vers l'API, donc on passe par le natif.
       var raw = '';
       try { raw = ex.friendsApiGet(url); } catch (e) { raw = ''; }
       var res = null;
