@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 5
+#define LAUNCHER_BUILD 7
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -1798,6 +1798,25 @@ bool run() {
 
         utils::io::write_file(altercod_session_file.string(), buf.GetString());
         return CComVariant("ok");
+      });
+
+  // AlterCOD friends API bridge (IKAAM): MSHTML's XHR blocks cross-zone
+  // requests to the friends API (returns status 0). We route them through
+  // native curl instead (same path the auto-updater uses successfully). JS
+  // passes the full URL and gets the raw response body back (or "" on error).
+  window.get_html_frame()->register_callback(
+      "friendsApiGet",
+      [](const std::vector<html_argument> &params) -> CComVariant {
+        if (params.empty() || !params[0].is_string())
+          return CComVariant("");
+        const auto url = params[0].get_string();
+        // Basic safety: only allow our own API host.
+        if (url.find("https://ikaam.fr/amis/") != 0)
+          return CComVariant("");
+        const auto response = utils::http::get_data(url);
+        if (!response.has_value())
+          return CComVariant("");
+        return CComVariant(response.value().c_str());
       });
 
   window.get_html_frame()->register_callback(
