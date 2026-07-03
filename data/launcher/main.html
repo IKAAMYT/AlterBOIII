@@ -360,7 +360,7 @@
       <div class="page-scroll-inner">
         <div class="page-header">
           <h2 class="page-title">Amis</h2>
-          <p class="page-sub">Cr&eacute;e ton compte AlterCOD, ajoute des amis par pseudo et retrouve-les en jeu.</p>
+          <p class="page-sub">Connecte-toi avec ton compte du forum, ajoute des amis par pseudo et retrouve-les en jeu.</p>
         </div>
 
         <!-- ETAT DECONNECTE : connexion via le forum (OAuth uniquement) -->
@@ -381,9 +381,12 @@
         <!-- ETAT CONNECTE : gestion des amis -->
         <div id="friendsMain" class="friends-main" style="display:none;">
           <div class="friends-me">
-            <span class="friends-me-dot"></span>
-            <span class="friends-me-label">Connect&eacute; en tant que</span>
-            <span class="friends-me-name" id="friendsMeName">-</span>
+            <div class="friends-me-avatar" id="friendsMeAvatar">?</div>
+            <div class="friends-me-info">
+              <span class="friends-me-label">Connect&eacute; en tant que</span>
+              <span class="friends-me-name" id="friendsMeName">-</span>
+            </div>
+            <span class="friends-me-status"><span class="friends-me-dot"></span>En ligne</span>
             <button type="button" class="friends-logout" id="friendsLogout" title="Se d&eacute;connecter">Se d&eacute;connecter</button>
           </div>
 

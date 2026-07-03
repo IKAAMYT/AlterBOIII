@@ -3594,6 +3594,8 @@ function friendsSetLoggedInUI(loggedIn) {
   if (main) main.style.display = loggedIn ? '' : 'none';
   var me = document.getElementById('friendsMeName');
   if (me) me.textContent = _friendsPseudo || '-';
+  var meAv = document.getElementById('friendsMeAvatar');
+  if (meAv) meAv.textContent = friendInitial(_friendsPseudo);
   if (loggedIn) {
     friendsStartHeartbeat();
   } else {
