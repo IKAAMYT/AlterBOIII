@@ -34,7 +34,7 @@
 // AlterBO3 (IKAAM): launcher build number for the self-update system.
 // Bump this each release and set the same number in launcher_ver.txt on
 // ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 5
+#define LAUNCHER_BUILD 6
 
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
@@ -1283,21 +1283,8 @@ bool is_game_process_running() {
 bool run() {
   // AlterBO3 (IKAAM): self-update. First remove the leftover old exe from a
   // previous update, then check if a newer launcher build is available.
-  // Both are wrapped in try/catch because utils::http::get_data throws on any
-  // non-2xx status or curl error (CURLOPT_FAILONERROR). An unhandled throw here
-  // would kill the process BEFORE the window is created — the launcher would
-  // simply never appear, with no error. Network/update problems must never
-  // prevent the launcher from opening.
-  try {
-    cleanup_old_launcher();
-  } catch (...) {
-  }
-  try {
-    check_launcher_update();
-  } catch (...) {
-    // Update check failed (server down, bad status, etc.): ignore and continue
-    // to the launcher window as normal.
-  }
+  cleanup_old_launcher();
+  check_launcher_update();
 
   // Use shared pointers for results to avoid capture-by-reference crashes on
   // exit
@@ -1770,85 +1757,6 @@ bool run() {
 
   const auto friends_file =
       std::filesystem::path("boiii_players") / "user" / "friends.json";
-
-  // AlterCOD session bridge (IKAAM): the launcher stores the friends account
-  // token in localStorage, which the game cannot read. This callback writes it
-  // to boiii_players/user/altercod_session.json so the in-game heartbeat can
-  // pick it up. Called on login (with token) and logout (empty clears it).
-  const auto altercod_session_file =
-      std::filesystem::path("boiii_players") / "user" / "altercod_session.json";
-
-  window.get_html_frame()->register_callback(
-      "saveFriendsSession",
-      [altercod_session_file](
-          const std::vector<html_argument> &params) -> CComVariant {
-        std::string token = params.size() > 0 && params[0].is_string()
-                                ? params[0].get_string()
-                                : "";
-        std::string pseudo = params.size() > 1 && params[1].is_string()
-                                 ? params[1].get_string()
-                                 : "";
-
-        std::error_code ec;
-        std::filesystem::create_directories(altercod_session_file.parent_path(),
-                                            ec);
-
-        if (token.empty()) {
-          // Logout: remove the session file.
-          std::filesystem::remove(altercod_session_file, ec);
-          return CComVariant("ok");
-        }
-
-        rapidjson::Document doc;
-        doc.SetObject();
-        auto &al = doc.GetAllocator();
-        doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(), al);
-        doc.AddMember("pseudo", rapidjson::Value(pseudo.c_str(), al).Move(),
-                      al);
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
-        doc.Accept(writer);
-
-        utils::io::write_file(altercod_session_file.string(), buf.GetString());
-        return CComVariant("ok");
-      });
-
-  // AlterCOD friends API bridge (IKAAM): MSHTML's XHR blocks cross-zone
-  // requests to the friends API (returns status 0). We route them through
-  // native curl instead (same path the auto-updater uses successfully). JS
-  // passes the full URL and gets the raw response body back (or "" on error).
-  window.get_html_frame()->register_callback(
-      "friendsApiGet",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("");
-        const auto url = params[0].get_string();
-        // Basic safety: only allow our own API host.
-        if (url.find("https://ikaam.fr/amis/") != 0)
-          return CComVariant("");
-
-        // Split "endpoint?query" so we can POST the query as the body. We use
-        // post_data (not get_data) because get_data sets CURLOPT_FAILONERROR
-        // and throws on non-2xx, and requests an octet-stream Accept header
-        // meant for binary downloads. post_data is throw-free, returns the body
-        // on 200, and our PHP API accepts params via GET or POST identically.
-        std::string endpoint = url;
-        std::string body;
-        const auto qpos = url.find('?');
-        if (qpos != std::string::npos) {
-          endpoint = url.substr(0, qpos);
-          body = url.substr(qpos + 1);
-        }
-
-        try {
-          const auto response = utils::http::post_data(endpoint, body, 10);
-          if (!response.has_value())
-            return CComVariant("");
-          return CComVariant(response.value().c_str());
-        } catch (...) {
-          return CComVariant("");
-        }
-      });
 
   window.get_html_frame()->register_callback(
       "readFriends",
@@ -2654,14 +2562,7 @@ void check_launcher_update() {
   static const char *exe_url = "https://ikaam.fr/COD/AlterBOIII.exe";
 
   // 1) Fetch the remote build number.
-  // get_data throws on non-2xx / curl errors (CURLOPT_FAILONERROR). Catch it so
-  // a server hiccup on launcher_ver.txt never crashes startup.
-  std::optional<std::string> rev_data;
-  try {
-    rev_data = utils::http::get_data(ver_url);
-  } catch (...) {
-    return; // treat any error as "no update", launcher opens normally
-  }
+  const auto rev_data = utils::http::get_data(ver_url);
   if (!rev_data || rev_data->empty()) {
     return; // network down or file missing: skip silently, launcher still works
   }
@@ -2695,15 +2596,7 @@ void check_launcher_update() {
   }
 
   // 3) Download the new exe into memory.
-  // Download the new exe (throw-safe: get_data throws on non-2xx).
-  std::optional<std::string> exe_data;
-  try {
-    exe_data = utils::http::get_data(exe_url);
-  } catch (...) {
-    game::show_error("Echec du telechargement de la mise a jour.\n"
-                     "Reessayez plus tard.");
-    return;
-  }
+  const auto exe_data = utils::http::get_data(exe_url);
   if (!exe_data || exe_data->empty()) {
     game::show_error("Echec du telechargement de la mise a jour.\n"
                      "Reessayez plus tard.");
