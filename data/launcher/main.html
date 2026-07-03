@@ -363,19 +363,18 @@
           <p class="page-sub">Cr&eacute;e ton compte AlterCOD, ajoute des amis par pseudo et retrouve-les en jeu.</p>
         </div>
 
-        <!-- ETAT DECONNECTE : inscription / connexion -->
+        <!-- ETAT DECONNECTE : connexion via le forum (OAuth uniquement) -->
         <div id="friendsAuth" class="friends-auth">
-          <div class="friends-auth-tabs">
-            <button type="button" class="friends-auth-tab active" id="tabLogin">Connexion</button>
-            <button type="button" class="friends-auth-tab" id="tabRegister">Inscription</button>
+          <div class="oauth-hero">
+            <div class="oauth-hero-ico">A</div>
+            <div class="oauth-hero-title">Connecte-toi &agrave; AlterCOD</div>
+            <div class="oauth-hero-sub">Utilise ton compte du forum pour retrouver tes amis en jeu.</div>
           </div>
-
-          <div class="friends-auth-form">
-            <input type="text" id="authPseudo" class="friends-input" placeholder="Pseudo" autocomplete="off" maxlength="20" spellcheck="false">
-            <input type="password" id="authPassword" class="friends-input" placeholder="Mot de passe" autocomplete="off" maxlength="64">
-            <div class="friends-auth-hint" id="authPseudoHint"></div>
-            <button type="button" class="btn btn-primary btn-full" id="authSubmit">Se connecter</button>
-            <div class="friends-auth-msg" id="authMsg"></div>
+          <button type="button" class="btn btn-primary btn-full" id="oauthBtn">Se connecter avec le forum</button>
+          <div class="friends-auth-msg" id="oauthMsg"></div>
+          <div class="oauth-register">
+            Pas encore de compte ?
+            <a id="oauthRegisterLink" style="color:#f2c411;cursor:pointer">Cr&eacute;e-le sur le forum</a>
           </div>
         </div>
 

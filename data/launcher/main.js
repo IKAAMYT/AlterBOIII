@@ -3965,6 +3965,17 @@ if (oauthBtn) {
   };
 }
 
+// Lien "Cree ton compte sur le forum" → ouvre le forum dans le navigateur
+var oauthRegisterLink = document.getElementById('oauthRegisterLink');
+if (oauthRegisterLink) {
+  oauthRegisterLink.onclick = function() {
+    try {
+      var ex = getExternal();
+      if (ex && ex.openUrl) { ex.openUrl('https://ikaam.fr/forum/'); }
+    } catch (e) {}
+  };
+}
+
 // ── Initialisation ──
 friendsLoadSession();
 if (_friendsToken) {
