@@ -2006,15 +2006,60 @@ bool run() {
         }
       });
 
-  // AlterCOD OAuth login (IKAAM): the JS calls this when the user clicks
-  // "Se connecter avec le forum". Runs the full OAuth flow (local server +
-  // browser + code exchange) and returns "token|pseudo" on success, "" on
-  // failure. Blocking, but only fires on an explicit button click.
+  // AlterCOD OAuth login (IKAAM): the JS calls startOAuthLogin() when the user
+  // clicks "Se connecter avec le forum". To avoid freezing the MSHTML UI thread
+  // (a blocking call here makes the window unresponsive and the launcher can
+  // end up launching the game), we run the flow on a DETACHED background thread
+  // and let the JS poll checkOAuthResult() for the outcome.
+  //   startOAuthLogin()   -> "started" | "busy"
+  //   checkOAuthResult()  -> "pending" | "" (failed) | "token|pseudo" (success)
+  auto oauth_state =
+      std::make_shared<std::atomic<int>>(0); // 0 idle,1 running,2 done
+  auto oauth_result = std::make_shared<std::string>();
+  auto oauth_mutex = std::make_shared<std::mutex>();
+
   window.get_html_frame()->register_callback(
       "startOAuthLogin",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        const auto result = run_oauth_login();
-        return CComVariant(result.c_str());
+      [oauth_state, oauth_result, oauth_mutex](
+          const std::vector<html_argument> & /*params*/) -> CComVariant {
+        int expected = 0;
+        if (!oauth_state->compare_exchange_strong(expected, 1)) {
+          return CComVariant("busy"); // already running
+        }
+        std::thread([oauth_state, oauth_result, oauth_mutex]() {
+          std::string r;
+          try {
+            r = run_oauth_login();
+          } catch (...) {
+            r = "";
+          }
+          {
+            std::lock_guard<std::mutex> lock(*oauth_mutex);
+            *oauth_result = r;
+          }
+          oauth_state->store(2); // done
+        }).detach();
+        return CComVariant("started");
+      });
+
+  window.get_html_frame()->register_callback(
+      "checkOAuthResult",
+      [oauth_state, oauth_result, oauth_mutex](
+          const std::vector<html_argument> & /*params*/) -> CComVariant {
+        const int st = oauth_state->load();
+        if (st == 1) {
+          return CComVariant("pending");
+        }
+        if (st == 2) {
+          std::string r;
+          {
+            std::lock_guard<std::mutex> lock(*oauth_mutex);
+            r = *oauth_result;
+          }
+          oauth_state->store(0); // reset for next time
+          return CComVariant(r.c_str());
+        }
+        return CComVariant(""); // idle / nothing running
       });
 
   window.get_html_frame()->register_callback(
