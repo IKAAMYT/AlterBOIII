@@ -3939,38 +3939,55 @@ if (oauthBtn) {
   oauthBtn.onclick = function() {
     var msg = document.getElementById('oauthMsg');
     var ex = getExternal();
-    if (!ex || !ex.startOAuthLogin) {
-      // DIAGNOSTIC : que contient l'objet external ?
-      var diag = 'ex=' + (ex ? 'oui' : 'NON');
-      if (ex) {
-        diag += ' | startOAuth=' + (typeof ex.startOAuthLogin);
-        diag += ' friendsApiGet=' + (typeof ex.friendsApiGet);
-        diag += ' saveSession=' + (typeof ex.saveFriendsSession);
-        diag += ' openUrl=' + (typeof ex.openUrl);
-        diag += ' launchGame=' + (typeof ex.launchGame);
-      }
-      if (msg) { msg.textContent = diag; msg.className = 'friends-auth-msg no'; }
+    if (!ex || !ex.startOAuthLogin || !ex.checkOAuthResult) {
+      if (msg) { msg.textContent = 'Fonction indisponible (mets a jour le launcher).'; msg.className = 'friends-auth-msg no'; }
       return;
     }
     oauthBtn.disabled = true;
     if (msg) { msg.textContent = 'Ouverture du navigateur... autorise la connexion puis reviens ici.'; msg.className = 'friends-auth-msg'; }
-    // Appel bloquant cote C++ (le temps que l'utilisateur autorise).
-    var result = '';
-    try { result = ex.startOAuthLogin(); } catch (e) { result = ''; }
-    oauthBtn.disabled = false;
-    if (result && result.indexOf('|') !== -1) {
-      var parts = result.split('|');
-      var tok = parts[0], pseudo = parts[1] || '';
-      if (tok) {
-        friendsSaveSession(tok, pseudo);
-        friendsSetLoggedInUI(true);
-        loadFriendsData();
-        if (typeof showToast === 'function') showToast('Connecte en tant que ' + pseudo + ' !', 'success');
-        if (msg) msg.textContent = '';
-        return;
-      }
+
+    // Lance le flux OAuth cote C++ (thread detache, non bloquant).
+    var started = '';
+    try { started = ex.startOAuthLogin(); } catch (e) { started = ''; }
+    if (started === 'busy') {
+      if (msg) { msg.textContent = 'Connexion deja en cours...'; }
+      // on continue quand meme a poller
     }
-    if (msg) { msg.textContent = 'Connexion annulee ou echouee. Reessaie.'; msg.className = 'friends-auth-msg no'; }
+
+    // Poll le resultat toutes les 1.5s (max ~130s).
+    var tries = 0;
+    var poll = setInterval(function() {
+      tries++;
+      var res = '';
+      try { res = ex.checkOAuthResult(); } catch (e) { res = ''; }
+
+      if (res === 'pending') {
+        if (tries > 90) { // ~135s : abandon
+          clearInterval(poll);
+          oauthBtn.disabled = false;
+          if (msg) { msg.textContent = 'Delai depasse. Reessaie.'; msg.className = 'friends-auth-msg no'; }
+        }
+        return; // toujours en attente
+      }
+
+      // Termine (succes ou echec)
+      clearInterval(poll);
+      oauthBtn.disabled = false;
+
+      if (res && res.indexOf('|') !== -1) {
+        var parts = res.split('|');
+        var tok = parts[0], pseudo = parts[1] || '';
+        if (tok) {
+          friendsSaveSession(tok, pseudo);
+          friendsSetLoggedInUI(true);
+          loadFriendsData();
+          if (typeof showToast === 'function') showToast('Connecte en tant que ' + pseudo + ' !', 'success');
+          if (msg) msg.textContent = '';
+          return;
+        }
+      }
+      if (msg) { msg.textContent = 'Connexion annulee ou echouee. Reessaie.'; msg.className = 'friends-auth-msg no'; }
+    }, 1500);
   };
 }
 
