@@ -3940,7 +3940,16 @@ if (oauthBtn) {
     var msg = document.getElementById('oauthMsg');
     var ex = getExternal();
     if (!ex || !ex.startOAuthLogin) {
-      if (msg) { msg.textContent = 'Fonction indisponible (mets a jour le launcher).'; msg.className = 'friends-auth-msg no'; }
+      // DIAGNOSTIC : que contient l'objet external ?
+      var diag = 'ex=' + (ex ? 'oui' : 'NON');
+      if (ex) {
+        diag += ' | startOAuth=' + (typeof ex.startOAuthLogin);
+        diag += ' friendsApiGet=' + (typeof ex.friendsApiGet);
+        diag += ' saveSession=' + (typeof ex.saveFriendsSession);
+        diag += ' openUrl=' + (typeof ex.openUrl);
+        diag += ' launchGame=' + (typeof ex.launchGame);
+      }
+      if (msg) { msg.textContent = diag; msg.className = 'friends-auth-msg no'; }
       return;
     }
     oauthBtn.disabled = true;
