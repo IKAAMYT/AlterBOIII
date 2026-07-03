@@ -3531,13 +3531,15 @@ function friendsApi(action, data, cb) {
     // brut de la reponse (ou "" en cas d'echec).
     var ex = getExternal();
     if (ex && ex.friendsApiGet) {
-      // Appel synchrone cote C++ (curl via post_data). MSHTML bloque les XHR
-      // cross-zone vers l'API, donc on passe par le natif.
       var raw = '';
-      try { raw = ex.friendsApiGet(url); } catch (e) { raw = ''; }
+      try { raw = ex.friendsApiGet(url); } catch (e) { raw = 'EXCEPTION'; }
       var res = null;
       try { res = JSON.parse(raw); } catch (e) {}
-      if (!res) res = { ok: false, error: 'Serveur injoignable.' };
+      if (!res) {
+        var diag = 'raw len=' + (raw ? raw.length : 0) +
+          ' body=' + (raw ? String(raw).substring(0, 70) : '(vide)');
+        res = { ok: false, error: 'DIAG: ' + diag };
+      }
       cb(res);
       return;
     }
