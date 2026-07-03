@@ -1283,8 +1283,21 @@ bool is_game_process_running() {
 bool run() {
   // AlterBO3 (IKAAM): self-update. First remove the leftover old exe from a
   // previous update, then check if a newer launcher build is available.
-  cleanup_old_launcher();
-  check_launcher_update();
+  // Both are wrapped in try/catch because utils::http::get_data throws on any
+  // non-2xx status or curl error (CURLOPT_FAILONERROR). An unhandled throw here
+  // would kill the process BEFORE the window is created — the launcher would
+  // simply never appear, with no error. Network/update problems must never
+  // prevent the launcher from opening.
+  try {
+    cleanup_old_launcher();
+  } catch (...) {
+  }
+  try {
+    check_launcher_update();
+  } catch (...) {
+    // Update check failed (server down, bad status, etc.): ignore and continue
+    // to the launcher window as normal.
+  }
 
   // Use shared pointers for results to avoid capture-by-reference crashes on
   // exit
@@ -2641,7 +2654,14 @@ void check_launcher_update() {
   static const char *exe_url = "https://ikaam.fr/COD/AlterBOIII.exe";
 
   // 1) Fetch the remote build number.
-  const auto rev_data = utils::http::get_data(ver_url);
+  // get_data throws on non-2xx / curl errors (CURLOPT_FAILONERROR). Catch it so
+  // a server hiccup on launcher_ver.txt never crashes startup.
+  std::optional<std::string> rev_data;
+  try {
+    rev_data = utils::http::get_data(ver_url);
+  } catch (...) {
+    return; // treat any error as "no update", launcher opens normally
+  }
   if (!rev_data || rev_data->empty()) {
     return; // network down or file missing: skip silently, launcher still works
   }
@@ -2675,7 +2695,15 @@ void check_launcher_update() {
   }
 
   // 3) Download the new exe into memory.
-  const auto exe_data = utils::http::get_data(exe_url);
+  // Download the new exe (throw-safe: get_data throws on non-2xx).
+  std::optional<std::string> exe_data;
+  try {
+    exe_data = utils::http::get_data(exe_url);
+  } catch (...) {
+    game::show_error("Echec du telechargement de la mise a jour.\n"
+                     "Reessayez plus tard.");
+    return;
+  }
   if (!exe_data || exe_data->empty()) {
     game::show_error("Echec du telechargement de la mise a jour.\n"
                      "Reessayez plus tard.");
