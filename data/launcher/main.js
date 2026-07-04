@@ -1,3 +1,301 @@
+/* ============================================================
+   AlterBO3 (IKAAM) — i18n FR/EN
+   Bascule de langue en direct. Le launcher est ecrit en FR ;
+   ce module remplace les textes FR par leur equivalent EN en
+   parcourant le DOM. Reversible (bascule EN -> FR).
+
+   Utilisation :
+     I18N.init();            // au demarrage (applique la langue sauvee)
+     I18N.set('en');         // bascule anglais
+     I18N.set('fr');         // bascule francais
+     I18N.current            // 'fr' | 'en'
+   ============================================================ */
+(function (global) {
+  'use strict';
+
+  // Dictionnaire FR -> EN. Cle = texte francais exact (trim).
+  // Les termes techniques deja en anglais (asset pools, etc.) ne sont pas
+  // listes : ils restent identiques dans les deux langues.
+  var FR_EN = {
+    // Navigation
+    'Accueil': 'Home',
+    'Bibliothèque': 'Library',
+    'Serveurs': 'Servers',
+    'Amis': 'Friends',
+    'Réglages': 'Settings',
+    'Workshop': 'Workshop',
+
+    // Accueil / général
+    'Jouer': 'Play',
+    'Joueurs en ligne': 'Players online',
+    'Serveurs actifs': 'Active servers',
+    'Récupération des serveurs…': 'Fetching servers…',
+    'Chargement…': 'Loading…',
+    'Actualiser': 'Refresh',
+    'Nom de joueur': 'Player name',
+    'Liens': 'Links',
+    'Site IKAAM': 'IKAAM Website',
+    'Forum': 'Forum',
+    'Discord': 'Discord',
+    'À propos': 'About',
+    'Maintenance': 'Maintenance',
+    'AlterCOD Team': 'AlterCOD Team',
+
+    // Options de lancement
+    'Options de lancement': 'Launch options',
+    'Mode sans échec': 'Safe mode',
+    'Lance avec les réglages minimaux (sans mods)': 'Launch with minimal settings (no mods)',
+    'Sans Steam': 'No Steam',
+    'Lance sans connexion à Steam': 'Launch without connecting to Steam',
+    'Sans plugins': 'No plugins',
+    'Désactive le chargement des plugins custom': 'Disable loading of custom plugins',
+    'Lua non sécurisé': 'Unsafe Lua',
+    'Autorise le chargement de scripts Lua non signés': 'Allow loading of unsigned Lua scripts',
+    'Console dev': 'Dev console',
+    'Active la console développeur en jeu': 'Enable the in-game developer console',
+    'Sans console': 'No console',
+    'Désactive la fenêtre de console externe': 'Disable the external console window',
+    'Logs complets': 'Full logs',
+    'Affiche les logs complets non tronqués': 'Show full untruncated logs',
+    'Sans interface': 'No UI',
+    'Lance le serveur sans fenêtre visible': 'Launch the server with no visible window',
+    'Passer l\'intro': 'Skip intro',
+    'Passer l\'intro du jeu': 'Skip the game intro',
+    'Fermer le launcher en jouant': 'Close launcher while playing',
+    'Ferme la fenêtre du launcher au lancement du jeu': 'Close the launcher window when the game starts',
+    'Garde le launcher ouvert après le lancement': 'Keep the launcher open after launch',
+    'Garder le launcher': 'Keep launcher',
+
+    // Mode d'affichage
+    'Mode d\'affichage': 'Display mode',
+    'Plein écran': 'Fullscreen',
+    'Fenêtré': 'Windowed',
+    'Sans bordure': 'Borderless',
+    'Lance en plein écran sans bordure': 'Launch in borderless fullscreen',
+    'Lance le jeu en fenêtré': 'Launch the game in windowed mode',
+
+    // Réglages généraux
+    'Général': 'General',
+    'Affichage': 'Display',
+    'Graphismes': 'Graphics',
+    'Performance': 'Performance',
+    'Réseau': 'Network',
+    'Avancé': 'Advanced',
+    'Vidéo': 'Video',
+    'Options': 'Options',
+    'Patchs': 'Patches',
+
+    // Réglages détaillés
+    'Résolution': 'Resolution',
+    'Mode sans échec': 'Safe mode',
+    'Taux de rafraîchissement': 'Refresh rate',
+    'Taux de rafraîchissement de l\'écran en Hz': 'Screen refresh rate in Hz',
+    'Limite FPS': 'FPS limit',
+    'Latence max d\'image': 'Max frame latency',
+    'Faible latence': 'Low latency',
+    'Téléchargement rapide': 'Fast download',
+    'V-Sync': 'V-Sync',
+    'Active la synchro verticale pour éviter le tearing': 'Enable vertical sync to prevent tearing',
+    'Affiche un compteur de FPS en jeu': 'Show an in-game FPS counter',
+    'Active le lissage des images pour un framerate stable': 'Enable frame smoothing for a stable framerate',
+    'Préréglage graphique': 'Graphics preset',
+    'Préréglage rapide': 'Quick preset',
+    'Applique une configuration graphique prédéfinie': 'Apply a predefined graphics configuration',
+    'Utilisation VRAM complète': 'Full VRAM usage',
+    'Asset pools étendus': 'Extended asset pools',
+    'Extension d\'Asset Pool': 'Asset Pool extension',
+    'Désactive les patchs d\'asset pools': 'Disable asset pool patches',
+    'Mot de passe réseau': 'Network password',
+    'Aucun mot de passe': 'No password',
+    'Autorise seulement les amis à rejoindre ton lobby': 'Only allow friends to join your lobby',
+    'Amis seulement': 'Friends only',
+    'FOV': 'FOV',
+    'Champ de vision': 'Field of view',
+
+    // Vérifier les MAJ / maintenance
+    'Vérifier les MAJ': 'Check for updates',
+    'Vérifier les MAJ au lancement': 'Check for updates on launch',
+    'Vérifier les fichiers du jeu': 'Verify game files',
+    'Actualisation auto de la bibliothèque': 'Auto-refresh the library',
+    'Correctif mise à jour BOIII': 'BOIII update fix',
+    'Revenir à une version précédente de BO3': 'Roll back to a previous BO3 version',
+    'Télécharger BlackOps3.exe': 'Download BlackOps3.exe',
+    'Gérer l\'installation': 'Manage installation',
+    'Dossier du jeu': 'Game folder',
+    'Ouvrir le dossier': 'Open folder',
+    'Changer': 'Change',
+    'Non défini': 'Not set',
+
+    // Workshop
+    'Parcourir le Workshop': 'Browse Workshop',
+    'Parcourez et gérez vos maps et mods workshop installés.': 'Browse and manage your installed workshop maps and mods.',
+    'Éléments installés': 'Installed items',
+    'Détails du mod': 'Mod details',
+    'Télécharger par ID Workshop ou lien': 'Download by Workshop ID or link',
+    'Télécharger': 'Download',
+    'Téléchargements': 'Downloads',
+    'Ouvrir le Workshop Steam dans le navigateur': 'Open the Steam Workshop in your browser',
+    'Chargement des éléments workshop...': 'Loading workshop items...',
+    'Voir sur Steam': 'View on Steam',
+    'Mieux notés': 'Top rated',
+    'Plus récents': 'Newest',
+    'Plus anciens': 'Oldest',
+    'Alphabétique': 'Alphabetical',
+
+    // Amis
+    'Ajouter un ami': 'Add a friend',
+    'Entre le pseudo de la personne pour lui envoyer une demande.': 'Enter someone\'s username to send them a request.',
+    'Envoyer': 'Send',
+    'Mes amis': 'My friends',
+    'Demandes reçues': 'Received requests',
+    'Rechercher': 'Search',
+    'Rechercher un ami...': 'Search a friend...',
+    'Se connecter avec le forum': 'Sign in with the forum',
+    'Se déconnecter': 'Sign out',
+    'Connecté en tant que': 'Signed in as',
+    'En ligne': 'Online',
+    'Connecte-toi à AlterCOD': 'Sign in to AlterCOD',
+    'Utilise ton compte du forum pour retrouver tes amis en jeu.': 'Use your forum account to find your friends in-game.',
+    'Crée-le sur le forum': 'Create one on the forum',
+    'Ouverture du navigateur... autorise la connexion puis reviens ici.': 'Opening your browser... authorize the connection then come back here.',
+    'Serveur injoignable.': 'Server unreachable.',
+    '0 ami': '0 friends',
+
+    // WIP (en cours de creation)
+    'Système d\'amis en cours de création': 'Friends system under construction',
+    'Connexion via le forum, demandes d\'amis, présence en jeu et statut "en partie" : tout ça arrive bientôt pour retrouver ta communauté directement depuis le launcher.': 'Forum sign-in, friend requests, in-game presence and "in match" status: it\'s all coming soon so you can find your community right from the launcher.',
+    'Retour du développement début août': 'Development resumes early August',
+    'En développement': 'In development',
+
+    // Modes de jeu
+    'Multijoueur': 'Multiplayer',
+    'Campagne': 'Campaign',
+    'Zombies': 'Zombies',
+    'Sélectionner le mode de jeu': 'Select game mode',
+    'Sélectionne les modes à retirer': 'Select modes to remove',
+
+    // Boutons / actions communs
+    'Appliquer': 'Apply',
+    'Annuler': 'Cancel',
+    'Confirmer': 'Confirm',
+    'Fermer': 'Close',
+    'Supprimer': 'Delete',
+    'Tout supprimer': 'Delete all',
+    'Effacer': 'Clear',
+    'Réinitialiser': 'Reset',
+    'Enregistrer': 'Save',
+    'Retour': 'Back',
+    'Suivant': 'Next',
+    'Précédent': 'Previous',
+    'Tous': 'All',
+    'Mot de passe': 'Password',
+    'Message': 'Message',
+    'Type d\'IA': 'AI type',
+    'Pools de base': 'Base pools',
+    'Pools de gameplay': 'Gameplay pools',
+    'Timeout (secondes)': 'Timeout (seconds)',
+
+    // Divers écrans
+    'Page 1 / 1': 'Page 1 / 1'
+  };
+
+  // Index inverse EN -> FR (pour rebasculer)
+  var EN_FR = {};
+  for (var k in FR_EN) {
+    if (FR_EN.hasOwnProperty(k)) EN_FR[FR_EN[k]] = k;
+  }
+
+  // Attributs textuels a traduire aussi
+  var ATTRS = ['placeholder', 'title'];
+
+  function translateText(txt, map) {
+    if (!txt) return txt;
+    var trimmed = txt.replace(/^\s+|\s+$/g, '');
+    if (map.hasOwnProperty(trimmed)) {
+      // Preserve l'espacement autour
+      return txt.replace(trimmed, map[trimmed]);
+    }
+    return txt;
+  }
+
+  function walk(node, map) {
+    if (node.nodeType === 3) { // text node
+      var t = node.nodeValue;
+      var nt = translateText(t, map);
+      if (nt !== t) node.nodeValue = nt;
+      return;
+    }
+    if (node.nodeType === 1) { // element
+      // Ne pas toucher aux scripts / styles / inputs de valeur
+      var tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE') return;
+      // Attributs
+      for (var i = 0; i < ATTRS.length; i++) {
+        var a = ATTRS[i];
+        if (node.hasAttribute && node.hasAttribute(a)) {
+          var av = node.getAttribute(a);
+          var nav = translateText(av, map);
+          if (nav !== av) node.setAttribute(a, nav);
+        }
+      }
+      var children = node.childNodes;
+      for (var j = 0; j < children.length; j++) {
+        walk(children[j], map);
+      }
+    }
+  }
+
+  var I18N = {
+    current: 'fr',
+
+    apply: function (lang) {
+      var map = (lang === 'en') ? FR_EN : EN_FR;
+      // Si on est deja dans la bonne langue, ne rien faire
+      if (lang === this.current) return;
+      try {
+        walk(document.body, map);
+      } catch (e) {}
+      this.current = lang;
+      document.documentElement.setAttribute('data-lang', lang);
+      // Sauver le choix (via C++ si dispo, sinon variable en memoire)
+      try {
+        if (typeof saveLangPref === 'function') saveLangPref(lang);
+      } catch (e) {}
+    },
+
+    set: function (lang) {
+      if (lang !== 'fr' && lang !== 'en') return;
+      this.apply(lang);
+      // Met a jour l'etat visuel du selecteur
+      try {
+        var btns = document.querySelectorAll('[data-lang-btn]');
+        for (var i = 0; i < btns.length; i++) {
+          var b = btns[i];
+          if (b.getAttribute('data-lang-btn') === lang) b.classList.add('active');
+          else b.classList.remove('active');
+        }
+      } catch (e) {}
+    },
+
+    toggle: function () {
+      this.set(this.current === 'fr' ? 'en' : 'fr');
+    },
+
+    init: function (savedLang) {
+      var lang = savedLang || 'fr';
+      // On part du principe que le DOM est en FR. Si la langue sauvee est EN,
+      // on applique la traduction apres un court delai (DOM pret).
+      if (lang === 'en') {
+        var self = this;
+        setTimeout(function () { self.set('en'); }, 50);
+      } else {
+        this.set('fr');
+      }
+    }
+  };
+
+  global.I18N = I18N;
+})(window);
 (function() {
 var playerName = document.getElementById('playerName');
 var workshopId = document.getElementById('workshopId');
@@ -4015,6 +4313,30 @@ if (oauthRegisterLink) {
 }
 
 // ── Initialisation ──
+
+// Langue : lit la preference sauvee (si le C++ l'expose), sinon FR par defaut.
+(function initLang() {
+  var saved = 'fr';
+  try {
+    var ex = getExternal();
+    if (ex) {
+      // readLangPref/saveLangPref sont optionnels (C++). Sinon on garde FR.
+      var v = null;
+      try { v = ex.readLangPref(); } catch (e) { v = null; }
+      if (v === 'en' || v === 'fr') saved = v;
+    }
+  } catch (e) {}
+  try { if (window.I18N) I18N.init(saved); } catch (e) {}
+})();
+
+// Persiste le choix de langue (via C++ si dispo).
+function saveLangPref(lang) {
+  try {
+    var ex = getExternal();
+    if (ex && ex.saveLangPref) ex.saveLangPref(lang);
+  } catch (e) {}
+}
+
 // ─────────────────────────────────────────────────────────────
 // SYSTEME D'AMIS : mode "En cours de creation"
 // Pour REACTIVER le systeme complet : passe WIP_FRIENDS a false.

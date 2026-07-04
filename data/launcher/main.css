@@ -2149,6 +2149,17 @@ cards
   color: #f2c411; font-size: 12.5px; font-weight: 600;
   letter-spacing: 0.02em;
 }
+.friends-wip-eta {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 11px 20px;
+  margin-bottom: 18px;
+  background: rgba(242,196,17,0.05);
+  border: 1px solid rgba(242,196,17,0.18);
+  border-radius: 12px;
+  color: #d8cfa8; font-size: 14px; font-weight: 600;
+}
+.friends-wip-eta svg { flex-shrink: 0; }
 .friends-wip-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: #f2c411;
@@ -2158,3 +2169,34 @@ cards
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(242,196,17,0.5); }
   50% { opacity: 0.5; box-shadow: 0 0 0 6px rgba(242,196,17,0); }
 }
+
+/* ── Sélecteur de langue FR/EN ── */
+.lang-switch {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px 14px;
+  margin-bottom: 4px;
+}
+.lang-btn {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 0;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(242,196,17,0.14);
+  border-radius: 8px;
+  color: #8a8172;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.lang-btn:hover {
+  border-color: rgba(242,196,17,0.35);
+  color: #d8cfa8;
+}
+.lang-btn.active {
+  background: rgba(242,196,17,0.1);
+  border-color: rgba(242,196,17,0.5);
+  color: #f2c411;
+}
+.lang-flag { font-size: 14px; line-height: 1; }
+.lang-code { letter-spacing: 0.03em; }

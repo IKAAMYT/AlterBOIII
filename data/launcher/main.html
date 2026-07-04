@@ -41,6 +41,14 @@
         </button>
       </div>
       <div class="nav-footer">
+        <div class="lang-switch">
+          <button type="button" class="lang-btn active" data-lang-btn="fr" onclick="I18N.set('fr')" title="Français">
+            <span class="lang-flag">🇫🇷</span><span class="lang-code">FR</span>
+          </button>
+          <button type="button" class="lang-btn" data-lang-btn="en" onclick="I18N.set('en')" title="English">
+            <span class="lang-flag">🇬🇧</span><span class="lang-code">EN</span>
+          </button>
+        </div>
         <div class="credits-mini">
           <div class="credits-mini-label">AlterCOD Team</div>
           <div class="credits-mini-list">
@@ -372,11 +380,15 @@
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
             </svg>
           </div>
-          <div class="friends-wip-title">Syst&egrave;me d'amis en cours de cr&eacute;ation</div>
-          <div class="friends-wip-sub">On peaufine la connexion, les demandes d'amis et la pr&eacute;sence en jeu.<br>&Ccedil;a arrive tr&egrave;s bient&ocirc;t &mdash; merci de ta patience !</div>
+          <div class="friends-wip-title" data-i18n="wip_title">Syst&egrave;me d'amis en cours de cr&eacute;ation</div>
+          <div class="friends-wip-sub" data-i18n="wip_sub">Connexion via le forum, demandes d'amis, pr&eacute;sence en jeu et statut "en partie" : tout &ccedil;a arrive bient&ocirc;t pour retrouver ta communaut&eacute; directement depuis le launcher.</div>
+          <div class="friends-wip-eta">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f2c411" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span data-i18n="wip_eta">Retour du d&eacute;veloppement d&eacute;but ao&ucirc;t</span>
+          </div>
           <div class="friends-wip-badge">
             <span class="friends-wip-dot"></span>
-            En d&eacute;veloppement
+            <span data-i18n="wip_badge">En d&eacute;veloppement</span>
           </div>
         </div>
 
