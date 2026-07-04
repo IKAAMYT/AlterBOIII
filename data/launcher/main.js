@@ -87,7 +87,6 @@
 
     // Réglages détaillés
     'Résolution': 'Resolution',
-    'Mode sans échec': 'Safe mode',
     'Taux de rafraîchissement': 'Refresh rate',
     'Taux de rafraîchissement de l\'écran en Hz': 'Screen refresh rate in Hz',
     'Limite FPS': 'FPS limit',
