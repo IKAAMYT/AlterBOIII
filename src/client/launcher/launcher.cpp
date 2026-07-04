@@ -2808,8 +2808,12 @@ bool run() {
 
   // window.get_html_frame()->load_html(utils::nt::load_resource(MENU_MAIN));
   // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if
-  // missing)
-  ensure_launcher_ui();
+  // missing). Wrapped so a network hiccup can never stop the launcher from
+  // loading its (possibly cached) UI.
+  try {
+    ensure_launcher_ui();
+  } catch (...) {
+  }
   window.get_html_frame()->load_url(utils::string::va(
       "file:///%ls", get_launcher_ui_file().wstring().c_str()));
 
@@ -3003,7 +3007,17 @@ void ensure_launcher_ui() {
   // Read the remote revision (trimmed). If the network fails we just skip the
   // forced refresh and fall back to "download only what's missing".
   std::string remote_rev;
-  const auto rev_data = utils::http::get_data(rev_url);
+  // get_data throws on non-2xx / curl errors (CURLOPT_FAILONERROR). If the rev
+  // fetch throws, the whole UI refresh was silently skipped, leaving the
+  // launcher stuck on an old cached UI forever. Catch it so we still fall back
+  // to "download only what's missing", and so a transient error can't freeze
+  // the UI version.
+  std::optional<std::string> rev_data;
+  try {
+    rev_data = utils::http::get_data(rev_url);
+  } catch (...) {
+    rev_data = std::nullopt;
+  }
   if (rev_data && !rev_data->empty()) {
     remote_rev = *rev_data;
     while (!remote_rev.empty() &&
@@ -3035,7 +3049,12 @@ void ensure_launcher_ui() {
     }
 
     const auto url = std::string(base) + name;
-    const auto data = utils::http::get_data(url);
+    std::optional<std::string> data;
+    try {
+      data = utils::http::get_data(url);
+    } catch (...) {
+      data = std::nullopt;
+    }
     if (data && !data->empty()) {
       utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
