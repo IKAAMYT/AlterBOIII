@@ -2171,36 +2171,50 @@ cards
 }
 
 /* ── Sélecteur de langue FR/EN ── */
-.lang-switch {
-  padding: 12px 4px 14px;
-  margin-bottom: 4px;
+.lang-block {
+  padding: 14px 0 16px;
+  margin-bottom: 6px;
   border-top: 1px solid rgba(242, 196, 17, 0.10);
+}
+.lang-label {
+  display: block;
+  color: #6b6455;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 9px;
+  padding-left: 2px;
+}
+.lang-label svg { vertical-align: -2px; margin-right: 5px; }
+.lang-label span { vertical-align: middle; }
+.lang-switch {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(242, 196, 17, 0.14);
+  border-radius: 10px;
+  padding: 3px;
   font-size: 0;
   white-space: nowrap;
 }
 .lang-btn {
   display: inline-block;
-  width: 48%;
+  width: 50%;
   box-sizing: border-box;
-  padding: 9px 0;
+  padding: 8px 0;
   text-align: center;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(242,196,17,0.18);
-  border-radius: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
   color: #8a8172;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   cursor: pointer;
   vertical-align: middle;
 }
-.lang-btn:first-child { margin-right: 4%; }
-.lang-btn:hover {
-  border-color: rgba(242,196,17,0.4);
-  color: #d8cfa8;
-}
+.lang-btn:hover { color: #d8cfa8; }
 .lang-btn.active {
-  background: rgba(242,196,17,0.12);
-  border-color: rgba(242,196,17,0.55);
-  color: #f2c411;
+  background: linear-gradient(135deg, #f2c411, #cc9e00);
+  color: #0b0a08;
+  box-shadow: 0 2px 8px rgba(242, 196, 17, 0.25);
 }
