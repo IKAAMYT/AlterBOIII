@@ -3529,18 +3529,23 @@ function friendsApi(action, data, cb) {
     // MSHTML bloque les XHR cross-zone vers l'API (status 0). On passe donc par
     // le C++ (curl natif), comme l'auto-updater. Le callback renvoie le corps
     // brut de la reponse (ou "" en cas d'echec).
+    // IMPORTANT : ne PAS tester `if (ex.friendsApiGet)` — sous MSHTML, evaluer
+    // la propriete APPELLE le callback avec 0 argument, qui retourne "" (string
+    // vide, donc falsy) et fait rater le test. On appelle donc directement dans
+    // un try/catch. Si le callback n'existe pas, l'appel throw -> fallback XHR.
     var ex = getExternal();
-    var hasApiGet = ex && typeof ex.friendsApiGet === 'function';
-    if (ex && ex.friendsApiGet) {
-      var raw = '';
-      try { raw = ex.friendsApiGet(url); } catch (e) { raw = 'EXCEPTION:' + e; }
+    var raw = null;
+    if (ex) {
+      try {
+        raw = ex.friendsApiGet(url);
+      } catch (e) {
+        raw = null; // callback absent (vieux exe) -> on tombe sur le XHR
+      }
+    }
+    if (raw !== null) {
       var res = null;
       try { res = JSON.parse(raw); } catch (e) {}
-      if (!res) {
-        var diag = 'raw len=' + (raw ? raw.length : 0) +
-          ' body=' + (raw ? String(raw).substring(0, 70) : '(vide)');
-        res = { ok: false, error: 'DIAG C++: ' + diag };
-      }
+      if (!res) res = { ok: false, error: 'Serveur injoignable.' };
       cb(res);
       return;
     }
@@ -3553,7 +3558,7 @@ function friendsApi(action, data, cb) {
       if (xhr.readyState !== 4) return;
       var res2 = null;
       try { res2 = JSON.parse(xhr.responseText); } catch (e) {}
-      if (!res2) res2 = { ok: false, error: 'FALLBACK XHR (friendsApiGet=' + (typeof (getExternal() || {}).friendsApiGet) + ')' };
+      if (!res2) res2 = { ok: false, error: 'Serveur injoignable.' };
       cb(res2);
     };
     xhr.ontimeout = function() {
@@ -3944,7 +3949,7 @@ if (oauthBtn) {
   oauthBtn.onclick = function() {
     var msg = document.getElementById('oauthMsg');
     var ex = getExternal();
-    if (!ex || !ex.startOAuthLogin || !ex.checkOAuthResult) {
+    if (!ex) {
       if (msg) { msg.textContent = 'Fonction indisponible (mets a jour le launcher).'; msg.className = 'friends-auth-msg no'; }
       return;
     }
@@ -3952,6 +3957,8 @@ if (oauthBtn) {
     if (msg) { msg.textContent = 'Ouverture du navigateur... autorise la connexion puis reviens ici.'; msg.className = 'friends-auth-msg'; }
 
     // Lance le flux OAuth cote C++ (thread detache, non bloquant).
+    // On appelle directement (sans tester la propriete, qui sous MSHTML
+    // declencherait le callback a vide).
     var started = '';
     try { started = ex.startOAuthLogin(); } catch (e) { started = ''; }
     if (started === 'busy') {
