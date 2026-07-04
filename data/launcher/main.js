@@ -3530,15 +3530,16 @@ function friendsApi(action, data, cb) {
     // le C++ (curl natif), comme l'auto-updater. Le callback renvoie le corps
     // brut de la reponse (ou "" en cas d'echec).
     var ex = getExternal();
+    var hasApiGet = ex && typeof ex.friendsApiGet === 'function';
     if (ex && ex.friendsApiGet) {
       var raw = '';
-      try { raw = ex.friendsApiGet(url); } catch (e) { raw = 'EXCEPTION'; }
+      try { raw = ex.friendsApiGet(url); } catch (e) { raw = 'EXCEPTION:' + e; }
       var res = null;
       try { res = JSON.parse(raw); } catch (e) {}
       if (!res) {
         var diag = 'raw len=' + (raw ? raw.length : 0) +
           ' body=' + (raw ? String(raw).substring(0, 70) : '(vide)');
-        res = { ok: false, error: 'DIAG: ' + diag };
+        res = { ok: false, error: 'DIAG C++: ' + diag };
       }
       cb(res);
       return;
@@ -3552,7 +3553,7 @@ function friendsApi(action, data, cb) {
       if (xhr.readyState !== 4) return;
       var res2 = null;
       try { res2 = JSON.parse(xhr.responseText); } catch (e) {}
-      if (!res2) res2 = { ok: false, error: 'Serveur injoignable.' };
+      if (!res2) res2 = { ok: false, error: 'FALLBACK XHR (friendsApiGet=' + (typeof (getExternal() || {}).friendsApiGet) + ')' };
       cb(res2);
     };
     xhr.ontimeout = function() {
