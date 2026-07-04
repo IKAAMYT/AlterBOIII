@@ -2100,3 +2100,61 @@ cards
 .oauth-register {
   text-align: center; font-size: 13px; color: #8a8172; margin-top: 18px;
 }
+
+/* ── Ecran "En cours de creation" (page Amis) ── */
+.friends-wip {
+  position: relative;
+  text-align: center;
+  padding: 56px 32px 60px;
+  margin-top: 24px;
+  background: linear-gradient(160deg, rgba(20,18,16,0.7), rgba(11,10,8,0.4));
+  border: 1px solid rgba(242,196,17,0.16);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.friends-wip-glow {
+  position: absolute;
+  top: -120px; left: 50%;
+  transform: translateX(-50%);
+  width: 420px; height: 300px;
+  background: radial-gradient(circle, rgba(242,196,17,0.12), transparent 70%);
+  pointer-events: none;
+}
+.friends-wip-ico {
+  position: relative;
+  width: 74px; height: 74px;
+  margin: 0 auto 22px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(242,196,17,0.14), rgba(242,196,17,0.04));
+  border: 1px solid rgba(242,196,17,0.3);
+  display: flex; align-items: center; justify-content: center;
+}
+.friends-wip-title {
+  position: relative;
+  font-size: 22px; font-weight: 700; color: #f5f3ee;
+  margin-bottom: 12px;
+}
+.friends-wip-sub {
+  position: relative;
+  font-size: 14px; color: #8a8172; line-height: 1.6;
+  max-width: 440px; margin: 0 auto 24px;
+}
+.friends-wip-badge {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 18px;
+  background: rgba(242,196,17,0.08);
+  border: 1px solid rgba(242,196,17,0.25);
+  border-radius: 30px;
+  color: #f2c411; font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.friends-wip-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #f2c411;
+  animation: wipPulse 1.6s ease-in-out infinite;
+}
+@keyframes wipPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(242,196,17,0.5); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 6px rgba(242,196,17,0); }
+}

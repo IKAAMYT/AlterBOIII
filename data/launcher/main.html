@@ -363,6 +363,23 @@
           <p class="page-sub">Connecte-toi avec ton compte du forum, ajoute des amis par pseudo et retrouve-les en jeu.</p>
         </div>
 
+        <!-- ECRAN "EN COURS DE CREATION" (temporaire) -->
+        <!-- Pour reactiver le systeme d'amis : mettre WIP_FRIENDS = false dans main.js -->
+        <div id="friendsWip" class="friends-wip" style="display:none;">
+          <div class="friends-wip-glow"></div>
+          <div class="friends-wip-ico">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#f2c411" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+          </div>
+          <div class="friends-wip-title">Syst&egrave;me d'amis en cours de cr&eacute;ation</div>
+          <div class="friends-wip-sub">On peaufine la connexion, les demandes d'amis et la pr&eacute;sence en jeu.<br>&Ccedil;a arrive tr&egrave;s bient&ocirc;t &mdash; merci de ta patience !</div>
+          <div class="friends-wip-badge">
+            <span class="friends-wip-dot"></span>
+            En d&eacute;veloppement
+          </div>
+        </div>
+
         <!-- ETAT DECONNECTE : connexion via le forum (OAuth uniquement) -->
         <div id="friendsAuth" class="friends-auth">
           <div class="oauth-hero">

@@ -4015,19 +4015,34 @@ if (oauthRegisterLink) {
 }
 
 // ── Initialisation ──
-friendsLoadSession();
-if (_friendsToken) {
-  // Re-ecrit le fichier session pour le heartbeat en jeu
-  try {
-    var _ex = getExternal();
-    if (_ex && _ex.saveFriendsSession) {
-      _ex.saveFriendsSession(_friendsToken, _friendsPseudo);
-    }
-  } catch (e) {}
-  friendsSetLoggedInUI(true);
-  loadFriendsData();
+// ─────────────────────────────────────────────────────────────
+// SYSTEME D'AMIS : mode "En cours de creation"
+// Pour REACTIVER le systeme complet : passe WIP_FRIENDS a false.
+// ─────────────────────────────────────────────────────────────
+var WIP_FRIENDS = true;
+
+if (WIP_FRIENDS) {
+  var _wip = document.getElementById('friendsWip');
+  var _auth = document.getElementById('friendsAuth');
+  var _main = document.getElementById('friendsMain');
+  if (_wip) _wip.style.display = '';
+  if (_auth) _auth.style.display = 'none';
+  if (_main) _main.style.display = 'none';
 } else {
-  friendsSetLoggedInUI(false);
+  friendsLoadSession();
+  if (_friendsToken) {
+    // Re-ecrit le fichier session pour le heartbeat en jeu
+    try {
+      var _ex = getExternal();
+      if (_ex && _ex.saveFriendsSession) {
+        _ex.saveFriendsSession(_friendsToken, _friendsPseudo);
+      }
+    } catch (e) {}
+    friendsSetLoggedInUI(true);
+    loadFriendsData();
+  } else {
+    friendsSetLoggedInUI(false);
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────
