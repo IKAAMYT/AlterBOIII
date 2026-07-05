@@ -439,7 +439,7 @@ struct component final : generic_component {
         0x141E0AA1B_g, 0xEB); // Release un-handled reportReward spamming loop
 
     localized_strings::override("MENU_CONNECTING_DW",
-                                "Emulating Online Service");
+                                "Connexion à AlterBOIII");
   }
 
   void pre_destroy() override {

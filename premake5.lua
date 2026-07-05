@@ -160,9 +160,9 @@ newaction({
 
       -- AlterBO3 (IKAAM): force the displayed product version. The auto-generated
       -- version came from the latest git tag (showing 5.0.0). We override it here
-      -- so the launcher and in-game branding always read "2.0.0". To change the
+      -- so the launcher and in-game branding always read "2.0.1". To change the
       -- shown version later, edit the value below.
-      tagName = "2.0.0"
+      tagName = "2.0.1"
 
       -- get current branch name
       proc = assert(io.popen("git branch --show-current"))
