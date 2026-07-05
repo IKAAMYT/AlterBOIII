@@ -37,7 +37,7 @@ using XZoneName = xzone::XZoneName;
 namespace workshop {
 std::thread download_thread{};
 
-utils::hook::detour setup_server_map_hook;
+utils::hook::detour CL_SetupForNewServerMap_hook;
 
 static const std::unordered_map<std::string, std::string> dlc_links = {
     {"zm_zod", "https://forum.ezz.lol/topic/6/bo3-dlc"},
@@ -82,9 +82,9 @@ void dlc_popup_thread_func() {
           [map_copy, link] {
             game::ui::UI_OpenErrorPopupWithMessage(
                 0, game::errorCode::UI,
-                utils::string::va("Map DLC manquante : %s\n\nOuverture de la "
-                                  "page de telechargement...\n%s",
-                                  map_copy.c_str(), link.c_str()));
+                utils::string::va(
+                    "Missing DLC map: %s\n\nOpening download page...\n%s",
+                    map_copy.c_str(), link.c_str()));
           },
           scheduler::main);
       ShellExecuteA(nullptr, "open", link.c_str(), nullptr, nullptr,
@@ -186,9 +186,9 @@ bool unload_xzone_by_name(const char *zone_name, bool createDefault,
   return false; // Zone not found
 }
 
-void setup_server_map_stub(game::LocalClientNum_t localClientNum,
-                           const char *map, const char *gametype) {
-  const std::string loaded_mod_id = game::ugc::getPublisherIdFromLoadedMod();
+void CL_SetupForNewServerMap_stub(game::LocalClientNum_t localClientNum,
+                                  const char *map, const char *gametype) {
+  const std::string loaded_mod_id = game::ugc::UGC_ActiveMod_PublisherId();
   const bool is_usermap =
       utils::string::is_numeric(map) || !get_usermap_publisher_id(map).empty();
   const bool mod_loaded = loaded_mod_id.size() > 0;
@@ -208,13 +208,13 @@ void setup_server_map_stub(game::LocalClientNum_t localClientNum,
     unload_xzone_by_name("zm_levelcommon", false, false);
   }
 
-  setup_server_map_hook.invoke(localClientNum, map, gametype);
+  CL_SetupForNewServerMap_hook.invoke(localClientNum, map, gametype);
 }
 
 void load_workshop_data(game::ugc::WorkshopData *item) {
-  const auto base_path = item->absolutePathZoneFiles;
-  const auto path = utils::string::va("%s/workshop.json", base_path);
-  const auto json_str = utils::io::read_file(path);
+  const char *base_path = item->absolutePathZoneFiles;
+  const char *path = utils::string::va("%s/workshop.json", base_path);
+  const std::string json_str = utils::io::read_file(path);
 
   if (json_str.empty()) {
     printf("[ Workshop ] workshop.json has not been found in folder:\n%s\n",
@@ -247,7 +247,7 @@ void load_workshop_data(game::ugc::WorkshopData *item) {
 void populate_workshop_paths(game::ugc::WorkshopData *item,
                              const std::filesystem::path &content_folder,
                              const game::ZoneType type) {
-  std::memset(item, 0, sizeof(game::ugc::WorkshopData));
+  item->clear();
 
   const std::filesystem::path zone_path = content_folder / "zone";
   const std::filesystem::path relative_zone_path =
@@ -347,7 +347,7 @@ const char *va_user_content_path(const char *fmt, const char *root_dir,
 }
 
 std::string get_mod_resized_name() {
-  const std::string loaded_mod_id = game::ugc::getPublisherIdFromLoadedMod();
+  const std::string loaded_mod_id = game::ugc::UGC_ActiveMod_PublisherId();
 
   if (loaded_mod_id == "usermaps" || loaded_mod_id.empty()) {
     return loaded_mod_id;
@@ -399,7 +399,7 @@ int get_workshop_retry_attempts() {
 }
 
 std::string get_mod_publisher_id() {
-  const std::string loaded_mod_id = game::ugc::getPublisherIdFromLoadedMod();
+  const std::string loaded_mod_id = game::ugc::UGC_ActiveMod_PublisherId();
 
   if (loaded_mod_id == "usermaps" || loaded_mod_id.empty()) {
     return loaded_mod_id;
@@ -691,15 +691,14 @@ bool check_valid_usermap_id(const std::string &mapname,
       const std::string id_copy = mapname;
       const auto ws_info = get_steam_workshop_info(id_copy);
       std::string confirm_msg =
-          utils::string::va("La map '%s' est introuvable.\n", id_copy.c_str());
+          utils::string::va("Usermap '%s' was not found.\n", id_copy.c_str());
       if (!ws_info.title.empty())
-        confirm_msg += "Titre : " + ws_info.title + "\n";
+        confirm_msg += "Title: " + ws_info.title + "\n";
       if (ws_info.file_size > 0)
-        confirm_msg +=
-            "Taille : " + human_readable_size(ws_info.file_size) + "\n";
-      confirm_msg += "\nVoulez-vous la telecharger depuis le Steam Workshop ?";
+        confirm_msg += "Size: " + human_readable_size(ws_info.file_size) + "\n";
+      confirm_msg += "\nDo you want to download it from the Steam Workshop?";
       download_overlay::show_confirmation(
-          "Telecharger la map ?", confirm_msg, [id_copy] {
+          "Download Map?", confirm_msg, [id_copy] {
             download_thread = utils::thread::create_named_thread(
                 "workshop_download", steamcmd::initialize_download, id_copy,
                 std::string("Map"));
@@ -710,16 +709,15 @@ bool check_valid_usermap_id(const std::string &mapname,
       const std::string id_copy = workshop_id;
       const std::string name_copy = mapname;
       const auto ws_info = get_steam_workshop_info(id_copy);
-      std::string confirm_msg = utils::string::va(
-          "La map '%s' est introuvable.\n", name_copy.c_str());
+      std::string confirm_msg =
+          utils::string::va("Usermap '%s' was not found.\n", name_copy.c_str());
       if (!ws_info.title.empty())
-        confirm_msg += "Titre : " + ws_info.title + "\n";
+        confirm_msg += "Title: " + ws_info.title + "\n";
       if (ws_info.file_size > 0)
-        confirm_msg +=
-            "Taille : " + human_readable_size(ws_info.file_size) + "\n";
-      confirm_msg += "\nVoulez-vous la telecharger depuis le Steam Workshop ?";
+        confirm_msg += "Size: " + human_readable_size(ws_info.file_size) + "\n";
+      confirm_msg += "\nDo you want to download it from the Steam Workshop?";
       download_overlay::show_confirmation(
-          "Telecharger la map ?", confirm_msg, [id_copy] {
+          "Download Map?", confirm_msg, [id_copy] {
             download_thread = utils::thread::create_named_thread(
                 "workshop_download", steamcmd::initialize_download, id_copy,
                 std::string("Map"));
@@ -768,15 +766,14 @@ bool check_valid_mod_id(const std::string &mod,
       const std::string id_copy = mod;
       const auto ws_info = get_steam_workshop_info(id_copy);
       std::string confirm_msg =
-          utils::string::va("Le mod '%s' est introuvable.\n", id_copy.c_str());
+          utils::string::va("Mod '%s' was not found.\n", id_copy.c_str());
       if (!ws_info.title.empty())
-        confirm_msg += "Titre : " + ws_info.title + "\n";
+        confirm_msg += "Title: " + ws_info.title + "\n";
       if (ws_info.file_size > 0)
-        confirm_msg +=
-            "Taille : " + human_readable_size(ws_info.file_size) + "\n";
-      confirm_msg += "\nVoulez-vous la telecharger depuis le Steam Workshop ?";
+        confirm_msg += "Size: " + human_readable_size(ws_info.file_size) + "\n";
+      confirm_msg += "\nDo you want to download it from the Steam Workshop?";
       download_overlay::show_confirmation(
-          "Telecharger le mod ?", confirm_msg, [id_copy] {
+          "Download Mod?", confirm_msg, [id_copy] {
             download_thread = utils::thread::create_named_thread(
                 "workshop_download", steamcmd::initialize_download, id_copy,
                 std::string("Mod"));
@@ -787,16 +784,15 @@ bool check_valid_mod_id(const std::string &mod,
       const std::string id_copy = workshop_id;
       const std::string name_copy = mod;
       const auto ws_info = get_steam_workshop_info(id_copy);
-      std::string confirm_msg = utils::string::va(
-          "Le mod '%s' est introuvable.\n", name_copy.c_str());
+      std::string confirm_msg =
+          utils::string::va("Mod '%s' was not found.\n", name_copy.c_str());
       if (!ws_info.title.empty())
-        confirm_msg += "Titre : " + ws_info.title + "\n";
+        confirm_msg += "Title: " + ws_info.title + "\n";
       if (ws_info.file_size > 0)
-        confirm_msg +=
-            "Taille : " + human_readable_size(ws_info.file_size) + "\n";
-      confirm_msg += "\nVoulez-vous la telecharger depuis le Steam Workshop ?";
+        confirm_msg += "Size: " + human_readable_size(ws_info.file_size) + "\n";
+      confirm_msg += "\nDo you want to download it from the Steam Workshop?";
       download_overlay::show_confirmation(
-          "Telecharger le mod ?", confirm_msg, [id_copy] {
+          "Download Mod?", confirm_msg, [id_copy] {
             download_thread = utils::thread::create_named_thread(
                 "workshop_download", steamcmd::initialize_download, id_copy,
                 std::string("Mod"));
@@ -808,16 +804,16 @@ bool check_valid_mod_id(const std::string &mod,
         const std::string name_copy = mod;
         const auto ws_info = get_steam_workshop_info(resolved_id);
         std::string confirm_msg = utils::string::va(
-            "Le mod '%s' est introuvable.\nID workshop : %s\n",
+            "Mod '%s' was not found.\nResolved workshop ID: %s\n",
             name_copy.c_str(), resolved_id.c_str());
         if (!ws_info.title.empty())
-          confirm_msg += "Titre : " + ws_info.title + "\n";
+          confirm_msg += "Title: " + ws_info.title + "\n";
         if (ws_info.file_size > 0)
           confirm_msg +=
-              "Taille : " + human_readable_size(ws_info.file_size) + "\n";
-        confirm_msg += "\nVoulez-vous le telecharger maintenant ?";
+              "Size: " + human_readable_size(ws_info.file_size) + "\n";
+        confirm_msg += "\nDo you want to download it now?";
         download_overlay::show_confirmation(
-            "Telecharger le mod ?", confirm_msg, [resolved_id] {
+            "Download Mod?", confirm_msg, [resolved_id] {
               download_thread = utils::thread::create_named_thread(
                   "workshop_download", steamcmd::initialize_download,
                   resolved_id, std::string("Mod"));
@@ -832,7 +828,7 @@ bool check_valid_mod_id(const std::string &mod,
                   utils::string::va(
                       "Could not download: folder name is not numeric and "
                       "'workshop_id' dvar is empty.\nMod: %s\nSet workshop_id "
-                      "ou abonnez-vous sur le Steam Workshop.",
+                      "or subscribe on Steam Workshop.",
                       name_copy.c_str()));
             },
             scheduler::main);
@@ -863,7 +859,7 @@ void wait_for_mod_load() {
 void setup_same_mod_as_host(game::LocalClientNum_t localClientNum,
                             const std::string &usermap, const std::string &mod,
                             bool force_fs_reinit) {
-  const std::string loaded_mod = game::ugc::getPublisherIdFromLoadedMod();
+  const std::string loaded_mod = game::ugc::UGC_ActiveMod_PublisherId();
   if (loaded_mod != mod) {
     if (!usermap.empty() || !mod.empty()) {
       bool fs_reinit_required =
@@ -874,7 +870,7 @@ void setup_same_mod_as_host(game::LocalClientNum_t localClientNum,
       if (fs_reinit_required) {
         wait_for_mod_load();
       }
-    } else if (game::ugc::isModLoaded()) {
+    } else if (game::ugc::UGC_ActiveMod_Loaded()) {
       bool fs_reinit_required =
           force_fs_reinit ||
           mod_switch_requires_fs_reinitialization(loaded_mod, "");
@@ -1050,8 +1046,9 @@ public:
         download_thread.detach();
       });
 
-      setup_server_map_hook.create(game::cl::CL_SetupForNewServerMap.get(),
-                                   setup_server_map_stub);
+      CL_SetupForNewServerMap_hook.create(
+          game::cl::CL_SetupForNewServerMap.get(),
+          CL_SetupForNewServerMap_stub);
 
       utils::hook::call(0x14135CDA1_g, com_error_missing_map_stub);
     }

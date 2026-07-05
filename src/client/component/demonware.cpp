@@ -438,7 +438,8 @@ struct component final : generic_component {
     utils::hook::set<uint8_t>(
         0x141E0AA1B_g, 0xEB); // Release un-handled reportReward spamming loop
 
-    localized_strings::override("MENU_CONNECTING_DW", "Connexion à AlterBOIII");
+    localized_strings::override("MENU_CONNECTING_DW",
+                                "Emulating Online Service");
   }
 
   void pre_destroy() override {

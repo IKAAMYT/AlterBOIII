@@ -2,14 +2,13 @@
 #include "loader/component_loader.hpp"
 
 #include "game/game.hpp"
+#include "game/utils.hpp"
 #include "scheduler.hpp"
 #include "discord.hpp"
 #include "party.hpp"
 
 #include <discord_rpc.h>
 #include <utils/string.hpp>
-#include <utils/io.hpp>
-#include <utils/properties.hpp>
 
 #include <ctime>
 #include <unordered_map>
@@ -17,7 +16,7 @@
 static __declspec(noinline) bool seh_dvar_string(const char *name, char *buf,
                                                  size_t sz) {
   __try {
-    const auto *dvar = game::Dvar_FindVar(name);
+    const game::dvar_t *dvar = game::get_dvar(name);
     if (!dvar) {
       buf[0] = '\0';
       return true;
@@ -37,12 +36,12 @@ static __declspec(noinline) bool seh_dvar_string(const char *name, char *buf,
 
 static __declspec(noinline) bool seh_dvar_int(const char *name, int *out) {
   __try {
-    const auto *dvar = game::Dvar_FindVar(name);
+    const game::dvar_t *dvar = game::get_dvar(name);
     if (!dvar) {
       *out = 0;
       return true;
     }
-    *out = dvar->current.value.integer;
+    *out = game::get_dvar_int(dvar);
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     *out = 0;
@@ -103,7 +102,7 @@ static __declspec(noinline) bool seh_get_client_count(int max_clients,
 
 namespace discord {
 namespace {
-constexpr auto DISCORD_APP_ID = "1520258667071537233";
+constexpr const char *DISCORD_APP_ID = "1520258667071537233";
 
 time_t start_time = 0;
 time_t match_time = 0;
@@ -113,7 +112,7 @@ std::atomic_int s_player_score{0};
 std::atomic_int s_enemy_score{0};
 std::atomic_int s_rounds_played{0};
 
-static const std::unordered_map<std::string, const char *> map_names = {
+static const std::unordered_map<std::string_view, const char *> map_names = {
     {"mp_combine", "Combine"},
     {"mp_biodome", "Aquarium"},
     {"mp_redwood", "Redwood"},
@@ -158,18 +157,19 @@ static const std::unordered_map<std::string, const char *> map_names = {
     {"zm_tomb", "Origins"},
 };
 
-static const std::unordered_map<std::string, const char *> gametype_names = {
-    {"tdm", "Team Deathmatch"},    {"dm", "Free-For-All"},
-    {"ffa", "Free-For-All"},       {"dom", "Domination"},
-    {"sd", "Search & Destroy"},    {"hp", "Hardpoint"},
-    {"ctf", "Capture The Flag"},   {"kc", "Kill Confirmed"},
-    {"conf", "Kill Confirmed"},    {"gun", "Gun Game"},
-    {"sas", "Safeguard"},          {"snipe", "One Shot"},
-    {"oic", "One in the Chamber"}, {"sharp", "Sharpshooter"},
-    {"prop", "Prop Hunt"},         {"ball", "Uplink"},
-    {"infect", "Infected"},        {"dem", "Demolition"},
-    {"clean", "Search & Rescue"},  {"zom", "Zombies"},
-    {"zclassic", "Zombies"},
+static const std::unordered_map<std::string_view, const char *> gametype_names =
+    {
+        {"tdm", "Team Deathmatch"},    {"dm", "Free-For-All"},
+        {"ffa", "Free-For-All"},       {"dom", "Domination"},
+        {"sd", "Search & Destroy"},    {"hp", "Hardpoint"},
+        {"ctf", "Capture The Flag"},   {"kc", "Kill Confirmed"},
+        {"conf", "Kill Confirmed"},    {"gun", "Gun Game"},
+        {"sas", "Safeguard"},          {"snipe", "One Shot"},
+        {"oic", "One in the Chamber"}, {"sharp", "Sharpshooter"},
+        {"prop", "Prop Hunt"},         {"ball", "Uplink"},
+        {"infect", "Infected"},        {"dem", "Demolition"},
+        {"clean", "Search & Rescue"},  {"zom", "Zombies"},
+        {"zclassic", "Zombies"},
 };
 
 const char *get_mode_name(bool is_mp, bool is_zm, bool is_cp) {
@@ -182,19 +182,19 @@ const char *get_mode_name(bool is_mp, bool is_zm, bool is_cp) {
   return "Playing";
 }
 
-std::string get_display_map(const std::string &raw, bool is_mp, bool is_zm,
+std::string get_display_map(const std::string_view &raw, bool is_mp, bool is_zm,
                             bool is_cp) {
-  if (const auto it = map_names.find(raw); it != map_names.end())
-    return it->second;
+  if (map_names.contains(raw))
+    return map_names.at(raw);
   if (raw.empty())
     return get_mode_name(is_mp, is_zm, is_cp);
-  return raw;
+  return std::string(raw);
 }
 
-std::string get_display_gametype(const std::string &raw) {
-  if (const auto it = gametype_names.find(raw); it != gametype_names.end())
-    return it->second;
-  return raw.empty() ? "" : raw;
+std::string get_display_gametype(const std::string_view &raw) {
+  if (gametype_names.contains(raw))
+    return gametype_names.at(raw);
+  return raw.empty() ? "" : std::string(raw);
 }
 
 std::string strip_colors(const std::string &src) {
@@ -251,12 +251,11 @@ void update_discord() {
       seh_Com_IsRunningUILevel(&ui_level);
 
       dp.startTimestamp = start_time;
-      dp.details = "BO3 via AlterBOIII";
-      dp.state = ui_level ? "Menu principal" : "Chargement...";
-      dp.largeImageKey = "boiii";
+      dp.details = "AlterBOIII par IKAAM";
+      dp.state = ui_level ? "Main Menu" : "Loading...";
+      dp.largeImageKey = "logo";
       dp.largeImageText = "AlterBOIII par IKAAM";
-      dp.smallImageKey = "logo";
-      dp.smallImageText = "AlterBOIII";
+      dp.smallImageKey = "sexy";
       Discord_UpdatePresence(&dp);
       return;
     }
@@ -276,15 +275,16 @@ void update_discord() {
     seh_SessionMode_IsMode(game::eModes::ZOMBIES, &is_zm);
     seh_SessionMode_IsMode(game::eModes::CAMPAIGN, &is_cp);
 
-    auto mapname = safe_dvar_string("mapname");
+    std::string mapname = safe_dvar_string("mapname");
     if (mapname == "core_frontend")
       mapname.clear();
-    const auto display_map = get_display_map(mapname, is_mp, is_zm, is_cp);
+    const std::string display_map =
+        get_display_map(mapname, is_mp, is_zm, is_cp);
 
-    auto gametype = safe_dvar_string("g_gametype");
+    std::string gametype = safe_dvar_string("g_gametype");
     if (gametype.empty() || gametype == "frontend")
       gametype = safe_dvar_string("ui_gametype");
-    const auto display_type = get_display_gametype(gametype);
+    const std::string display_type = get_display_gametype(gametype);
 
     std::string server_name;
     try {
@@ -337,13 +337,13 @@ void update_discord() {
     dp.state = state.c_str();
 
     const bool known_map = map_names.count(mapname) > 0;
-    dp.largeImageKey = known_map ? mapname.c_str() : "boiii";
+    dp.largeImageKey = known_map ? mapname.c_str() : "logo";
 
     std::string large_text =
         std::string(get_mode_name(is_mp, is_zm, is_cp)) + " - " + display_map;
     dp.largeImageText = large_text.c_str();
     dp.smallImageKey = "logo";
-    dp.smallImageText = "AlterBOIII";
+    dp.smallImageText = "AlterBOIII par IKAAM";
 
     int max_clients = 0;
     try {
@@ -369,29 +369,13 @@ void update_discord() {
   }
 }
 
-void discord_log(const std::string &line) {
-  // AlterBO3 (IKAAM): write a diagnostic line to a file we can inspect, since
-  // printf output isn't visible in a normal launch.
-  try {
-    const auto path = utils::properties::get_appdata_path() / "discord_log.txt";
-    const auto stamp = std::to_string(time(nullptr));
-    utils::io::write_file(path.string(), "[" + stamp + "] " + line + "\n",
-                          true);
-    OutputDebugStringA(("[AlterBO3 Discord] " + line + "\n").c_str());
-  } catch (...) {
-  }
-}
-
 void ready(const DiscordUser *request) {
   SetEnvironmentVariableA("discord_user", request->userId);
-  discord_log(std::string("READY connected as ") +
-              (request->username ? request->username : "?") + " (" +
-              (request->userId ? request->userId : "?") + ")");
+  printf("Discord: Ready: %s - %s\n", request->userId, request->username);
 }
 
 void errored(const int error_code, const char *message) {
-  discord_log("ERROR " + std::to_string(error_code) + ": " +
-              (message ? message : "?"));
+  printf("Discord: Error (%i): %s\n", error_code, message);
 }
 } // namespace
 
@@ -411,8 +395,6 @@ public:
     handlers.disconnected = errored;
 
     Discord_Initialize(DISCORD_APP_ID, &handlers, 1, nullptr);
-    discord_log(std::string("Discord_Initialize called with App ID ") +
-                DISCORD_APP_ID);
 
     scheduler::loop(Discord_RunCallbacks, scheduler::pipeline::async, 1s);
     scheduler::loop(update_discord, scheduler::pipeline::main, 5s);
