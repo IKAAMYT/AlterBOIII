@@ -1,0 +1,60 @@
+═══════════════════════════════════════════════════════
+  MERGE AlterBOIII + dernières améliorations d'Ezz
+═══════════════════════════════════════════════════════
+
+CE QUE CONTIENT CE MERGE :
+  • Toutes les améliorations récentes d'Ezz (~112 fichiers modifiés,
+    16 nouveaux) : fixes de crash mapswitch, système HKS (Havok Script
+    Lua), refonte symbols/, structs réorganisés, fixes noms/tags,
+    workshop rework, serveurs dédiés, etc.
+  • TOUS tes ajouts IKAAM préservés :
+    - Launcher custom (OAuth, système d'amis, i18n FR/EN)
+    - Heartbeat AlterCOD en jeu (greffé sur le friends.cpp à jour d'Ezz)
+    - Discord Rich Presence (logique améliorée d'Ezz + TON branding)
+    - Ton branding partout (logo, splash, resource.rc, version 2.0.0)
+    - Protection anti-écrasement de ton exe/UI dans l'updater
+    - Fix accents français (progress_ui)
+    - Tes noms de bots custom
+    - Tout ton dossier data/ (UI launcher + ui_scripts menu social)
+    - Tes workflows GitHub Actions (alterbo3-release.yml)
+
+═══════════════════════════════════════════════════════
+  COMMENT L'APPLIQUER (IMPORTANT)
+═══════════════════════════════════════════════════════
+
+⚠️ Ce merge remplace BEAUCOUP de fichiers. La méthode la plus sûre :
+
+MÉTHODE RECOMMANDÉE (branche de test) :
+  1. Sur GitHub, crée une nouvelle BRANCHE (ex: "merge-ezz-juillet")
+     depuis ta branche main.
+  2. Dézippe ce ZIP sur ton PC.
+  3. Upload/remplace les dossiers src/ et data/ + premake5.lua
+     dans cette nouvelle branche (via GitHub web ou GitHub Desktop).
+  4. Lance le workflow de build SUR CETTE BRANCHE.
+  5. Si le build est VERT et que le jeu marche → merge la branche
+     dans main.
+  6. Si le build ÉCHOUE → tu n'as rien cassé sur main, on debug la
+     branche ensemble.
+
+  Ne remplace PAS directement main : si une erreur de compilation
+  passe (impossible à tester en local), tu casserais ta version live.
+
+CE QUI N'EST PAS DANS LE ZIP (à ne pas toucher) :
+  • deps/ (submodules Git : Steamworks, curl, imgui... se récupèrent
+    automatiquement via git submodule, déjà configurés)
+  • old-dll/ (vieux binaires, inutiles au build)
+  • .git/ (historique)
+
+═══════════════════════════════════════════════════════
+  RISQUE HONNÊTE
+═══════════════════════════════════════════════════════
+Le gros risque = une erreur de compilation due à la refonte
+structurelle d'Ezz (nouveau symbol.hpp, structs déplacés). J'ai
+vérifié que :
+  ✓ Tous les includes de tes fichiers sont résolus
+  ✓ symbol.hpp (que ton game.hpp utilisait inline) est bien présent
+  ✓ Pas de fichier orphelin (ancien quake.hpp, strlcpy supprimés)
+  ✓ Le premake compile par glob → prend les 16 nouveaux fichiers auto
+  ✓ Aucune nouvelle dépendance requise
+Mais je ne peux pas compiler ici, donc le build GitHub reste le juge
+final. D'où la branche de test.
