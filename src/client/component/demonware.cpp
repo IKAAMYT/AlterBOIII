@@ -1,15 +1,15 @@
-#include <std_include.hpp>
 #include "loader/component_loader.hpp"
+#include <std_include.hpp>
 
 #include <utils/hook.hpp>
 #include <utils/thread.hpp>
 
-#include "game/game.hpp"
-#include "game/demonware/servers/lobby_server.hpp"
+#include "game/demonware/server_registry.hpp"
 #include "game/demonware/servers/auth3_server.hpp"
+#include "game/demonware/servers/lobby_server.hpp"
 #include "game/demonware/servers/stun_server.hpp"
 #include "game/demonware/servers/umbrella_server.hpp"
-#include "game/demonware/server_registry.hpp"
+#include "game/game.hpp"
 
 #include "localized_strings.hpp"
 
@@ -438,8 +438,7 @@ struct component final : generic_component {
     utils::hook::set<uint8_t>(
         0x141E0AA1B_g, 0xEB); // Release un-handled reportReward spamming loop
 
-    localized_strings::override("MENU_CONNECTING_DW",
-                                "Connexion à AlterBOIII");
+    localized_strings::override("MENU_CONNECTING_DW", "Connexion à AlterBOIII");
   }
 
   void pre_destroy() override {

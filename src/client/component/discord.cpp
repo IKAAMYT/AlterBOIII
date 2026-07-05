@@ -1,11 +1,11 @@
-#include <std_include.hpp>
 #include "loader/component_loader.hpp"
+#include <std_include.hpp>
 
+#include "discord.hpp"
 #include "game/game.hpp"
 #include "game/utils.hpp"
-#include "scheduler.hpp"
-#include "discord.hpp"
 #include "party.hpp"
+#include "scheduler.hpp"
 
 #include <discord_rpc.h>
 #include <utils/string.hpp>

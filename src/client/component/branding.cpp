@@ -1,13 +1,13 @@
+#include "game/game.hpp"
+#include "loader/component_loader.hpp"
+#include "version.hpp"
 #include <cstdint>
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
-#include "game/game.hpp"
-#include "version.hpp"
 
 #include "scheduler.hpp"
 
-#include <utils/hook.hpp>
 #include <utils/flags.hpp>
+#include <utils/hook.hpp>
 
 namespace branding {
 namespace {

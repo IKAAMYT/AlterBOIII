@@ -7,12 +7,12 @@
 #include "scheduler.hpp"
 
 #include <errhandlingapi.h>
+#include <utils/compression.hpp>
 #include <utils/flags.hpp>
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
 #include <utils/thread.hpp>
-#include <utils/compression.hpp>
 
 #include <exception/minidump.hpp>
 
