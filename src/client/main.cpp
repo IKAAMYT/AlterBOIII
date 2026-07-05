@@ -1,24 +1,24 @@
-#include <curl/curl.h>
 #include <std_include.hpp>
+#include <curl/curl.h>
 
 #include "loader/component_loader.hpp"
 #include "loader/loader.hpp"
 
-#include <utils/com.hpp>
 #include <utils/finally.hpp>
-#include <utils/flags.hpp>
 #include <utils/hook.hpp>
-#include <utils/http.hpp>
-#include <utils/io.hpp>
 #include <utils/nt.hpp>
+#include <utils/io.hpp>
+#include <utils/http.hpp>
+#include <utils/flags.hpp>
+#include <utils/com.hpp>
 #include <utils/progress_ui.hpp>
 
 #include <steam/steam.hpp>
 
-#include "component/updater.hpp"
 #include "game/game.hpp"
-#include "launcher/html/html_window.hpp"
 #include "launcher/launcher.hpp"
+#include "launcher/html/html_window.hpp"
+#include "component/updater.hpp"
 
 #include <shlobj.h>
 #include <tlhelp32.h>
@@ -942,8 +942,7 @@ int main() {
         updater::update();
       }
 
-      // AlterBO3 (IKAAM): the auto-updater is disabled, so fetch the custom
-      // launcher UI here if it's missing (needs internet on first launch).
+      // AlterBO3 (IKAAM): fetch the custom launcher UI if missing.
       if (!is_server) {
         launcher::check_self_update();
         launcher::ensure_launcher_ui();

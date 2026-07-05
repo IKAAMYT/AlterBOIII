@@ -1,21 +1,21 @@
-#include "friends.hpp"
-#include "loader/component_loader.hpp"
 #include <std_include.hpp>
+#include "loader/component_loader.hpp"
+#include "friends.hpp"
 
 #include "game/game.hpp"
 #include "game/utils.hpp"
-#include "name.hpp"
 #include "network.hpp"
 #include "party.hpp"
 #include "scheduler.hpp"
 #include "steam/steam.hpp"
 #include "steam_proxy.hpp"
 #include "workshop.hpp"
+#include "name.hpp"
 
-#include <utils/concurrency.hpp>
-#include <utils/http.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
+#include <utils/concurrency.hpp>
+#include <utils/http.hpp>
 
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
@@ -609,8 +609,7 @@ struct component final : client_component {
 
     scheduler::once([] { fetch_public_ip(); }, scheduler::async, 2000ms);
 
-    // AlterCOD heartbeat (IKAAM): advertise our presence (in game + server) to
-    // friends via the friends API. Once shortly after start, then every 60s.
+    // AlterCOD heartbeat (IKAAM)
     scheduler::once([] { altercod_send_heartbeat(); }, scheduler::async,
                     5000ms);
     scheduler::loop([] { altercod_send_heartbeat(); }, scheduler::async, 60s);
