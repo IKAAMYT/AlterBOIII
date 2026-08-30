@@ -1,8 +1,7 @@
-#include <sstream>
-#include "../std_include.hpp"
+#include <std_include.hpp>
 #include <cstdint>
 #include <atomic>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
 #include "scheduler.hpp"
 
@@ -13,9 +12,8 @@
 #include <game/impl/cl/cl.hpp>
 #include <game/impl/cg/cg.hpp>
 
-#include <utils/hook.hpp>
 #include <utils/string.hpp>
-#include <utils/io.hpp>
+#include <utils/hook.hpp>
 
 #include <mmeapi.h>
 
@@ -24,8 +22,8 @@ namespace {
 
 utils::hook::detour preload_map_hook;
 
-const game::dvar_t *cl_yaw_speed;
-const game::dvar_t *cl_pitch_speed;
+game::EngineDependentDvar cl_yaw_speed;
+game::EngineDependentDvar cl_pitch_speed;
 
 void stop_intro_if_needed() {
   if (game::com::Com_SessionMode_GetMode() != game::eModes::ZOMBIES &&
@@ -51,7 +49,7 @@ void stop_intro_if_needed() {
 
 void preload_map_stub(game::LocalClientNum_t local_client_num,
                       const char *mapname, const char *gametype) {
-  game::com::Com_GametypeSettings_SetGametype(gametype, true);
+  game::com::gts::Com_GametypeSettings_SetGametype(gametype, true);
   stop_intro_if_needed();
   preload_map_hook.invoke(local_client_num, mapname, gametype);
 }
@@ -95,11 +93,11 @@ void patch_is_mod_loaded_checks() {
 }
 
 float cl_key_state_yaw_speed_stub(void *key) {
-  return game::cl::CL_KeyState(key) * game::get_dvar_float(cl_yaw_speed);
+  return game::cl::CL_KeyState(key) * cl_yaw_speed.get_float();
 }
 
 float cl_key_state_pitch_speed_stub(void *key) {
-  return game::cl::CL_KeyState(key) * game::get_dvar_float(cl_pitch_speed);
+  return game::cl::CL_KeyState(key) * cl_pitch_speed.get_float();
 }
 
 game::fileHandle_t
@@ -174,7 +172,7 @@ utils::hook::detour sd_alloc_sanity_hook;
   routine would consolidate free blocks in the pool to create larger contiguous
   free spaces, allowing subsequent allocation attempts to succeed.
 
-  Unfortunately, this is not feasible with the the SD allocator pool, as
+  Unfortunately, this is not feasible with the SD allocator pool, as
   pointers to allocations are passed directly to the caller. Defragmentation
   would therefore cause all existing pointers to become invalid, leading to
   crashes and other undefined behavior.
@@ -222,13 +220,6 @@ void live_delayed_com_error_stub(const char *comErrorString, int32_t code) {
 
 utils::hook::detour CL_CheckForResendHook;
 
-template <typename T, std::atomic<T *> &storage> T *malloc_store(size_t size) {
-  T *result = reinterpret_cast<T *>(malloc(size));
-  storage.store(result, std::memory_order_seq_cst);
-
-  return result;
-}
-
 utils::hook::detour CG_SightTrace_Safe_hook;
 bool CG_SightTrace_Safe(int32_t *hitNum, const game::vec3_t *start,
                         const game::vec3_t *end, game::contents_t mask,
@@ -257,57 +248,57 @@ int32_t CM_SightTraceThroughTree_Safe(const game::cm::traceWork_t *tw,
                                                             p1_, p2, trace);
 }
 
-template <typename T, std::atomic<T *> &storage> void free_zero(T *ptr) {
-  free(ptr);
-  storage.store(nullptr, std::memory_order_seq_cst);
+template <auto &allocation,
+          typename T = std::remove_reference_t<decltype(allocation)>>
+T *return_static_alloc([[maybe_unused]] size_t size) {
+  assert(sizeof(T) >= size &&
+         "Size of static allocation must be >= size of heap allocation");
+
+  return &allocation;
 }
 
-template <typename T, std::atomic<T *> &storage>
-T *Hunk_UserAlloc_StoreGlobal(game::hunk::HunkUser *user, size_t size,
-                              int32_t alignment, const char *name) {
-  T *result = reinterpret_cast<T *>(
-      game::hunk::Hunk_UserAlloc(user, size, alignment, name));
-  storage.store(result, std::memory_order_seq_cst);
+template <auto &allocation,
+          typename T = std::remove_reference_t<decltype(allocation)>>
+void clear(T *ptr) {
+  memset(ptr, 0, sizeof(T));
+}
+
+template <auto &allocation,
+          typename T = std::remove_reference_t<decltype(allocation)>>
+T *Hunk_UserAlloc_ReturnStaticAllocation(
+    [[maybe_unused]] game::hunk::HunkUser *user, [[maybe_unused]] size_t size,
+    [[maybe_unused]] int32_t alignment, [[maybe_unused]] const char *name) {
+
+  assert(sizeof(T) >= size + alignment_size(size, alignment) &&
+         "Size of static allocation must be >= size of heap allocation");
+  return &allocation;
+}
+
+template <auto &allocation, typename T = std::remove_extent_t<
+                                std::remove_reference_t<decltype(allocation)>>>
+
+T *Hunk_UserAlloc_ReturnStaticAllocation_FirstNull(
+    [[maybe_unused]] game::hunk::HunkUser *user, [[maybe_unused]] size_t size,
+    [[maybe_unused]] int32_t alignment, [[maybe_unused]] const char *name) {
+  assert(sizeof(T) >= size + alignment_size(size, alignment) &&
+         "Size of static allocation must be >= size of heap allocation");
+  static std::atomic_uint32_t next_alloc_index = 0;
+
+  T *result = &allocation[next_alloc_index.load(std::memory_order_acquire)];
+
+  next_alloc_index.fetch_add(1, std::memory_order_release);
+  uint32_t storage_len = std::size(allocation);
+  next_alloc_index.compare_exchange_strong(
+      storage_len, 0, std::memory_order_release, std::memory_order_acquire);
 
   return result;
 }
 
-/*
-   `storage` must be an `atomicarray` with item type `T`.
-   Its length cannot be automatically derived in the template, so the array's
-   type is specified as `auto` to allow count (`N`) computation in the function,
-   with a proceeding assertion to ensure the passed `storage` type is an
-   `atomicarray<T, N>`.
-*/
-template <typename T, auto &storage>
-T *Hunk_UserAlloc_StoreGlobal_FirstNull(game::hunk::HunkUser *user, size_t size,
-                                        int32_t alignment, const char *name) {
-  constexpr uint32_t N = ARRAYSIZE(storage);
-
-  static_assert(std::is_same_v<std::remove_reference_t<decltype(storage)>,
-                               atomicarray<T *, N>>,
-                "Type Error: 'storage' MUST be a atomicarray<T*, N>");
-
-  T *result = reinterpret_cast<T *>(
-      game::hunk::Hunk_UserAlloc(user, size, alignment, name));
-  /*
-     compare_exchange_strong requires an lvalue - cannot use an inlined
-     `nullptr` rvalue
-  */
-  T *null = nullptr;
-  for (uint32_t i = 0; i < N && !storage[i].compare_exchange_strong(
-                                    null, result, std::memory_order_seq_cst,
-                                    std::memory_order_relaxed);
-       ++i) {
-  }
-
-  return result;
-}
-
-template <typename T, std::atomic<T *> &storage>
-void Hunk_UserFree_ResetGlobal(game::hunk::HunkUser *user, T *ptr) {
-  game::hunk::Hunk_UserFree(user, reinterpret_cast<void *>(ptr));
-  storage.store(nullptr, std::memory_order_seq_cst);
+template <auto &allocation,
+          typename T = std::remove_reference_t<decltype(allocation)>>
+void Hunk_UserFree_ResetGlobal([[maybe_unused]] game::hunk::HunkUser *user,
+                               T *ptr) {
+  memset(ptr, 0, sizeof(T));
 }
 
 utils::hook::detour CG_FreeCGEnts_hook;
@@ -328,11 +319,13 @@ utils::hook::detour CG_ClearCGEnts_hook;
   and are dependent on access occurring in the specific location of
   de/encryption, we cannot feasibly access these globals in boiii.
 
-  To circumvent this, we can instead get each global's allocation pointer at the
-  site of allocation, and store them in our own globals for use elsewhere.
+  To circumvent this, rather than allocate these pools at a varying address on
+  the heap, we can instead statically allocate these pool and return the address
+  to our allocation where the pool would be dynamically allocated in the base
+  game.
 
-  We then clear each global's allocation pointer when freed by hooking its
-  corresponding free call in the engine.
+  We then clear each pool with `memset(pool, 0, sizeof(pool));` where it would
+  be freed in the basegame by hooking its corresponding free call in the engine.
 */
 void store_tac_protected_allocs() {
   /*
@@ -343,57 +336,41 @@ void store_tac_protected_allocs() {
   */
 
   /*
-     TODO: remove this block and the `Hunk_UserAlloc_StoreGlobal` and
-    `Hunk_UserAlloc_StoreGlobal_FirstNull` functions after TAC protection
-    removed
+     TODO: remove this block and the `Hunk_UserAlloc_ReturnStaticAllocation` and
+    `Hunk_UserAlloc_ReturnStaticAllocation_FirstNull` functions after TAC
+    protection removed
   */
   {
     utils::hook::call(0x140840929_g,
-                      reinterpret_cast<void *>(
-                          Hunk_UserAlloc_StoreGlobal<game::level::cl::cgPool,
-                                                     game::cg::cgArray_store>));
+                      Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cgArray>);
     utils::hook::call(
         0x1408421C3_g,
-        reinterpret_cast<void *>(
-            Hunk_UserAlloc_StoreGlobal<game::level::cl::cgsPool,
-                                       game::cg::cgsArray_store>));
+
+        Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cgsArray>);
     utils::hook::call(
         0x140843A4F_g,
-        reinterpret_cast<void *>(
-            Hunk_UserAlloc_StoreGlobal<game::anim::ViewModelInfo,
-                                       game::cg::cg_viewModelArray_store>));
+        Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cg_viewModelArray>);
     utils::hook::call(
         0x140843A70_g,
-        reinterpret_cast<void *>(
-            Hunk_UserAlloc_StoreGlobal<game::cg::ClientPlayerAttachmentInfo,
-                                       game::cg::cg_attachmentsArray_store>));
-    utils::hook::call(
-        0x14085B9F5_g,
-        reinterpret_cast<void *>(Hunk_UserAlloc_StoreGlobal_FirstNull<
-                                 game::level::cl::centityPool_t,
-                                 game::cg::cg_entitiesArray_store>));
+        Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cg_attachmentsArray>);
+    utils::hook::call(0x14085B9F5_g,
+
+                      Hunk_UserAlloc_ReturnStaticAllocation_FirstNull<
+                          game::cg::cg_entitiesArray>);
   }
 
   // CG global hunk frees
   {
-    utils::hook::call(
-        0x140853E13_g,
-        reinterpret_cast<void *>(
-            Hunk_UserFree_ResetGlobal<game::cg::ClientPlayerAttachmentInfo,
-                                      game::cg::cg_attachmentsArray_store>));
-    utils::hook::call(
-        0x140853E22_g,
-        reinterpret_cast<void *>(
-            Hunk_UserFree_ResetGlobal<game::anim::ViewModelInfo,
-                                      game::cg::cg_viewModelArray_store>));
+    utils::hook::call(0x140853E13_g,
+                      Hunk_UserFree_ResetGlobal<game::cg::cg_attachmentsArray>);
+    utils::hook::call(0x140853E22_g,
+
+                      Hunk_UserFree_ResetGlobal<game::cg::cg_viewModelArray>);
     utils::hook::call(0x140855728_g,
-                      reinterpret_cast<void *>(
-                          Hunk_UserFree_ResetGlobal<game::level::cl::cgsPool,
-                                                    game::cg::cgsArray_store>));
+
+                      Hunk_UserFree_ResetGlobal<game::cg::cgsArray>);
     utils::hook::call(0x140856EC3_g,
-                      reinterpret_cast<void *>(
-                          Hunk_UserFree_ResetGlobal<game::level::cl::cgPool,
-                                                    game::cg::cgArray_store>));
+                      Hunk_UserFree_ResetGlobal<game::cg::cgArray>);
 
     CG_FreeCGEnts_hook.create(game::cg::CG_FreeCGEnts.get(),
                               game::cg::CG_FreeCGEnts_Impl);
@@ -408,17 +385,15 @@ void store_tac_protected_allocs() {
      are being freed.
   */
   {
-    utils::hook::call(0x1419D7E22_g,
-                      reinterpret_cast<void *>(
-                          malloc_store<game::level::gentity_pool,
-                                       game::level::g_entities_cl_allocation>));
+    utils::hook::call(
+        0x1419D7E22_g,
+        return_static_alloc<game::level::g_entities_cl_allocation>);
   }
 }
 
 template <const int32_t NonZeroVal>
-int32_t Dvar_GetInt_NonZero(const game::dvar_t *dvar) {
-  static_assert(NonZeroVal != 0, "NonZeroVal == 0");
-
+  requires(NonZeroVal != 0)
+int32_t Dvar_GetInt_NonZero(game::EngineDependentDvar dvar) {
   int32_t val = game::Dvar_GetInt(dvar);
   if (val == 0) {
     return NonZeroVal;
@@ -435,204 +410,6 @@ void TaskManager2_ProcessDemonwareTask_Safe(game::dw::TaskRecord *task) {
         task->remoteTask.m_ptr->vtbl->checkTimeout != nullptr))) {
     TaskManager2_ProcessDemonwareTask_Safe_hook.invoke(task);
   }
-}
-
-utils::hook::detour BB_Send_hook;
-utils::hook::detour BB_CheckSend_hook;
-
-utils::hook::detour GScr_BBPrint_hook;
-namespace {
-using namespace game;
-using namespace game::scr;
-using namespace game::scr::gscr;
-void GScr_BBPrint_StdoutRedirect(scriptInstance_t inst) {
-#ifndef NDEBUG
-  int32_t numParam = Scr_GetNumParam(inst);
-
-  // BB requires at least an event name and a format string
-  if (numParam < 2) {
-    return;
-  }
-
-  const char *eventName = Scr_GetString(inst, 0);
-  const char *formatString = Scr_GetString(inst, 1);
-
-  std::string formatStr = formatString;
-  std::ostringstream messageStream;
-  size_t formatLen = formatStr.length();
-
-  int32_t paramIndex = 2;
-  int32_t vectorComponent = 0;
-
-  for (size_t i = 0; i < formatLen; ++i) {
-    // Check for the start of a format specifier
-    if (formatStr[i] == '%') {
-      // Handle escaped percent signs "%%"
-      if (i + 1 < formatLen && formatStr[i + 1] == '%') {
-        messageStream << '%';
-        ++i;
-        continue;
-      }
-
-      // Extract the full format specifier token
-      std::string specifier = "%";
-      size_t j = i + 1;
-      while (
-          j < formatLen && formatStr[j] != 'd' && formatStr[j] != 'i' &&
-          formatStr[j] != 'o' && formatStr[j] != 'u' && formatStr[j] != 'x' &&
-          formatStr[j] != 'X' && formatStr[j] != 'f' && formatStr[j] != 'F' &&
-          formatStr[j] != 'e' && formatStr[j] != 'E' && formatStr[j] != 'g' &&
-          formatStr[j] != 'G' && formatStr[j] != 'c' && formatStr[j] != 's' &&
-          formatStr[j] != 'p') {
-        specifier += formatStr[j];
-        j++;
-      }
-
-      // If a valid specifier character was found, process the argument
-      if (j < formatLen) {
-        char specChar = formatStr[j];
-        specifier += specChar;
-        i = j; // Advance main loop index past the specifier
-
-        if (paramIndex < numParam) {
-          ScrVarType type = Scr_GetType(inst, paramIndex);
-          str512_t tempBuffer;
-
-          // 1. Handle String Formats
-          if (specChar == 's') {
-            const char *strVal = "";
-            if (type == ScrVarType::STRING ||
-                type == ScrVarType::LOCALIZED_STRING) {
-              strVal = Scr_GetString(inst, paramIndex);
-            }
-            snprintf(tempBuffer, sizeof(tempBuffer), specifier.c_str(), strVal);
-            messageStream << tempBuffer;
-            paramIndex++;
-          }
-          // 2. Handle Floating-Point Formats
-          else if (specChar == 'f' || specChar == 'F' || specChar == 'e' ||
-                   specChar == 'E' || specChar == 'g' || specChar == 'G') {
-            double floatVal = 0.0;
-            if (type == ScrVarType::FLOAT) {
-              floatVal = static_cast<double>(Scr_GetFloat(inst, paramIndex));
-              paramIndex++;
-            } else if (type == ScrVarType::INT) {
-              floatVal = static_cast<double>(Scr_GetInt(inst, paramIndex));
-              paramIndex++;
-            } else if (type == ScrVarType::VECTOR) {
-              vec3_t vectorValue;
-              Scr_GetVector(inst, paramIndex, &vectorValue);
-
-              if (vectorComponent == 0)
-                floatVal = static_cast<double>(vectorValue.x);
-              else if (vectorComponent == 1)
-                floatVal = static_cast<double>(vectorValue.y);
-              else if (vectorComponent == 2)
-                floatVal = static_cast<double>(vectorValue.z);
-
-              vectorComponent++;
-              if (vectorComponent == 3) {
-                vectorComponent = 0;
-                paramIndex++;
-              }
-            } else {
-              paramIndex++;
-            }
-            snprintf(tempBuffer, sizeof(tempBuffer), specifier.c_str(),
-                     floatVal);
-            messageStream << tempBuffer;
-          }
-          // 3. Handle Integer Formats
-          else {
-            int32_t intVal = 0;
-            if (type == ScrVarType::INT) {
-              intVal = Scr_GetInt(inst, paramIndex);
-              paramIndex++;
-            } else if (type == ScrVarType::FLOAT) {
-              intVal = static_cast<int32_t>(Scr_GetFloat(inst, paramIndex));
-              paramIndex++;
-            } else if (type == ScrVarType::VECTOR) {
-              vec3_t vectorValue;
-              Scr_GetVector(inst, paramIndex, &vectorValue);
-
-              if (vectorComponent == 0)
-                intVal = static_cast<int32_t>(vectorValue.x);
-              else if (vectorComponent == 1)
-                intVal = static_cast<int32_t>(vectorValue.y);
-              else if (vectorComponent == 2)
-                intVal = static_cast<int32_t>(vectorValue.z);
-
-              vectorComponent++;
-              if (vectorComponent == 3) {
-                vectorComponent = 0;
-                paramIndex++;
-              }
-            } else {
-              paramIndex++;
-            }
-            snprintf(tempBuffer, sizeof(tempBuffer), specifier.c_str(), intVal);
-            messageStream << tempBuffer;
-          }
-        } else {
-          // Fallback if the format string expects more arguments than
-          // provided
-          messageStream << specifier;
-        }
-      } else {
-        // Malformed specifier near the end of the string, print verbatim
-        messageStream << specifier;
-        i = j;
-      }
-    } else {
-      // Pass standard characters through verbatim
-      messageStream << formatStr[i];
-    }
-  }
-
-  fprintf(stdout, "[BB][0] %s: %s\n", eventName, messageStream.str().c_str());
-  fflush(stdout);
-#endif
-}
-} // namespace
-
-utils::hook::detour BB_Print_hook;
-void BB_Print_StdoutRedirect(game::ControllerIndex_t controllerIndex,
-                             const char *name, const char *fmt, ...) {
-#ifndef NDEBUG
-  std::string buffer;
-
-  va_list args;
-  va_start(args, fmt);
-  int32_t buf_len = vsnprintf(nullptr, 0, fmt, args) + 1;
-  buffer.resize(buf_len);
-
-  va_start(args, fmt);
-  vsnprintf(buffer.data(), buf_len, fmt, args);
-  va_end(args);
-
-  if (name && name[0]) {
-    fprintf(stdout, "[BB][%d] %s: %s\n", static_cast<int32_t>(controllerIndex),
-            name, buffer.c_str());
-    fflush(stdout);
-  } else {
-    fprintf(stdout, "[BB][%d]: %s\n", static_cast<int32_t>(controllerIndex),
-            buffer.c_str());
-    fflush(stdout);
-  }
-#endif
-}
-
-void redirect_bb_logging_to_stdout() {
-  BB_Send_hook.create(
-      game::bb::BB_Send.get(),
-      reinterpret_cast<fastcall_t<void(game::ControllerIndex_t, bool)>>(
-          stub_func));
-  BB_CheckSend_hook.create(
-      game::bb::BB_CheckSend.get(),
-      reinterpret_cast<fastcall_t<void(game::ControllerIndex_t)>>(stub_func));
-  GScr_BBPrint_hook.create(game::scr::gscr::GScr_BBPrint.get(),
-                           GScr_BBPrint_StdoutRedirect);
-  BB_Print_hook.create(game::bb::BB_Print.get(), BB_Print_StdoutRedirect);
 }
 
 void fix_mapswitch_crashes() {
@@ -662,6 +439,53 @@ void fix_mapswitch_crashes() {
       game::dw::task::TaskManager2_ProcessDemonwareTask.get(),
       TaskManager2_ProcessDemonwareTask_Safe);
 }
+
+utils::hook::detour SV_FastRestart_f_hook;
+utils::hook::detour SV_MapRestart_f_hook;
+
+inline constexpr std::string_view TDM_GAMETYPE = "tdm";
+inline constexpr std::string_view ZCLASSIC_GAMETYPE = "zclassic";
+inline constexpr std::string_view CAMPAIGN_GAMETYPE = "cp";
+inline constexpr std::string_view MULTIPLAYER_MAP_PREFIX = "mp_";
+inline constexpr std::string_view ZOMBIES_MAP_PREFIX = "zm_";
+inline constexpr std::string_view CAMPAIGN_MAP_PREFIX = "cp_";
+template <const game::RestartMethod_t RestartMethod>
+void SV_RestartCmd_RotateOrDefault() {
+  if (game::get_sv_running() &&
+      !game::com::Com_SessionMode_IsMode(game::eModes::COUNT) /* main menu */) {
+    std::string_view curr_gametype;
+    const std::string_view curr_mapname =
+        game::get_mapname().value_or("mp_nuketown");
+
+    const std::optional<std::string_view> gametype_dvar_val = game::gametype();
+    if (gametype_dvar_val.has_value()) {
+      curr_gametype = gametype_dvar_val.value();
+
+    } else if (utils::string::starts_with(curr_mapname,
+                                          MULTIPLAYER_MAP_PREFIX)) {
+      curr_gametype = TDM_GAMETYPE;
+
+    } else if (utils::string::starts_with(curr_mapname, ZOMBIES_MAP_PREFIX)) {
+      curr_gametype = ZCLASSIC_GAMETYPE;
+    } else if (utils::string::starts_with(curr_mapname, CAMPAIGN_MAP_PREFIX)) {
+      curr_gametype = CAMPAIGN_GAMETYPE;
+    }
+
+    const char *rotate_cmd = utils::string::va(
+        "gametype %s map %s", curr_gametype.data(), curr_mapname.data());
+    game::sv_maprotation->set(rotate_cmd);
+    game::sv::SV_MapRotate_f();
+  } else {
+    game::sv::SV_MapRestart(RestartMethod);
+  }
+}
+
+template <const IntegralLike auto Val> decltype(Val) return_const() {
+  return Val;
+}
+
+utils::hook::detour Com_FPSLimit_hook;
+
 } // namespace
 
 class component final : public client_component {
@@ -671,7 +495,6 @@ public:
     store_tac_protected_allocs();
     replace_sd_allocator();
     fix_mapswitch_crashes();
-    redirect_bb_logging_to_stdout();
 
     fix_amd_cpu_stuttering();
 
@@ -744,7 +567,7 @@ public:
       Total replacement of a function can usually be performed by `hook`ing
       the function and instead executing another function which does not invoke
       the hooked function. In this case, the crash-triggering instruction would
-      still be executed, as hook invocation executes the hooked function's
+      still be executed, as detour invocation executes the hooked function's
       prologue.
 
       To resolve this, we instead replace all known calls to the original
@@ -759,6 +582,16 @@ public:
 
     CL_CheckForResendHook.create(game::cl::CL_CheckForResend.get(),
                                  game::cl::CL_CheckForResend_Impl);
+    SV_MapRestart_f_hook.create(
+        game::sv::SV_MapRestart_f.get(),
+        SV_RestartCmd_RotateOrDefault<game::RestartMethod_t::FULL>);
+    SV_FastRestart_f_hook.create(
+        game::sv::SV_FastRestart_f.get(),
+        SV_RestartCmd_RotateOrDefault<game::RestartMethod_t::ROUND>);
+    // Remove hard-coded FPS limiting - always defer to `com_maxfps` dvar value
+    Com_FPSLimit_hook.create(
+        game::com::Com_FPSLimit.get(),
+        return_const<std::numeric_limits<uint32_t>::max()>);
 
     patch_players_folder_name();
   }

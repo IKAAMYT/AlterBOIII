@@ -23,7 +23,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
   end)
   for fov = 65, 120, 5 do
     table.insert(fovOptions, {
-      option = fov == 80 and "80 (Default)" or tostring(fov),
+      option = fov == 80 and "80 (défaut)" or tostring(fov),
       value = fov,
       default = fov == currentFov,
     })
@@ -32,8 +32,8 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Field of View",
-      "Adjust your field of view (65-120).",
+      "Champ de vision",
+      "Réglez votre champ de vision (65-120).",
       "QuickSettings_fov",
       "cg_fov_default",
       fovOptions,
@@ -42,7 +42,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     )
   )
 
-  -- FOV Scale (zoom FOV multiplier)
+  -- Échelle FOV (zoom FOV multiplier)
   -- NOTE: CreateDvarSettings uses DvarInt internally to match selection.
   -- DvarInt("cg_fovScale") returns 1 for 1.0, so only 1.0 auto-selects.
   -- We default to 1.0 and use float values directly.
@@ -50,7 +50,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
   local fovScaleValues = { 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.5, 2.0 }
   for _, scale in ipairs(fovScaleValues) do
     table.insert(fovScaleOptions, {
-      option = scale == 1.0 and "1.0 (Default)" or tostring(scale),
+      option = scale == 1.0 and "1.0 (défaut)" or tostring(scale),
       value = scale,
       default = scale == 1.0,
     })
@@ -59,7 +59,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "FOV Scale",
+      "Échelle FOV",
       "Multiplier applied to ADS and zoom FOV. 1.0 = default.",
       "QuickSettings_fovscale",
       "cg_fovScale",
@@ -253,8 +253,8 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Game Speed",
-      "Adjust game speed. 1 = normal.",
+      "Vitesse de jeu",
+      "Réglez la vitesse de jeu. 1 = normal.",
       "QuickSettings_timescale",
       "timescale",
       {
@@ -314,9 +314,9 @@ LUI.createMenu.BoiiiQuickSettingsMenu = function(controller)
   local GameSettingsBackground = CoD.GameSettings_Background.new(self, controller)
   GameSettingsBackground:setLeftRight(true, true, 0, 0)
   GameSettingsBackground:setTopBottom(true, true, 0, 0)
-  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("QUICK SETTINGS"))
+  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES RAPIDES"))
   GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-    Engine.Localize("QUICK SETTINGS")
+    Engine.Localize("PARAMÈTRES RAPIDES")
   )
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeInfo:setAlpha(0)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeName:setAlpha(0)
@@ -326,7 +326,7 @@ LUI.createMenu.BoiiiQuickSettingsMenu = function(controller)
   local Options = CoD.Competitive_SettingsList.new(self, controller)
   Options:setLeftRight(true, false, 26, 741)
   Options:setTopBottom(true, false, 135, 720)
-  Options.Title.DescTitle:setText(Engine.Localize("Frequently Used Settings"))
+  Options.Title.DescTitle:setText(Engine.Localize("Paramètres fréquemment utilisés"))
   Options.ButtonList:setVerticalCount(14)
   Options.ButtonList:setDataSource("BoiiiQuickSettings")
   self:addElement(Options)

@@ -1,5 +1,5 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
 #include "splash.hpp"
 #include "resource.hpp"
@@ -61,40 +61,27 @@ void show() {
 
     if (image) {
       window = CreateWindowExA(WS_EX_APPWINDOW, "Black Ops III Splash Screen",
-                               "AlterBO3", WS_POPUP | WS_SYSMENU,
+                               "EZZ BOIII", WS_POPUP | WS_SYSMENU,
                                (x_pixels - 320) / 2, (y_pixels - 100) / 2, 320,
                                100, nullptr, nullptr, self, nullptr);
 
       if (window) {
-        // AlterBO3 (IKAAM): SS_REALSIZECONTROL stretches the bitmap to the
-        // static's size, so we can force a fixed display size regardless of
-        // the source image resolution.
-        auto *const image_window = CreateWindowExA(
-            0, "Static", nullptr,
-            WS_CHILD | WS_VISIBLE | SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 320,
-            100, window, nullptr, self, nullptr);
+        auto *const image_window =
+            CreateWindowExA(0, "Static", nullptr, WS_CHILD | WS_VISIBLE | 0xEu,
+                            0, 0, 320, 100, window, nullptr, self, nullptr);
         if (image_window) {
-          SendMessageA(image_window, STM_SETIMAGE, IMAGE_BITMAP, image);
-
-          // Read the source bitmap dimensions to keep the aspect ratio.
-          BITMAP bm{};
-          GetObjectA(image.get(), sizeof(bm), &bm);
-          const int src_w = bm.bmWidth > 0 ? bm.bmWidth : 16;
-          const int src_h = bm.bmHeight > 0 ? bm.bmHeight : 9;
-
-          // AlterBO3 (IKAAM): fixed display width, height scaled to ratio.
-          const int target_w = 550;
-          const int target_h = static_cast<int>(static_cast<double>(target_w) *
-                                                static_cast<double>(src_h) /
-                                                static_cast<double>(src_w));
-
-          MoveWindow(image_window, 0, 0, target_w, target_h, TRUE);
-
           RECT rect;
-          rect.left = (x_pixels - target_w) / 2;
-          rect.top = (y_pixels - target_h) / 2;
-          rect.right = rect.left + target_w;
-          rect.bottom = rect.top + target_h;
+          SendMessageA(image_window, STM_SETIMAGE, IMAGE_BITMAP, image);
+          GetWindowRect(image_window, &rect);
+
+          const int width = rect.right - rect.left;
+          rect.left = (x_pixels - width) / 2;
+
+          const int height = rect.bottom - rect.top;
+          rect.top = (y_pixels - height) / 2;
+
+          rect.right = rect.left + width;
+          rect.bottom = rect.top + height;
           AdjustWindowRect(&rect, WS_CHILD | WS_VISIBLE | 0xEu, 0);
           SetWindowPos(window, nullptr, rect.left, rect.top,
                        rect.right - rect.left, rect.bottom - rect.top,

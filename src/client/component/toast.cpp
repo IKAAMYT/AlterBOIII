@@ -1,8 +1,9 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
-#include "game/game.hpp"
-#include "game/ui_scripting/execution.hpp"
+
 #include "toast.hpp"
+#include <loader/component_loader.hpp>
+#include <game/game.hpp>
+#include <game/ui_scripting/execution.hpp>
 #include "scheduler.hpp"
 
 #include <utils/string.hpp>
@@ -10,6 +11,7 @@
 namespace toast {
 using namespace game::ui::lua::hks;
 namespace {
+
 std::string escape_lua_string(const std::string &s) {
   std::string result;
   result.reserve(s.size() + 8);
@@ -65,57 +67,100 @@ bool execute_lua(const std::string &code) {
 
   return false;
 }
+
+const char *zombie_toast_patch = R"lua(
+if not CoD.isZombie then return end
+
+local function ensureToast(hud)
+	if hud == nil or hud.toastNotification ~= nil or CoD.ToastNotification == nil then
+		return
+	end
+	local controller = hud.controller or Engine.GetPrimaryController()
+	local toast = CoD.ToastNotification.new(hud, controller)
+	toast:setState("DefaultState")
+	toast:setPriority(9999)
+	hud.toastNotification = toast
+	local parent = hud:getParent()
+	if parent then
+		parent:addElement(toast)
+	end
+end
+
+if HUD_FirstSnapshot_Zombie ~= nil and HUD_FirstSnapshot_Zombie ~= CoD.__boiiiToastFirstSnapshot then
+	local oldZombieFirstSnapshot = HUD_FirstSnapshot_Zombie
+	local patchedZombieFirstSnapshot = function(hud, event)
+		oldZombieFirstSnapshot(hud, event)
+		ensureToast(hud)
+	end
+	CoD.__boiiiToastFirstSnapshot = patchedZombieFirstSnapshot
+	HUD_FirstSnapshot_Zombie = patchedZombieFirstSnapshot
+end
+
+if LUI ~= nil and LUI.roots ~= nil then
+	for _, root in pairs(LUI.roots) do
+		if type(root) == "table" and root.getFirstChild ~= nil then
+			local child = root:getFirstChild()
+			while child ~= nil do
+				if child.id == "Menu.HUD" then
+					ensureToast(child)
+				end
+				child = child:getNextSibling()
+			end
+		end
+	end
+end
+)lua";
+
 } // namespace
+
+void patch_hud() { execute_lua(zombie_toast_patch); }
+
+void precache_icon(const std::string &material) {
+  const auto escaped = escape_lua_string(material);
+  const std::string code =
+      utils::string::va("pcall(function()\n"
+                        "  if Engine.PrecacheImage then\n"
+                        "    Engine.PrecacheImage(\"%s\")\n"
+                        "  end\n"
+                        "end)\n",
+                        escaped.c_str());
+  scheduler::once([code] { execute_lua(code); }, scheduler::main);
+}
 
 void show(const std::string &title, const std::string &description,
           const std::string &icon) {
   if (game::is_server())
     return;
-  if (game::com::Com_IsInGame())
-    return;
 
   const auto escaped_title = escape_lua_string(title);
-  const auto escaped_desc = escape_lua_string(description);
+  const auto escaped_description = escape_lua_string(description);
   const auto escaped_icon = escape_lua_string(icon);
 
   const std::string code = utils::string::va(
       "pcall(function()\n"
-      "  local ctrl = "
-      "Engine.GetModelForController(Engine.GetPrimaryController())\n"
-      "  local toast = Engine.CreateModel(ctrl, \"FrontendToast\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"state\"), "
-      "\"DefaultState\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"kicker\"), \"%s\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"description\"), "
-      "\"%s\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"contentIcon\"), "
-      "\"%s\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"functionIcon\"), "
-      "\"blacktransparent\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"backgroundId\"), "
-      "\"blacktransparent\")\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"emblemDecal\"), 0)\n"
-      "  Engine.SetModelValue(Engine.CreateModel(toast, \"notify\"), true)\n"
+      "  if CoD and CoD.OverlayUtility and CoD.OverlayUtility.ShowToast then\n"
+      "    CoD.OverlayUtility.ShowToast(\"Invite\", \"%s\", \"%s\", \"%s\")\n"
+      "  end\n"
       "end)\n",
-      escaped_title.c_str(), escaped_desc.c_str(), escaped_icon.c_str());
+      escaped_title.c_str(), escaped_description.c_str(), escaped_icon.c_str());
 
-  // Must run on main thread where Lua state is available
   scheduler::once([code] { execute_lua(code); }, scheduler::main);
 }
 
 void success(const std::string &title, const std::string &description) {
-  show(title, description, "t7_icon_save_overlays");
+  show(title, description, "uie_t7_icon_menu_invite_sent");
 }
 
 void warn(const std::string &title, const std::string &description) {
-  show(title, description, "t7_icon_notice_overlays_bkg");
+  show(title, description, "uie_t7_icon_menu_invite_fail");
 }
 
 void error(const std::string &title, const std::string &description) {
-  show(title, description, "t7_icon_error_overlays");
+  show(title, description, "uie_t7_icon_menu_invite_fail");
 }
 
 void info(const std::string &title, const std::string &description) {
-  show(title, description, "t7_icon_info_overlays_bkg");
+  show(title, description, "uie_t7_icon_menu_invite_sent");
 }
+
 } // namespace toast

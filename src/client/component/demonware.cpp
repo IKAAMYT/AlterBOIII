@@ -1,15 +1,17 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
 #include <utils/hook.hpp>
 #include <utils/thread.hpp>
+#include <utils/concurrency.hpp>
+#include <utils/memory.hpp>
 
-#include "game/game.hpp"
-#include "game/demonware/servers/lobby_server.hpp"
-#include "game/demonware/servers/auth3_server.hpp"
-#include "game/demonware/servers/stun_server.hpp"
-#include "game/demonware/servers/umbrella_server.hpp"
-#include "game/demonware/server_registry.hpp"
+#include <game/game.hpp>
+#include <game/demonware/servers/lobby_server.hpp>
+#include <game/demonware/servers/auth3_server.hpp>
+#include <game/demonware/servers/stun_server.hpp>
+#include <game/demonware/servers/umbrella_server.hpp>
+#include <game/demonware/server_registry.hpp>
 
 #include "localized_strings.hpp"
 
@@ -18,25 +20,20 @@
 
 namespace demonware {
 namespace {
-std::atomic_bool exit_server{false};
-std::thread server_thread{};
-utils::concurrency::container<std::unordered_map<SOCKET, bool>>
+static constinit std::atomic_bool exit_server{false};
+static std::thread server_thread{};
+static utils::concurrency::container<std::unordered_map<SOCKET, bool>>
     blocking_sockets{};
-utils::concurrency::container<std::unordered_map<SOCKET, tcp_server *>>
+static utils::concurrency::container<std::unordered_map<SOCKET, tcp_server *>>
     socket_map{};
-server_registry<tcp_server> tcp_servers{};
-server_registry<udp_server> udp_servers{};
-std::unordered_map<void *, void *> original_imports{};
+static server_registry<tcp_server> tcp_servers{};
+static server_registry<udp_server> udp_servers{};
+static std::unordered_map<void *, void *> original_imports{};
 
 tcp_server *find_server(const SOCKET socket) {
   return socket_map.access<tcp_server *>(
       [&](const std::unordered_map<SOCKET, tcp_server *> &map) -> tcp_server * {
-        const auto entry = map.find(socket);
-        if (entry == map.end()) {
-          return nullptr;
-        }
-
-        return entry->second;
+        return map.contains(socket) ? map.at(socket) : nullptr;
       });
 }
 
@@ -55,9 +52,8 @@ bool socket_link(const SOCKET socket, const uint32_t address) {
 
 void socket_unlink(const SOCKET socket) {
   socket_map.access([&](std::unordered_map<SOCKET, tcp_server *> &map) {
-    const auto entry = map.find(socket);
-    if (entry != map.end()) {
-      map.erase(entry);
+    if (map.contains(socket)) {
+      map.erase(socket);
     }
   });
 }
@@ -65,12 +61,7 @@ void socket_unlink(const SOCKET socket) {
 bool is_socket_blocking(const SOCKET socket, const bool def) {
   return blocking_sockets.access<bool>(
       [&](std::unordered_map<SOCKET, bool> &map) {
-        const auto entry = map.find(socket);
-        if (entry == map.end()) {
-          return def;
-        }
-
-        return entry->second;
+        return map.contains(socket) ? map[socket] : def;
       });
 }
 
@@ -438,7 +429,8 @@ struct component final : generic_component {
     utils::hook::set<uint8_t>(
         0x141E0AA1B_g, 0xEB); // Release un-handled reportReward spamming loop
 
-    localized_strings::override("MENU_CONNECTING_DW", "Connexion à AlterBOIII");
+    localized_strings::override("MENU_CONNECTING_DW",
+                                "Emulating Online Service");
   }
 
   void pre_destroy() override {

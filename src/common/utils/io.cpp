@@ -1,6 +1,6 @@
 #include "io.hpp"
-#include "nt.hpp"
 #include <fstream>
+#include <iostream>
 #include <windows.h>
 
 namespace utils::io {
@@ -28,36 +28,15 @@ bool move_file(const std::filesystem::path &src,
   return MoveFileW(src.wstring().data(), target.wstring().data()) == TRUE;
 }
 
-bool file_exists(const std::string &file) { return std::ifstream(file).good(); }
-
-bool write_file(const std::string &file, const std::string &data,
-                const bool append) {
-  const auto pos = file.find_last_of("/\\");
-  if (pos != std::string::npos) {
-    create_directory(file.substr(0, pos));
-  }
-
-  auto flags = std::ios::binary | std::ofstream::out;
-  if (append) {
-    flags |= std::ofstream::app;
-  }
-  std::ofstream stream(file, flags);
-
-  if (stream.is_open()) {
-    stream.write(data.data(), static_cast<std::streamsize>(data.size()));
-    stream.flush();
-    stream.close();
-    return true;
-  }
-
-  return false;
+bool file_exists(const std::filesystem::path &file) {
+  return std::ifstream(file).good();
 }
 
-bool write_file_bytes(const std::string &file, const uint8_t *data, size_t size,
-                      const bool append) {
-  const auto pos = file.find_last_of("/\\");
-  if (pos != std::string::npos) {
-    create_directory(file.substr(0, pos));
+bool write_file_bytes(const std::filesystem::path &file, const uint8_t *data,
+                      size_t size, const bool append) {
+  if (file.has_parent_path()) {
+    const std::filesystem::path parent = file.parent_path();
+    utils::io::create_directory(parent);
   }
 
   std::ofstream stream(file, std::ios::binary | std::ofstream::out |
@@ -74,13 +53,13 @@ bool write_file_bytes(const std::string &file, const uint8_t *data, size_t size,
   return false;
 }
 
-std::string read_file(const std::string &file) {
+std::string read_file(const std::filesystem::path &file) {
   std::string data;
   read_file(file, &data);
   return data;
 }
 
-bool read_file(const std::string &file, std::string *data) {
+bool read_file(const std::filesystem::path &file, std::string *data) {
   if (!data)
     return false;
   data->clear();
@@ -105,7 +84,7 @@ bool read_file(const std::string &file, std::string *data) {
   return false;
 }
 
-std::size_t file_size(const std::string &file) {
+std::size_t file_size(const std::filesystem::path &file) {
   if (file_exists(file)) {
     std::ifstream stream(file, std::ios::binary);
 
@@ -119,7 +98,15 @@ std::size_t file_size(const std::string &file) {
 }
 
 bool create_directory(const std::filesystem::path &directory) {
-  return std::filesystem::create_directories(directory);
+  try {
+    return std::filesystem::create_directories(directory);
+  } catch (const std::filesystem::filesystem_error &ex) {
+    std::cerr << "Caught standard filesystem error!\n";
+    std::cerr << "What:  " << ex.what() << '\n'; // Human-readable error message
+    std::cerr << "Path1: " << ex.path1()
+              << '\n'; // The path that caused the failure
+    return false;
+  }
 }
 
 bool directory_exists(const std::filesystem::path &directory) {
@@ -135,61 +122,6 @@ void copy_folder(const std::filesystem::path &src,
   std::filesystem::copy(src, target,
                         std::filesystem::copy_options::overwrite_existing |
                             std::filesystem::copy_options::recursive);
-}
-
-bool file_exists(const std::wstring &file) {
-  return std::ifstream(file).good();
-}
-
-bool write_file(const std::wstring &file, const std::string &data,
-                const bool append) {
-  const auto pos = file.find_last_of(L"/\\");
-  if (pos != std::string::npos) {
-    create_directory(file.substr(0, pos));
-  }
-
-  std::ofstream stream(file, std::ios::binary | std::ofstream::out |
-                                 (append ? std::ofstream::app : 0));
-
-  if (stream.is_open()) {
-    stream.write(data.data(), static_cast<std::streamsize>(data.size()));
-    stream.flush();
-    stream.close();
-    return true;
-  }
-
-  return false;
-}
-
-std::string read_file(const std::wstring &file) {
-  std::string data;
-  read_file(file, &data);
-  return data;
-}
-
-bool read_file(const std::wstring &file, std::string *data) {
-  if (!data)
-    return false;
-  data->clear();
-
-  if (file_exists(file)) {
-    std::ifstream stream(file, std::ios::binary);
-    if (!stream.is_open())
-      return false;
-
-    stream.seekg(0, std::ios::end);
-    const std::streamsize size = stream.tellg();
-    stream.seekg(0, std::ios::beg);
-
-    if (size > -1) {
-      data->resize(static_cast<uint32_t>(size));
-      stream.read(data->data(), size);
-      stream.close();
-      return true;
-    }
-  }
-
-  return false;
 }
 
 std::size_t file_size(const std::wstring &file) {
@@ -229,16 +161,12 @@ list_files(const std::filesystem::path &directory, const bool recursive,
 
 bool write_file_executable(const std::filesystem::path &file,
                            const std::string &data) {
-  return write_file_executable(file.wstring(), data);
-}
-
-bool write_file_executable(const std::wstring &file, const std::string &data) {
   HANDLE hFile = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
   if (hFile == INVALID_HANDLE_VALUE) {
     const DWORD error = GetLastError();
-    OutputDebugStringW((L"Failed to open file for writing: " + file +
+    OutputDebugStringW((L"Failed to open file for writing: " + file.wstring() +
                         L", error: " + std::to_wstring(error) + L"\n")
                            .c_str());
     return false;
@@ -250,8 +178,8 @@ bool write_file_executable(const std::wstring &file, const std::string &data) {
 
   if (!success || bytesWritten != data.size()) {
     const DWORD error = GetLastError();
-    OutputDebugStringW((L"Failed to write file: " + file + L", error: " +
-                        std::to_wstring(error) + L", written: " +
+    OutputDebugStringW((L"Failed to write file: " + file.wstring() +
+                        L", error: " + std::to_wstring(error) + L", written: " +
                         std::to_wstring(bytesWritten) + L"/" +
                         std::to_wstring(data.size()) + L"\n")
                            .c_str());

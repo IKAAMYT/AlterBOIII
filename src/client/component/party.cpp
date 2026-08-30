@@ -1,7 +1,7 @@
-#include "../std_include.hpp"
-#include "loader/component_loader.hpp"
-#include "../game/game.hpp"
-#include "../game/utils.hpp"
+#include <std_include.hpp>
+#include <loader/component_loader.hpp>
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 #include "party.hpp"
 #include "auth.hpp"
@@ -11,7 +11,6 @@
 #include "workshop.hpp"
 #include "profile_infos.hpp"
 #include "friends.hpp"
-#include "steam_proxy.hpp"
 #include "toast.hpp"
 
 #include <game/utils.hpp>
@@ -21,10 +20,13 @@
 #include <utils/cryptography.hpp>
 #include <utils/concurrency.hpp>
 
-#include "game/impl/cl/cl.hpp"
+#include <game/impl/cl/cl.hpp>
 
 namespace party {
+game::EngineDependentDvarMut cl_connected_to_dedi;
 namespace {
+constexpr uint16_t default_server_port = 27017;
+
 std::atomic_bool is_connecting_to_dedi{false};
 game::net::netadr_t connect_host{{}, {}, game::net::NA_BAD, {}};
 
@@ -32,10 +34,23 @@ std::mutex hostname_mutex;
 std::string cached_server_hostname;
 int cached_server_max_clients = 0;
 
-void update_dedi_dvar(bool on_dedi) {
-  game::Dvar_SetFromStringByName("cl_connected_to_dedi", on_dedi ? "1" : "0",
-                                 true);
+std::string normalize_connect_address(std::string address) {
+  utils::string::trim(address);
+
+  const size_t separator = address.find(':');
+  const std::string host = address.substr(0, separator);
+  if (utils::string::to_lower(host) == "localhost") {
+    address.replace(0, host.size(), "127.0.0.1");
+  }
+
+  if (separator == std::string::npos) {
+    address.append(":" + std::to_string(default_server_port));
+  }
+
+  return address;
 }
+
+void update_dedi_dvar(bool on_dedi) { cl_connected_to_dedi.set(on_dedi); }
 
 struct server_query {
   bool sent{false};
@@ -92,6 +107,27 @@ void launch_mode(const game::eModes mode) {
       scheduler::main);
 }
 
+bool ensure_networkmode_online() {
+  using namespace game;
+  using namespace game::lobby;
+  switch (com::Com_SessionMode_GetNetworkMode()) {
+  case eNetworkModes::ONLINE:
+  case eNetworkModes::SYSTEMLINK:
+    switch (base::LobbyBase_GetNetworkMode()) {
+    case LobbyNetworkMode::LAN:
+    case LobbyNetworkMode::LIVE:
+      return true;
+    default:
+      break;
+    }
+  default:
+    break;
+  }
+
+  base::LobbyBase_SetNetworkMode(LobbyNetworkMode::LIVE);
+  return false;
+}
+
 void connect_to_lobby_with_mode_internal(const game::net::netadr_t &addr,
                                          const game::eModes mode,
                                          const std::string &mapname,
@@ -100,7 +136,10 @@ void connect_to_lobby_with_mode_internal(const game::net::netadr_t &addr,
                                          const std::string &mod_id,
                                          const bool was_retried = false) {
 
-  if (game::com::Com_SessionMode_IsMode(mode)) {
+  const bool was_online = ensure_networkmode_online();
+  if (was_online && game::com::Com_SessionMode_IsMode(mode)) {
+    game::com::Com_SessionMode_SetGameMode(
+        game::eGameModes::MATCHMAKING_PLAYLIST);
 
     connect_to_lobby(
         game::com::Com_LocalClient_GetControllerIndex(game::LOCAL_CLIENT_0),
@@ -148,7 +187,7 @@ void connect_to_session(const game::net::netadr_t &addr,
     return;
   }
 
-  game::lobby::Join &join = *game::lobby::s_join;
+  game::lobby::Join &join = *game::lobby::session::s_join;
 
   game::lobby::JoinHost &host = join.hostList[0];
   memset(&host, 0, sizeof(host));
@@ -273,7 +312,7 @@ void handle_connect_query_response(const bool success,
   const std::string workshop_id = info.get("workshop_id").empty()
                                       ? info.get("usermapId")
                                       : info.get("workshop_id");
-  const std::string base_url = info.get("sv_wwwBaseURL").empty()
+  const std::string base_uri = info.get("sv_wwwBaseURL").empty()
                                    ? info.get("sv_wwwBaseUrl")
                                    : info.get("sv_wwwBaseURL");
 
@@ -296,11 +335,8 @@ void handle_connect_query_response(const bool success,
             workshop::get_usermap_publisher_id(mapname);
 
         if (workshop::check_valid_usermap_id(mapname, usermap_id, workshop_id,
-                                             base_url) &&
+                                             base_uri) &&
             workshop::check_valid_mod_id(mod_id, workshop_id)) {
-          game::com::Com_SessionMode_SetGameMode(
-              game::eGameModes::MATCHMAKING_PLAYLIST);
-
           // connect_to_session(target, hostname, xuid, mode);
           connect_to_lobby_with_mode_internal(target, mode, mapname, gametype,
                                               usermap_id, mod_id);
@@ -318,24 +354,13 @@ void handle_connect_query_response(const bool success,
       scheduler::main);
 }
 
-void connect_stub(const char *address) {
-  if (address) {
-    const game::net::netadr_t target = network::address_from_string(address);
-    if (target.type == game::net::NA_BAD) {
-      printf("Connect failed: invalid address \"%s\"\n", address);
-      toast::show("Connect failed", "Invalid address",
-                  "t7_icon_connect_overlays");
-      return;
-    }
-
-    connect_host = target;
-    toast::show("Connecting", address, "t7_icon_connect_overlays");
-  }
+void connect_finish(const game::net::netadr_t &target, const char *address) {
+  connect_host = target;
 
   profile_infos::clear_profile_infos();
 
   if (address) {
-    std::string game_info = friends::get_friend_game_info_by_address(address);
+    std::string game_info = friends::get_friend_game_info_by_address(target);
     if (!game_info.empty()) {
       std::vector<std::string> parts = utils::string::split(game_info, '|');
       if (parts.size() >= 4) {
@@ -346,17 +371,14 @@ void connect_stub(const char *address) {
         std::string mod_id = parts.size() >= 5 ? parts[4] : "";
 
         if (!mapname.empty() && !gametype.empty()) {
-
           scheduler::once(
-              [=] {
+              [=]() {
                 std::string usermap_id =
                     workshop::get_usermap_publisher_id(mapname);
-                game::com::Com_SessionMode_SetGameMode(
-                    game::eGameModes::MATCHMAKING_PLAYLIST);
                 connect_to_lobby_with_mode_internal(
                     connect_host, mode, mapname, gametype, usermap_id, mod_id);
               },
-              scheduler::main);
+              scheduler::pipeline::main);
           return;
         }
       }
@@ -364,6 +386,57 @@ void connect_stub(const char *address) {
   }
 
   query_server(connect_host, handle_connect_query_response);
+}
+
+void connect_stub(const char *address) {
+  if (address) {
+    const std::string address_copy = normalize_connect_address(address);
+
+    if (const auto friend_id = friends::find_browser_route(address_copy)) {
+      if (!friends::connect_to_friend(friend_id))
+        toast::show("Friend unavailable", "No joinable match was found",
+                    "t7_icon_connect_overlays");
+      return;
+    }
+
+    if (address_copy == "0.0.0.0" || address_copy.starts_with("0.0.0.0:")) {
+      toast::show("Friend unavailable",
+                  "Friend is offline or their party is closed",
+                  "t7_icon_connect_overlays");
+      return;
+    }
+
+    toast::show("Connecting", address_copy, "t7_icon_connect_overlays");
+
+    network::resolvedAddrCallback_t resolveCb =
+        [address_copy](game::net::netadr_t target) -> void {
+      scheduler::once(
+          [address_copy, target] {
+            if (target.type == game::net::NA_BAD) {
+              printf("Connect failed: invalid address \"%s\"\n",
+                     address_copy.c_str());
+              toast::show("Connect failed", "Invalid address",
+                          "t7_icon_connect_overlays");
+              return;
+            }
+
+            if (network::is_ip_address(target) &&
+                (target.addr == 0 || target.port == 0)) {
+              toast::show("Friend unavailable",
+                          "Friend is offline or their party is closed",
+                          "t7_icon_connect_overlays");
+              return;
+            }
+
+            connect_finish(target, address_copy.c_str());
+          },
+          scheduler::main);
+    };
+    // Resolve the address on a background thread.
+    network::address_from_string_async(address_copy, resolveCb);
+  } else {
+    connect_finish(connect_host, nullptr);
+  }
 }
 
 void send_server_query(server_query &query) {
@@ -408,38 +481,44 @@ void handle_info_response(const game::net::netadr_t &target,
 void cleanup_queried_servers() {
   std::vector<server_query> removed_queries{};
 
-  get_server_queries().access([&](std::vector<server_query> &server_queries) {
-    size_t sent_queries = 0;
+  if (game::com::Com_IsRunningUILevel()) {
+    get_server_queries().access([&](std::vector<server_query> &server_queries) {
+      size_t sent_queries = 0;
 
-    const std::chrono::high_resolution_clock::time_point now =
-        std::chrono::high_resolution_clock::now();
-    for (std::vector<server_query>::iterator i = server_queries.begin();
-         i != server_queries.end();) {
-      if (!i->sent) {
-        if (++sent_queries < 40) {
-          send_server_query(*i);
+      const std::chrono::high_resolution_clock::time_point now =
+          std::chrono::high_resolution_clock::now();
+      for (std::vector<server_query>::iterator i = server_queries.begin();
+           i != server_queries.end();) {
+        if (!i->sent) {
+          if (++sent_queries < 40) {
+            send_server_query(*i);
+          }
+
+          ++i;
+          continue;
         }
 
-        ++i;
-        continue;
-      }
+        if ((now - i->query_time) < 1s) {
+          ++i;
+          continue;
+        }
 
-      if ((now - i->query_time) < 1s) {
-        ++i;
-        continue;
+        removed_queries.emplace_back(std::move(*i));
+        i = server_queries.erase(i);
       }
+    });
 
-      removed_queries.emplace_back(std::move(*i));
-      i = server_queries.erase(i);
+    const utils::info_string empty{};
+    for (const server_query &query : removed_queries) {
+      query.callback(false, query.host, empty, 0);
     }
-  });
-
-  const utils::info_string empty{};
-  for (const server_query &query : removed_queries) {
-    query.callback(false, query.host, empty, 0);
   }
 }
 } // namespace
+
+void connect(const game::net::netadr_t &target) {
+  connect_finish(target, nullptr);
+}
 
 void query_server(const game::net::netadr_t &host, query_callback callback) {
   server_query query{};
@@ -478,13 +557,7 @@ void join_session(const game::net::netadr_t &addr, const std::string &hostname,
   connect_to_session(addr, hostname, xuid, mode);
 }
 
-uint16_t get_local_port() {
-  const game::dvar_t *net_port = game::get_dvar("net_port");
-  if (net_port) {
-    return static_cast<uint16_t>(game::get_dvar_uint(net_port));
-  }
-  return 3074; // BO3 default
-}
+uint16_t get_local_port() { return game::port(); }
 
 std::string get_server_hostname() {
   std::lock_guard lock(hostname_mutex);
@@ -504,9 +577,9 @@ void clear_server_info() {
 
 struct component final : client_component {
   void post_unpack() override {
-    (void)game::register_dvar_bool("cl_connected_to_dedi", false,
-                                   game::DVAR_NONE,
-                                   "True when connected to a dedicated server");
+    cl_connected_to_dedi =
+        game::register_dvar_bool("cl_connected_to_dedi", false, game::DVAR_NONE,
+                                 "True when connected to a dedicated server");
 
     utils::hook::jump(0x141EE5FE0_g, &connect_stub);
 

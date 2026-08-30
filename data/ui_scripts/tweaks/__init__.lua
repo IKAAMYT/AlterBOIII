@@ -10,12 +10,54 @@ pcall(function()
 end)
 
 if isPrivateGame then
+  local tweakNames = {
+    g_speed = "Vitesse de déplacement",
+    bg_gravity = "Gravité",
+    player_sustainAmmo = "Munitions infinies",
+    timescale = "Vitesse de jeu",
+    cg_drawGun = "Weapon Model",
+    r_fog = "Fog",
+    cg_fov_default = "Champ de vision",
+    cg_fovScale = "Échelle FOV",
+  }
+
+  local function showTweakToast(dvarName, value)
+    pcall(function()
+      if CoD.OverlayUtility and CoD.OverlayUtility.ShowToast then
+        local label = tweakNames[dvarName] or dvarName
+        CoD.OverlayUtility.ShowToast(
+          "DefaultState",
+          "RÉGLAGES DE JEU",
+          label .. ": " .. tostring(value),
+          "t7_icon_info_overlays_bkg"
+        )
+      end
+    end)
+  end
+
+  local lastTweakValues = {}
+  for dvarName, _ in pairs(tweakNames) do
+    pcall(function()
+      lastTweakValues[dvarName] = tostring(Engine.DvarString(nil, dvarName))
+    end)
+  end
+
+  local function showTweakToastIfChanged(dvarName, value)
+    local normalizedValue = tostring(value)
+    local previousValue = lastTweakValues[dvarName]
+    lastTweakValues[dvarName] = normalizedValue
+    if previousValue ~= nil and previousValue ~= normalizedValue then
+      showTweakToast(dvarName, value)
+    end
+  end
+
   local function updateDvar(f1_arg0, f1_arg1, f1_arg2, dvarName, f1_arg4)
     UpdateInfoModels(f1_arg1)
     local val = f1_arg1.value
     pcall(function()
       Engine.Exec(f1_arg2, dvarName .. " " .. tostring(val))
     end)
+    showTweakToastIfChanged(dvarName, val)
   end
 
   DataSources.BoiiiGameTweaks = DataSourceHelpers.ListSetup("BoiiiGameTweaks", function(controller)
@@ -28,7 +70,7 @@ if isPrivateGame then
     end)
     for _, val in ipairs({ 100, 150, 190, 250, 300, 400, 500, 800 }) do
       table.insert(speedOptions, {
-        option = val == 190 and "190 (Default)" or tostring(val),
+        option = val == 190 and "190 (défaut)" or tostring(val),
         value = val,
         default = val == currentSpeed,
       })
@@ -48,23 +90,23 @@ if isPrivateGame then
     )
 
     local gravityOptions = {}
-    local currentGravity = 800
+    local currentGravité = 800
     pcall(function()
-      currentGravity = Engine.DvarInt(nil, "bg_gravity")
+      currentGravité = Engine.DvarInt(nil, "bg_gravity")
     end)
     for _, val in ipairs({ 50, 100, 200, 400, 800, 1200, 1600, 2000 }) do
       table.insert(gravityOptions, {
-        option = val == 800 and "800 (Default)" or val <= 100 and val .. " (Moon)" or tostring(val),
+        option = val == 800 and "800 (défaut)" or val <= 100 and val .. " (Moon)" or tostring(val),
         value = val,
-        default = val == currentGravity,
+        default = val == currentGravité,
       })
     end
     table.insert(
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Gravity",
-        "Lower = floaty, higher = heavy.",
+        "Gravité",
+        "Faible = flottant, élevée = lourd.",
         "GameTweaks_gravity",
         "bg_gravity",
         gravityOptions,
@@ -78,7 +120,7 @@ if isPrivateGame then
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
         "Munitions infinies",
-        "Ne jamais être à court de munitions.",
+        "Ne manquez jamais de munitions.",
         "GameTweaks_infiniteammo",
         "player_sustainAmmo",
         {
@@ -94,15 +136,15 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Vitesse du jeu",
+        "Vitesse de jeu",
         "Accélère ou ralentit le jeu.",
         "GameTweaks_timescale",
         "timescale",
         {
-          { option = "0.25x (Slow Mo)", value = 0.25 },
-          { option = "0.5x (Half Speed)", value = 0.5 },
+          { option = "0.25x (Ralenti)", value = 0.25 },
+          { option = "0.5x (Demi-vitesse)", value = 0.5 },
           { option = "1x (Normal)", value = 1, default = true },
-          { option = "1.5x (Fast)", value = 1.5 },
+          { option = "1.5x (Rapide)", value = 1.5 },
           { option = "2x (Double)", value = 2 },
           { option = "4x (Chaos)", value = 4 },
         },
@@ -115,13 +157,13 @@ if isPrivateGame then
       t,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Masquer l'arme",
-        "Masque le modèle de l'arme à l'écran.",
+        "Masquer le modèle d'arme",
+        "Cache l'arme à l'écran.",
         "GameTweaks_drawgun",
         "cg_drawGun",
         {
-          { option = "Show (Default)", value = 1, default = true },
-          { option = "Hide", value = 0 },
+          { option = "Affiché (défaut)", value = 1, default = true },
+          { option = "Masqué", value = 0 },
         },
         nil,
         updateDvar
@@ -137,7 +179,7 @@ if isPrivateGame then
         "GameTweaks_fog",
         "r_fog",
         {
-          { option = "Fog On (Default)", value = 1, default = true },
+          { option = "Brouillard activé (défaut)", value = 1, default = true },
           { option = "Brouillard désactivé", value = 0 },
         },
         nil,
@@ -153,7 +195,7 @@ if isPrivateGame then
     end)
     for fov = 65, 120, 5 do
       table.insert(fovOptions, {
-        option = fov == 80 and "80 (Default)" or tostring(fov),
+        option = fov == 80 and "80 (défaut)" or tostring(fov),
         value = fov,
         default = fov == currentFov,
       })
@@ -163,7 +205,7 @@ if isPrivateGame then
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
         "Champ de vision",
-        "Adjust your field of view (65-120).",
+        "Réglez votre champ de vision (65-120).",
         "GameTweaks_fov",
         "cg_fov_default",
         fovOptions,
@@ -172,11 +214,11 @@ if isPrivateGame then
       )
     )
 
-    -- FOV Scale
+    -- Échelle FOV
     local fovScaleOptions = {}
     for _, s in ipairs({ 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.5, 2.0 }) do
       table.insert(fovScaleOptions, {
-        option = s == 1.0 and "1.0 (Default)" or tostring(s),
+        option = s == 1.0 and "1.0 (défaut)" or tostring(s),
         value = s,
         default = s == 1.0,
       })
@@ -186,7 +228,7 @@ if isPrivateGame then
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
         "Échelle FOV",
-        "Multiplier for ADS/zoom FOV. 1.0 = default.",
+        "Multiplicateur du FOV ADS/zoom. 1.0 = défaut.",
         "GameTweaks_fovscale",
         "cg_fovScale",
         fovScaleOptions,
@@ -194,6 +236,7 @@ if isPrivateGame then
         function(f1_arg0, f1_arg1, f1_arg2, dvarName, f1_arg4)
           UpdateInfoModels(f1_arg1)
           Engine.SetDvar(dvarName, f1_arg1.value)
+          showTweakToastIfChanged(dvarName, f1_arg1.value)
         end
       )
     )
@@ -207,7 +250,6 @@ if isPrivateGame then
     pcall(require, "ui.uieditor.widgets.StartMenu.StartMenu_Options_Slider_Control_Item")
     pcall(require, "ui.uieditor.widgets.Lobby.Common.FE_FocusBarContainer")
     pcall(require, "ui.uieditor.widgets.GameSettings.GameSettings_ChangedIndicator")
-    pcall(require, "ui.uieditor.widgets.Controls.Slider_Small")
     pcall(require, "ui.uieditor.widgets.StartMenu.StartMenu_Options_Slider")
 
     local SliderWidget = CoD.Slider_Small or CoD.StartMenu_Options_Slider
@@ -244,10 +286,10 @@ if isPrivateGame then
       local frame = CoD.GenericMenuFrame.new(self, controller)
       frame:setLeftRight(true, true, 0, 0)
       frame:setTopBottom(true, true, 0, 0)
-      frame.titleLabel:setText(Engine.Localize("AJUSTEMENTS"))
+      frame.titleLabel:setText(Engine.Localize("RÉGLAGES DE JEU"))
       pcall(function()
         frame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-          Engine.Localize("AJUSTEMENTS")
+          Engine.Localize("RÉGLAGES DE JEU")
         )
       end)
       frame:setModel(self.buttonModel, controller)

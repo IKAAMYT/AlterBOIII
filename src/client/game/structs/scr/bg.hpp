@@ -4,7 +4,6 @@
 #include "core.hpp"
 #include "../asm.hpp"
 namespace game {
-
 namespace scr {
 namespace bg {
 struct bgsClientFieldCallbacks_t {
@@ -37,10 +36,10 @@ struct bgsAnim_t {
 };
 
 struct bgs_clientfieldapi_t {
-  void (*CompareHashToGameState)(uint32_t);
-  bool (*AllowVersionReRegistration)(void);
-  bool (*FieldVersionAllowsRegistration)(clientField_t *, uint32_t);
-  bool (*ServerVersionAllowsRegistration)(uint32_t);
+  fastcallPtr_t<void(uint32_t)> CompareHashToGameState;
+  fastcallPtr_t<bool(void)> AllowVersionReRegistration;
+  fastcallPtr_t<bool(clientField_t *, uint32_t)> FieldVersionAllowsRegistration;
+  fastcallPtr_t<bool(uint32_t)> ServerVersionAllowsRegistration;
 };
 
 } // namespace bg

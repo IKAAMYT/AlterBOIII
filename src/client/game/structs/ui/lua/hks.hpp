@@ -1,12 +1,11 @@
 #pragma once
 
-#include "../../core.hpp"
-#include "../../func.hpp"
-#include "../../quake/core.hpp"
+#include <game/structs/core.hpp>
+#include <structs/func.hpp>
+#include <game/structs/quake/core.hpp>
+#include <game/ptr.hpp>
 
 namespace game {
-size_t select(const size_t client_val, const size_t server_val);
-size_t select(const void *client_val, const void *server_val);
 
 namespace ui {
 namespace lua {
@@ -246,19 +245,21 @@ typedef uint64_t hksSize;
 typedef int32_t HksGcCost;
 typedef void *hks_fixedheap;
 
-typedef fastcall_t<void *(void *userData, void *ptr, size_t osize,
-                          size_t nsize)>
+typedef fastcallPtr_t<void *(void *userData, void *ptr, size_t osize,
+                             size_t nsize)>
     lua_Alloc;
 typedef fastcall_t<hksInt32(lua_State *s)> lua_CFunction;
-typedef fastcall_t<char *(lua_State *s, void *data, size_t *size)> lua_Reader;
-typedef fastcall_t<void(lua_State *s, const char *fmt, ...)> HksLogFunc;
-typedef fastcall_t<void(lua_State *s, size_t requestSize)>
+typedef fastcallPtr_t<char *(lua_State *s, void *data, size_t *size)>
+    lua_Reader;
+typedef fastcallPtr_t<void(lua_State *s, const char *fmt, ...)> HksLogFunc;
+typedef fastcallPtr_t<void(lua_State *s, size_t requestSize)>
     HksEmergencyGCFailFunc;
-typedef fastcall_t<size_t(hks_fixedheap heap, size_t request)> hks_outofmemory;
-typedef fastcall_t<int32_t(const char *filename, int32_t lua_line)>
+typedef fastcallPtr_t<size_t(hks_fixedheap heap, size_t request)>
+    hks_outofmemory;
+typedef fastcallPtr_t<int32_t(const char *filename, int32_t lua_line)>
     hks_debug_map;
-typedef fastcall_t<void(lua_State *s, int64_t nargs, int32_t nresults,
-                        const hksInstruction *pc)>
+typedef fastcallPtr_t<void(lua_State *s, int64_t nargs, int32_t nresults,
+                           const hksInstruction *pc)>
     Hkslua_Caller;
 
 typedef hksInt32 lua_Integer;
@@ -268,7 +269,7 @@ struct GenericChunkHeader {
   hksSize m_flags;
 };
 
-struct ChunkHeader : GenericChunkHeader {
+struct ChunkHeader : public GenericChunkHeader {
   ChunkHeader *m_next;
 };
 ASSERT_SIZE(ChunkHeader, 0x10);
@@ -450,35 +451,18 @@ union hksInstruction {
 
   inline constexpr hksInt32 OpSBx() const { return opBx - 0xFFFF; }
 
-  constexpr hksInstruction() noexcept = default;
-  constexpr hksInstruction(const hksInstruction &) noexcept = default;
-  constexpr hksInstruction(hksInstruction &&) noexcept = default;
-
-  constexpr hksInstruction(bool b) noexcept : code(b ? 1 : 0) {}
-
-  // Implicit conversion from all standard integer types
-  template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-  constexpr hksInstruction(T val) noexcept : code(static_cast<int32_t>(val)) {}
-
-  constexpr operator bool() const noexcept { return code != 0; }
+  inline constexpr operator bool() const noexcept { return code != 0; }
 
   template <typename T, typename = std::enable_if_t<std::is_integral_v<T> &&
                                                     !std::is_same_v<T, bool>>>
-  constexpr operator T() const noexcept {
+  inline constexpr operator T() const noexcept {
     return static_cast<T>(code);
   }
-
-  constexpr hksInstruction &
-  operator=(const hksInstruction &) noexcept = default;
-  constexpr hksInstruction &operator=(hksInstruction &&) noexcept = default;
 
   constexpr bool operator!() const noexcept { return code == 0; }
 };
 ASSERT_SIZE(hksInstruction, sizeof(hksUint32));
-static_assert(std::is_standard_layout_v<hksInstruction>,
-              "hksInstruction must be standard layout!");
-static_assert(std::is_trivially_copyable_v<hksInstruction>,
-              "hksInstruction must be trivially copyable!");
+ASSERT_CPP03_POD(hksInstruction);
 #pragma pack(push, 1)
 struct CallStack {
   struct ActivationRecord {
@@ -497,10 +481,11 @@ struct CallStack {
   hksInt32 m_hook_level;
   uint8_t _padding2C[4];
 
-  static HksRegister *functionCall(hks::CallStack *callstack, lua_State *s,
-                                   hksInt32 nresults, HksObject *arg_end,
-                                   HksObject *stackTop,
-                                   const hksInstruction *instruction) {
+  static inline HksRegister *functionCall(hks::CallStack *callstack,
+                                          lua_State *s, hksInt32 nresults,
+                                          HksObject *arg_end,
+                                          HksObject *stackTop,
+                                          const hksInstruction *instruction) {
     using funcType = decltype(functionCall);
     funcType *functionCallImpl =
         reinterpret_cast<funcType *>(game::select(0x141D362A0, 0x1403DF640));
@@ -593,7 +578,7 @@ struct lua_Debug {
   hksInt32 is_tail_call;
 };
 
-using lua_function = fastcall_t<hksInt32(lua_State *s)>;
+using lua_function = fastcallPtr_t<hksInt32(lua_State *s)>;
 
 struct luaL_Reg {
   const char *name;
@@ -626,7 +611,7 @@ struct MetaTable {
 };
 
 #pragma pack(push, 1)
-struct HashTable : ChunkHeader {
+struct HashTable : public ChunkHeader {
   struct Node {
     HksObject m_key;
     HksObject m_value;
@@ -642,6 +627,7 @@ struct HashTable : ChunkHeader {
   uint8_t _padding34[4];
   Node *m_freeNode;
 
+  inline constexpr HashTable() noexcept = default;
   static HksRegister *getByString(HashTable *self, HksRegister *retstr,
                                   const HksRegister *key) {
     using funcType = decltype(getByString);
@@ -723,7 +709,12 @@ struct HashTable : ChunkHeader {
 ASSERT_SIZE(HashTable, 0x40);
 static_assert(std::is_trivially_copyable_v<HashTable>,
               "HashTable must be trivially copyable!");
-
+static_assert(std::is_trivially_constructible_v<HashTable>,
+              "HashTable must be trivially constructible!");
+static_assert(std::is_trivially_destructible_v<HashTable>,
+              "HashTable must be trivially destructible!");
+static_assert(std::is_trivially_copy_constructible_v<HashTable>,
+              "HashTable must be trivially copy constructible!");
 #pragma pack(pop)
 
 struct cclosure : ChunkHeader {
@@ -931,7 +922,7 @@ struct GarbageCollector {
   hksSize m_emergencyMemorySize;
   bool m_stopped;
   uint8_t _padding131[7];
-  lua_CFunction m_gcPolicy;
+  lua_CFunction *m_gcPolicy;
   hksSize m_pauseTriggerMemoryUsage;
   hksInt32 m_stepTriggerCountdown;
   hksUint32 m_stringTableIndex;
@@ -1131,7 +1122,7 @@ struct HksGlobal {
   RuntimeProfileData m_runProfilerData;
   uint8_t _unknown558[16];
   HksCompilerSettings m_compilerSettings;
-  lua_CFunction m_panicFunction;
+  lua_CFunction *m_panicFunction;
   plus::LuaObject *m_luaplusObjectList;
   int32_t m_heapAssertionFrequency;
   int32_t m_heapAssertionCount;
@@ -1218,7 +1209,7 @@ struct HksStateSettings {
   HksEmergencyGCFailFunc m_emergencyGCFailFunction;
   lua_Alloc m_allocator;
   void *m_allocatorData;
-  lua_CFunction m_panicFunction;
+  lua_CFunction *m_panicFunction;
   HksLogFunc m_logFunction;
   const char *m_name;
   hksUint32 m_initialRegistrySize;
@@ -1230,7 +1221,7 @@ struct HksStateSettings {
   hks::Debugger *m_debugObject;
   int32_t m_heapAssertionFrequency;
   uint8_t _padding7C[4];
-  lua_CFunction m_gcPolicy;
+  lua_CFunction *m_gcPolicy;
   HksBytecodeSharingMode m_bytecodeSharingMode;
   HksBytecodeEndianness m_bytecodeDumpEndianness;
   hksUint32 m_gcWeakStackSize;

@@ -3,13 +3,12 @@
 #include "gsc_lexer.hpp"
 #include "gsc_parser.hpp"
 #include "gsc_emitter.hpp"
-#include "game/game.hpp"
+#include <game/game.hpp>
 #include <utils/nt.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <regex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -35,13 +34,14 @@ resolve_insert_file(const std::string &insert_path,
       c = '/';
 
   // 1) Relative to source file + walk up parents
-  auto src_dir = std::filesystem::path(source_file).parent_path();
-  auto candidate = src_dir / norm_path;
-  auto result = try_read_file(candidate);
+  const std::filesystem::path src_dir =
+      std::filesystem::path(source_file).parent_path();
+  std::filesystem::path candidate = src_dir / norm_path;
+  std::string result = try_read_file(candidate);
   if (!result.empty())
     return {result, candidate.generic_string()};
 
-  auto parent = src_dir;
+  std::filesystem::path parent = src_dir;
   for (int depth = 0; depth < 10 && parent.has_parent_path(); depth++) {
     parent = parent.parent_path();
     candidate = parent / norm_path;
@@ -52,7 +52,8 @@ resolve_insert_file(const std::string &insert_path,
 
   try {
     // 2) AppData: %localappdata%/boiii/data/ and data/scripts/
-    const auto appdata_data = game::get_appdata_path() / "data";
+    const std::filesystem::path appdata_data =
+        game::get_appdata_path() / "data";
     candidate = appdata_data / norm_path;
     result = try_read_file(candidate);
     if (!result.empty())
@@ -64,7 +65,8 @@ resolve_insert_file(const std::string &insert_path,
       return {result, candidate.generic_string()};
 
     // 3) Game folder: boiii/ and boiii/scripts/
-    const auto host_boiii = utils::nt::library{}.get_folder() / "boiii";
+    const std::filesystem::path host_boiii =
+        utils::nt::library{}.get_folder() / "boiii";
     candidate = host_boiii / norm_path;
     result = try_read_file(candidate);
     if (!result.empty())
@@ -91,7 +93,7 @@ std::string preprocess_impl(const std::string &source,
                             std::unordered_set<std::string> &included_files,
                             std::string &error, define_map &defines,
                             func_define_map &func_defines) {
-  auto canon = std::filesystem::path(filename).generic_string();
+  const std::string canon = std::filesystem::path(filename).generic_string();
   if (included_files.count(canon))
     return {};
   included_files.insert(canon);
@@ -103,14 +105,15 @@ std::string preprocess_impl(const std::string &source,
   };
   std::vector<cond_state> cond_stack;
 
-  auto is_skipping = [&]() -> bool {
-    for (auto &c : cond_stack)
+  const std::function<bool()> is_skipping = [&]() -> bool {
+    for (const cond_state &c : cond_stack)
       if (!c.active)
         return true;
     return false;
   };
 
-  auto is_macro_defined = [&](const std::string &name) -> bool {
+  const std::function<bool(const std::string &name)> is_macro_defined =
+      [&](const std::string &name) -> bool {
     return defines.count(name) > 0 || func_defines.count(name) > 0;
   };
 
@@ -118,7 +121,7 @@ std::string preprocess_impl(const std::string &source,
   std::string output;
   output.reserve(source.size());
   std::string line;
-  int line_number = 0;
+  int32_t line_number = 0;
 
   while (std::getline(stream, line)) {
     line_number++;
@@ -126,7 +129,7 @@ std::string preprocess_impl(const std::string &source,
       line.pop_back();
 
     // Backslash line continuation - count joined lines to preserve line numbers
-    int continuation_count = 0;
+    int32_t continuation_count = 0;
     while (!line.empty() && line.back() == '\\') {
       line.pop_back();
       while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
@@ -301,7 +304,7 @@ std::string preprocess_impl(const std::string &source,
                 insert_path.back() == '\t'))
           insert_path.pop_back();
 
-        auto [file_content, resolved_path] =
+        const auto [file_content, resolved_path] =
             resolve_insert_file(insert_path, filename);
         if (!file_content.empty()) {
           std::string inserted =
@@ -312,15 +315,23 @@ std::string preprocess_impl(const std::string &source,
             output += "\n";
         } else {
           try {
-            auto appdata_scripts =
-                (game::get_appdata_path() / "data" / "scripts").string();
-            printf(
-                "^3[GSC] Warning: #insert file not found: '%s' — "
-                "download/create the .gsh headers and place them in '%s\\'\n",
-                insert_path.data(), appdata_scripts.data());
+            std::string normalized_path = insert_path;
+            std::replace(normalized_path.begin(), normalized_path.end(), '\\',
+                         '/');
+            const std::filesystem::path manual_path =
+                game::get_appdata_path() / "data" / normalized_path;
+            fprintf(stderr,
+                    "^3[GSC] Missing #insert file '%s'. Download or create the "
+                    ".gsh file and place it manually at:\n^3  %s\n",
+                    insert_path.c_str(), manual_path.string().c_str());
+            fflush(stderr);
           } catch (...) {
-            printf("^3[GSC] Warning: #insert file not found: '%s'\n",
-                   insert_path.data());
+            fprintf(stderr,
+                    "^3[GSC] Missing #insert file '%s'. Place the .gsh file "
+                    "under '%%LOCALAPPDATA%%/boiii/data' using the same "
+                    "relative path.\n",
+                    insert_path.c_str());
+            fflush(stderr);
           }
           output += "\n";
         }
@@ -359,7 +370,7 @@ std::string preprocess_impl(const std::string &source,
 
         if (after_name < processed.size() && processed[after_name] == '(') {
           size_t paren_start = after_name + 1;
-          int depth = 1;
+          int32_t depth = 1;
           size_t pi = paren_start;
           while (pi < processed.size() && depth > 0) {
             if (processed[pi] == '(')
@@ -375,7 +386,7 @@ std::string preprocess_impl(const std::string &source,
             size_t paren_end = pi + 1;
 
             std::vector<std::string> args;
-            int d = 0;
+            int32_t d = 0;
             size_t arg_start = 0;
             for (size_t ai = 0; ai <= args_str.size(); ai++) {
               if (ai == args_str.size() || (args_str[ai] == ',' && d == 0)) {
@@ -562,8 +573,8 @@ std::string preprocess(const std::string &source, const std::string &filename,
 struct addcommand_callback_entry {
   std::string command_name;
   std::string callback_expr;
-  int line;
-  int column;
+  int32_t line;
+  int32_t column;
 };
 
 std::string to_lower_copy(std::string value) {
@@ -613,7 +624,7 @@ std::string func_ref_to_source(const ast_ptr &node) {
     return node->children[0]->value + "::" + node->value;
   }
 
-  return "::" + node->value;
+  return node->value;
 }
 
 void collect_addcommand_callbacks(
@@ -625,12 +636,13 @@ void collect_addcommand_callbacks(
   }
 
   if (node->type == node_type::n_expression_stmt && !node->children.empty()) {
-    const auto &expr = node->children[0];
+    const std::shared_ptr<ast_node> &expr = node->children[0];
     if (expr && expr->type == node_type::n_call && expr->children.size() >= 2) {
       std::string call_name = to_lower_copy(expr->value);
       const bool is_local_call = expr->children[0]->value.empty();
       if (is_local_call && call_name == "addcommand") {
-        const auto &args = expr->children[1]->children;
+        const std::vector<std::shared_ptr<ast_node>> &args =
+            expr->children[1]->children;
         if (args.size() == 2) {
           if (!args[0] || args[0]->type != node_type::n_string) {
             error =
@@ -668,7 +680,7 @@ void collect_addcommand_callbacks(
     }
   }
 
-  for (const auto &child : node->children) {
+  for (const std::shared_ptr<ast_node> &child : node->children) {
     collect_addcommand_callbacks(child, entries, error);
   }
 }
@@ -710,7 +722,7 @@ std::string build_addcommand_dispatch_source(
     source += "        {\n";
     source += "            tokens = strtok(cmd, \" \");\n";
     source += "            args = __codex_addcommand_build_args(tokens);\n";
-    source += "            [[" + entry.callback_expr + "]](args);\n";
+    source += "            " + entry.callback_expr + "(args);\n";
     source += "            handled = true;\n";
     source += "        }\n";
     source += "\n";
@@ -748,7 +760,8 @@ bool append_generated_addcommand_dispatch(const ast_ptr &root,
   }
 
   std::sort(entries.begin(), entries.end(),
-            [](const auto &lhs, const auto &rhs) {
+            [](const addcommand_callback_entry &lhs,
+               const addcommand_callback_entry &rhs) {
               return lhs.command_name < rhs.command_name;
             });
 
@@ -758,7 +771,7 @@ bool append_generated_addcommand_dispatch(const ast_ptr &root,
     return true;
   }
 
-  auto generated_lex = tokenize(generated_source);
+  const lexer_result generated_lex = tokenize(generated_source);
   if (!generated_lex.success) {
     error = "internal addcommand callback generation failed while tokenizing "
             "for '" +
@@ -766,7 +779,7 @@ bool append_generated_addcommand_dispatch(const ast_ptr &root,
     return false;
   }
 
-  auto generated_parse = parse(generated_lex.tokens);
+  const parse_result generated_parse = parse(generated_lex.tokens);
   if (!generated_parse.success) {
     error =
         "internal addcommand callback generation failed while parsing for '" +
@@ -803,7 +816,7 @@ compile_result compile(const std::string &source, const std::string &filename) {
   }
 
   // Step 1: Tokenize
-  auto lex_result = tokenize(preprocessed);
+  const lexer_result lex_result = tokenize(preprocessed);
   if (!lex_result.success) {
     result.errors.push_back({lex_result.error, filename, lex_result.error_line,
                              lex_result.error_column});
@@ -811,7 +824,7 @@ compile_result compile(const std::string &source, const std::string &filename) {
   }
 
   // Step 2: Parse
-  auto parse_res = parse(lex_result.tokens);
+  const parse_result parse_res = parse(lex_result.tokens);
   if (!parse_res.success) {
     result.errors.push_back({parse_res.error, filename, parse_res.error_line,
                              parse_res.error_column});
@@ -826,7 +839,7 @@ compile_result compile(const std::string &source, const std::string &filename) {
   }
 
   // Step 3: Emit bytecode
-  auto emit_result = emit(parse_res.root, filename);
+  emitter_result emit_result = emit(parse_res.root, filename);
   if (!emit_result.success) {
     result.errors.push_back({emit_result.error, filename,
                              emit_result.error_line, emit_result.error_column});
@@ -835,7 +848,8 @@ compile_result compile(const std::string &source, const std::string &filename) {
 
   result.success = true;
   result.bytecode = std::move(emit_result.data);
-  for (auto &hn : emit_result.hash_names)
+  result.gdb = std::move(emit_result.gdb);
+  for (const gsc::hash_name_pair &hn : emit_result.hash_names)
     result.hash_names.push_back(
         {hn.hash, std::move(hn.name), hn.line, hn.params});
   result.replacefuncs = std::move(emit_result.replacefuncs);

@@ -1,4 +1,4 @@
-#include "../../../std_include.hpp"
+#include <std_include.hpp>
 
 #include <cstdint>
 #include <cstring>
@@ -6,13 +6,14 @@
 #include <cstdio>
 #include <algorithm>
 
+#include "hash.hpp"
 #include "rapidjson/document.h"
 
 #include "ugc.hpp"
 
-#include "../../../steam/steam.hpp"
-#include "../../../../common/utils/string.hpp"
-#include "../../../../common/str.hpp"
+#include <steam/steam.hpp>
+#include <utils/string.hpp>
+#include <str.hpp>
 
 #include "../../../component/workshop.hpp"
 
@@ -21,7 +22,7 @@ namespace ugc {
 
 WorkshopData *UGC_GetModByPublisherId(const char *publisherId) {
   if (publisherId) {
-    for (uint32_t modIdx = 0; modIdx < modsPool.count; modIdx++) {
+    for (uint32_t modIdx = 0; modIdx < modsPool.count; ++modIdx) {
       if (std::strcmp(modsPool.data[modIdx].publisherId, publisherId) == 0) {
         return &modsPool.data[modIdx];
       }
@@ -32,7 +33,7 @@ WorkshopData *UGC_GetModByPublisherId(const char *publisherId) {
 WorkshopData *UGC_GetUsermapByPublisherId(const char *publisherId) {
   if (publisherId) {
     for (uint32_t usermapIdx = 0; usermapIdx < usermapsPool.count;
-         usermapIdx++) {
+         ++usermapIdx) {
       if (std::strcmp(usermapsPool.data[usermapIdx].publisherId, publisherId) ==
           0) {
         return &usermapsPool.data[usermapIdx];
@@ -94,22 +95,14 @@ bool UGC_VerifyVersion_Impl(ZoneType zoneType, const char *publisherId,
 
 constexpr UGCHash UGC_HASH_NULLPTR = 0;
 constexpr UGCHash UGC_HASH_DJB2_INITIAL_SEED = 0x1505;
-constexpr UGCHash UGC_HASH_DJB2_CONSTANT = 33;
+constexpr UGCHash UGC_HASH_DJB2_CONSTANT = 0x21;
 UGCHash UGC_Hash(const char *str) {
   if (str) {
-    UGCHash hash = UGC_HASH_DJB2_INITIAL_SEED;
-    for (const char *c = str; *c; c++) {
-      hash =
-          static_cast<UGCHash>(std::tolower(static_cast<unsigned char>(*c))) +
-          hash * UGC_HASH_DJB2_CONSTANT;
-    }
-    return hash;
+    return djb2<UGC_HASH_DJB2_INITIAL_SEED, UGC_HASH_DJB2_CONSTANT>(str);
   }
   return UGC_HASH_NULLPTR;
 }
 
-// Post-invocation patches used in boiii which were originally applied as hooks,
-// carried over to our impl
 inline void UGC_LoadPool_Patches(ExtendedWorkshopDataPool *pool,
                                  ZoneType zoneType) {
 
@@ -117,7 +110,9 @@ inline void UGC_LoadPool_Patches(ExtendedWorkshopDataPool *pool,
     workshop::supplement_mods_from_disk();
   }
 
-  for (uint32_t i = 0; i < pool->count; i++) {
+  workshop::supplement_ugc_from_workshop(zoneType);
+
+  for (uint32_t i = 0; i < pool->count; ++i) {
     game::ugc::WorkshopData *ugc = &pool->data[i];
 
     if (ugc->internalName[0] &&
@@ -133,6 +128,7 @@ void UGC_LoadPool_Impl(ExtendedWorkshopDataPool *pool, ZoneType zoneType) {
 
   const char *cwd = sys::Sys_Cwd();
   const char *ugcContentContainerDirname;
+
   switch (zoneType) {
   case ZoneType::MOD:
     ugcContentContainerDirname = "mods";
@@ -150,18 +146,18 @@ void UGC_LoadPool_Impl(ExtendedWorkshopDataPool *pool, ZoneType zoneType) {
   snprintf(ugcContentListContainerDir, sizeof(ugcContentListContainerDir),
            "%s/%s", cwd, ugcContentContainerDirname);
   fs::PathList fileList = sys::Sys_ListFiles(ugcContentListContainerDir, "/",
-                                             nullptr, &numfiles, 0);
+                                             nullptr, &numfiles, qfalse);
 
   for (int32_t fileIdx = 0;
        fileIdx < numfiles && pool->count < EXTENDED_WORKSHOP_DATA_POOL_SIZE &&
        fileList[fileIdx] && fileList[fileIdx][0];
-       fileIdx++, pool->count++) {
+       ++fileIdx, ++pool->count) {
     fs::Path ugcDirname = fileList[fileIdx];
     WorkshopData *entry = &pool->data[pool->count];
 
-    strscpy(entry->title, ugcDirname, sizeof(entry->title));
-    strscpy(entry->internalName, ugcDirname, sizeof(entry->internalName));
-    strscpy(entry->publisherId, ugcDirname, sizeof(entry->publisherId));
+    strscpy(entry->title, ugcDirname);
+    strscpy(entry->internalName, ugcDirname);
+    strscpy(entry->publisherId, ugcDirname);
     strscpy(entry->absolutePathZoneFiles,
             // ORIGINAL:
             // utils::string::va("%s/%s/zone", ugcContentListContainerDir,
@@ -169,13 +165,10 @@ void UGC_LoadPool_Impl(ExtendedWorkshopDataPool *pool, ZoneType zoneType) {
 
             // PATCH:
             workshop::va_user_content_path(
-                "%s/%s/zone", ugcContentListContainerDir, ugcDirname),
-            sizeof(entry->absolutePathZoneFiles));
+                "%s/%s/zone", ugcContentListContainerDir, ugcDirname));
     strscpy(entry->contentPathToZoneFiles,
-            utils::string::va("%s/%s", "mods", ugcDirname),
-            sizeof(entry->contentPathToZoneFiles));
-    strscpy(entry->absolutePathContentDirectory, cwd,
-            sizeof(entry->absolutePathContentDirectory));
+            utils::string::va("%s/%s", ugcContentContainerDirname, ugcDirname));
+    strscpy(entry->absolutePathContentDirectory, cwd);
     entry->publisherIdHash = UGC_Hash(ugcDirname);
     entry->version = 1;
     entry->publisherIdInteger = 0;
@@ -184,7 +177,7 @@ void UGC_LoadPool_Impl(ExtendedWorkshopDataPool *pool, ZoneType zoneType) {
   fs::FS_FreePathList(fileList);
   if (game::is_client()) {
     for (ControllerIndex_t controllerIndex = game::CONTROLLER_INDEX_0;
-         controllerIndex <= game::CONTROLLER_INDEX_COUNT; controllerIndex++) {
+         controllerIndex <= game::CONTROLLER_INDEX_COUNT; ++controllerIndex) {
 
       ui::UI_Model_ForceNotify(pool->listModels[controllerIndex]);
     }
@@ -199,9 +192,7 @@ void UGC_LoadModsPool_Impl() {
 
   if (is_client) {
     for (game::ControllerIndex_t controllerIndex = game::CONTROLLER_INDEX_0;
-         controllerIndex != game::CONTROLLER_INDEX_COUNT;
-         controllerIndex = static_cast<game::ControllerIndex_t>(
-             static_cast<int32_t>(controllerIndex) + 1)) {
+         controllerIndex < game::CONTROLLER_INDEX_COUNT; ++controllerIndex) {
       ui::UIModelIndex modelForController =
           ui::UI_Model_GetModelForController(controllerIndex);
       if (modelForController) {
@@ -294,14 +285,13 @@ void UGC_LoadModByPublisherId_Impl(LocalClientNum_t localClientNum,
       return;
     }
 
-    strscpy(genMod.title, publisherId, sizeof(genMod.title));
-    strscpy(genMod.internalName, publisherId, sizeof(genMod.internalName));
-    strscpy(genMod.publisherId, publisherId, sizeof(genMod.publisherId));
+    strscpy(genMod.title, publisherId);
+    strscpy(genMod.internalName, publisherId);
+    strscpy(genMod.publisherId, publisherId);
     snprintf(genMod.contentPathToZoneFiles,
              sizeof(genMod.contentPathToZoneFiles), "%s/%s", "mods",
              publisherId);
-    strscpy(genMod.absolutePathContentDirectory, sys::Sys_Cwd(),
-            sizeof(genMod.absolutePathContentDirectory));
+    strscpy(genMod.absolutePathContentDirectory, sys::Sys_Cwd());
     strscpy(genMod.absolutePathZoneFiles,
             // ORIGINAL:
             // utils::string::va("%s/%s/%s/zone", sys::Sys_Cwd(), "mods",
@@ -309,8 +299,7 @@ void UGC_LoadModByPublisherId_Impl(LocalClientNum_t localClientNum,
 
             // PATCH:
             workshop::va_mods_path("%s/%s/%s/zone", sys::Sys_Cwd(), "mods",
-                                   publisherId),
-            sizeof(genMod.absolutePathZoneFiles));
+                                   publisherId));
     genMod.version = 1;
     genMod.publisherIdHash = UGC_Hash(publisherId);
     genMod.type = ZoneType::MOD;
@@ -377,7 +366,7 @@ void UGC_SetMapLoadingImage_Impl() {
     loadingImage->texture.basemap->lpVtbl->Release(
         loadingImage->texture.basemap);
     if (texture.basemap == nullptr) {
-      texture = (*gfx::loadedGfxImage.get())->texture;
+      texture = (*gfx::loadedGfxImage)->texture;
       gfx::Gfx_TexturePool_AddRef(texture, 0);
       texture.basemap->lpVtbl->AddRef(texture.basemap);
     }
@@ -404,9 +393,9 @@ class ModsUGCDetailsCallbackResult
 public:
   void Set(steam::SteamAPICall_t hApiCall, WorkshopData *result) {
 
-    typedef thiscall_t<void(ModsUGCDetailsCallbackResult * _this,
-                            steam::SteamAPICall_t hApiCall,
-                            WorkshopData * result)>
+    typedef thiscallPtr_t<void(ModsUGCDetailsCallbackResult * _this,
+                               steam::SteamAPICall_t hApiCall,
+                               WorkshopData * result)>
         SetFunc;
 
     SetFunc setImpl =
@@ -493,30 +482,25 @@ void UGC_LoadManifest_Impl(bool usermaps, bool mods,
                 targetPool->count++;
 
                 if (doc.HasMember("Title") && doc["Title"].IsString()) {
-                  strscpy(newUgcEntry->title, doc["Title"].GetString(),
-                          sizeof(newUgcEntry->title));
+                  strscpy(newUgcEntry->title, doc["Title"].GetString());
                 }
 
                 if (doc.HasMember("FolderName") &&
                     doc["FolderName"].IsString()) {
                   strscpy(newUgcEntry->internalName,
-                          doc["FolderName"].GetString(),
-                          sizeof(newUgcEntry->internalName));
+                          doc["FolderName"].GetString());
                 }
 
                 if (doc.HasMember("Description") &&
                     doc["Description"].IsString()) {
                   strscpy(newUgcEntry->description,
-                          doc["Description"].GetString(),
-                          sizeof(newUgcEntry->description));
+                          doc["Description"].GetString());
                 }
 
                 snprintf(newUgcEntry->publisherId,
-                         sizeof(newUgcEntry->publisherId), "%llu",
-                         sizeof(newUgcEntry->publisherId));
+                         sizeof(newUgcEntry->publisherId), "%llu", publisherId);
 
-                strscpy(newUgcEntry->absolutePathZoneFiles, dirPath,
-                        sizeof(newUgcEntry->absolutePathZoneFiles));
+                strscpy(newUgcEntry->absolutePathZoneFiles, dirPath);
 
                 const char *appIdPos = strstr(dirPath, APP_ID_STR);
                 if (appIdPos) {
@@ -528,8 +512,7 @@ void UGC_LoadManifest_Impl(bool usermaps, bool mods,
                   strscpy(newUgcEntry->absolutePathContentDirectory, dirPath,
                           copyLen);
 
-                  strscpy(newUgcEntry->contentPathToZoneFiles, appIdPos,
-                          sizeof(newUgcEntry->contentPathToZoneFiles));
+                  strscpy(newUgcEntry->contentPathToZoneFiles, appIdPos);
                 }
 
                 newUgcEntry->publisherIdHash =
@@ -559,6 +542,33 @@ WorkshopData *UGC_LoadUsermapByPublisherId_Impl(const char *publisherId) {
   WorkshopData *usermap = UGC_GetUsermapByPublisherId(publisherId);
   UGC_SetActiveUsermap(usermap);
   return usermap;
+}
+
+#include <cstdio>
+#include <cstdint>
+
+int32_t UGC_ZoneSourcePath_Impl(const char *name, const char *extension,
+                                int32_t size, char *buf, ZoneType zoneType,
+                                const char *publisherId) {
+  const char *cwd = sys::Sys_Cwd();
+
+  switch (zoneType) {
+  case ZoneType::OFFICIAL: {
+    return std::snprintf(buf, size, "%s/zone_source/%s%s", cwd, name,
+                         extension);
+  }
+  default: {
+    const WorkshopData *data = UGC_GetByPublisherId_Impl(zoneType, publisherId);
+
+    // Fall back to publisherId if WorkshopData is invalid or internalName is
+    // empty
+    const char *targetDir =
+        data && data->internalName[0] ? data->internalName : publisherId;
+
+    return std::snprintf(buf, size, "%s/%s/%s/zone_source/%s%s", cwd,
+                         dirname(zoneType), targetDir, name, extension);
+  }
+  }
 }
 } // namespace ugc
 } // namespace game

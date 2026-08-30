@@ -4,15 +4,25 @@
 #include <utils/io.hpp>
 #include <utils/string.hpp>
 #include <utils/http.hpp>
-#include <utils/flags.hpp>
-#include <utils/com.hpp>
 
 #include "launcher.hpp"
 #include "launcher_workshop.hpp"
 #include "html/html_window.hpp"
+#include "component/auth.hpp"
 
 #include <game/game.hpp>
-#include <version.hpp>
+
+// In case of clangd compilation
+#if __has_include(<version.h>)
+#include "version.h"
+#else
+#ifndef VERSION
+#define VERSION "0"
+#endif
+#ifndef SHORTVERSION
+#define SHORTVERSION "0"
+#endif
+#endif
 
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
@@ -31,11 +41,6 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-// AlterBO3 (IKAAM): launcher build number for the self-update system.
-// Bump this each release and set the same number in launcher_ver.txt on
-// ikaam.fr. Defined here (top of file) so it can also be shown in the title.
-#define LAUNCHER_BUILD 6
-
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
 
@@ -44,13 +49,22 @@ namespace {
 std::string human_readable_size(std::uint64_t bytes);
 std::filesystem::path get_steam_workshop_path();
 
+std::string sanitize_player_name(const std::string &name) {
+  std::string result;
+  for (const auto c : name) {
+    const auto uc = static_cast<unsigned char>(c);
+    if (uc >= 32 && uc <= 126)
+      result += c;
+  }
+  return result;
+}
+
 // AlterCOD OAuth (IKAAM): "Se connecter avec le forum". Opens a tiny local HTTP
 // server on a free loopback port, opens the forum authorization page in the
 // browser, waits for the browser to redirect to localhost/callback?code=XXX,
 // then exchanges the code for the account token via the forum. Returns
 // "token|pseudo" on success, "" on failure/timeout. This whole function only
 // runs when the user clicks the login button; nothing here executes at startup.
-// Winsock is available via std_include.hpp (ws2_32.lib already linked).
 std::string run_oauth_login() {
   WSADATA wsa;
   if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -200,14 +214,76 @@ std::string run_oauth_login() {
   return result;
 }
 
-std::string sanitize_player_name(const std::string &name) {
-  std::string result;
-  for (const auto c : name) {
-    const auto uc = static_cast<unsigned char>(c);
-    if (uc >= 32 && uc <= 126)
-      result += c;
+std::filesystem::path get_binds_file() {
+  return game::get_game_path() / "boiii_players" / "user" / "binds.cfg";
+}
+
+std::map<std::string, std::string> read_launcher_binds() {
+  std::map<std::string, std::string> binds;
+  std::string data;
+  if (!utils::io::read_file(get_binds_file(), &data))
+    return binds;
+
+  std::istringstream stream(data);
+  std::string line;
+  while (std::getline(stream, line)) {
+    utils::string::trim(line);
+    if (line.size() < 7 || _strnicmp(line.c_str(), "bind ", 5) != 0)
+      continue;
+    auto rest = line.substr(5);
+    const auto separator = rest.find(' ');
+    if (separator == std::string::npos)
+      continue;
+    auto key = utils::string::to_lower(rest.substr(0, separator));
+    auto command = rest.substr(separator + 1);
+    utils::string::trim(key);
+    utils::string::trim(command);
+    if (command.size() >= 2 && command.front() == '"' && command.back() == '"')
+      command = command.substr(1, command.size() - 2);
+    if (!key.empty() && !command.empty())
+      binds[key] = command;
   }
-  return result;
+  return binds;
+}
+
+bool valid_bind_key(const std::string &key) {
+  if (key.empty() || key.size() > 32)
+    return false;
+  return std::none_of(key.begin(), key.end(), [](const unsigned char c) {
+    return std::isspace(c) || c == '"' || c == ';';
+  });
+}
+
+bool valid_bind_command(const std::string &command) {
+  return !command.empty() && command.size() <= 512 &&
+         command.find_first_of("\r\n\"") == std::string::npos;
+}
+
+bool write_launcher_binds(const std::map<std::string, std::string> &binds) {
+  std::error_code ec;
+  std::filesystem::create_directories(get_binds_file().parent_path(), ec);
+  if (ec)
+    return false;
+  std::string data;
+  for (const auto &[key, command] : binds)
+    data += "bind " + key + " \"" + command + "\"\n";
+  return utils::io::write_file(get_binds_file(), data);
+}
+
+std::string launcher_binds_json() {
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  writer.StartArray();
+  for (const auto &[key, command] : read_launcher_binds()) {
+    writer.StartObject();
+    writer.Key("key");
+    writer.String(key.c_str());
+    writer.Key("command");
+    writer.String(command.c_str());
+    writer.EndObject();
+  }
+  writer.EndArray();
+  return {buffer.GetString(), buffer.GetSize()};
 }
 
 std::mutex library_list_mutex;
@@ -326,7 +402,7 @@ std::string compute_file_xxh3(const std::filesystem::path &file_path) {
 
 void verify_game_thread(const std::string &modes_csv) {
   verify_cancel_requested = false;
-  set_verify_status("Preparation de la verification...", 0.0, "");
+  set_verify_status("Preparing verification...", 0.0, "");
 
   try {
 
@@ -375,7 +451,7 @@ void verify_game_thread(const std::string &modes_csv) {
       return;
     }
 
-    set_verify_status("Chargement du manifeste...", 0.0, "Mode: " + mode_label);
+    set_verify_status("Loading manifest...", 0.0, "Mode: " + mode_label);
     std::ifstream mf(manifest_path, std::ios::binary);
     std::string manifest_str((std::istreambuf_iterator<char>(mf)),
                              std::istreambuf_iterator<char>());
@@ -384,16 +460,14 @@ void verify_game_thread(const std::string &modes_csv) {
     rapidjson::Document manifest;
     if (manifest.Parse(manifest_str.c_str()).HasParseError() ||
         !manifest.IsObject()) {
-      set_verify_status("Echec de lecture du manifeste verification.json", 0.0,
-                        "");
+      set_verify_status("Failed to parse verification.json manifest", 0.0, "");
       verify_running = false;
       return;
     }
 
     auto files_it = manifest.FindMember("files");
     if (files_it == manifest.MemberEnd() || !files_it->value.IsArray()) {
-      set_verify_status("Manifeste invalide : aucune liste de fichiers", 0.0,
-                        "");
+      set_verify_status("Invalid manifest: no files array", 0.0, "");
       verify_running = false;
       return;
     }
@@ -449,7 +523,7 @@ void verify_game_thread(const std::string &modes_csv) {
     };
     std::vector<manifest_entry> files_to_check;
 
-    set_verify_status("Filtrage des fichiers du manifeste...", 0.0,
+    set_verify_status("Filtering manifest files...", 0.0,
                       "Mode: " + mode_label);
 
     const auto &files_array = files_it->value;
@@ -530,7 +604,7 @@ void verify_game_thread(const std::string &modes_csv) {
 
     for (std::uint32_t i = 0; i < total; i++) {
       if (verify_cancel_requested) {
-        set_verify_status("Annule", 0.0, "");
+        set_verify_status("Cancelled", 0.0, "");
         verify_running = false;
         return;
       }
@@ -542,7 +616,7 @@ void verify_game_thread(const std::string &modes_csv) {
       auto slash = fname.rfind('/');
       if (slash != std::string::npos)
         fname = fname.substr(slash + 1);
-      set_verify_status("Verification (" + mode_label + ")...", pct,
+      set_verify_status("Verifying (" + mode_label + ")...", pct,
                         fname + " (" + std::to_string(i + 1) + "/" +
                             std::to_string(total) + ")");
 
@@ -610,32 +684,29 @@ void verify_game_thread(const std::string &modes_csv) {
     const std::uint32_t warn_total =
         warn_missing_count + warn_size_count + warn_hash_count;
 
-    std::string result_msg =
-        mode_label + " : " + std::to_string(total) +
-        " fichiers verifies : " + std::to_string(ok_count) + " OK";
+    std::string result_msg = mode_label + ": Verified " +
+                             std::to_string(total) +
+                             " files: " + std::to_string(ok_count) + " OK";
     if (error_total > 0) {
-      result_msg += " | ERREURS :";
+      result_msg += " | ERRORS:";
       if (missing_count > 0)
-        result_msg += " " + std::to_string(missing_count) + " manquant(s)";
+        result_msg += " " + std::to_string(missing_count) + " missing";
       if (size_mismatch_count > 0)
-        result_msg +=
-            " " + std::to_string(size_mismatch_count) + " taille incorrecte";
+        result_msg += " " + std::to_string(size_mismatch_count) + " wrong size";
       if (hash_mismatch_count > 0)
-        result_msg +=
-            " " + std::to_string(hash_mismatch_count) + " corrompu(s)";
+        result_msg += " " + std::to_string(hash_mismatch_count) + " corrupt";
     }
     if (warn_total > 0) {
-      result_msg += " | Optionnel (DLC) :";
+      result_msg += " | Optional (DLC):";
       if (warn_missing_count > 0)
-        result_msg += " " + std::to_string(warn_missing_count) + " manquant(s)";
+        result_msg += " " + std::to_string(warn_missing_count) + " missing";
       if (warn_size_count > 0)
-        result_msg +=
-            " " + std::to_string(warn_size_count) + " taille incorrecte";
+        result_msg += " " + std::to_string(warn_size_count) + " wrong size";
       if (warn_hash_count > 0)
-        result_msg += " " + std::to_string(warn_hash_count) + " corrompu(s)";
+        result_msg += " " + std::to_string(warn_hash_count) + " corrupt";
     }
     if (error_total == 0 && warn_total == 0)
-      result_msg += " - tout est bon !";
+      result_msg += " - all good!";
 
     std::vector<std::string> comp_issues;
     for (const auto &[comp_key, cs] : comp_stats) {
@@ -672,7 +743,7 @@ void verify_game_thread(const std::string &modes_csv) {
     set_verify_status(result_msg, 100.0, "Done");
 
   } catch (...) {
-    set_verify_status("Echec de la verification (reessayez)", 0.0, "");
+    set_verify_status("Verification failed (try again)", 0.0, "");
   }
   verify_running = false;
 }
@@ -979,7 +1050,7 @@ std::filesystem::path get_steam_workshop_path() {
   std::filesystem::path base(cwd);
 
   auto steamapps = base.parent_path().parent_path();
-  auto workshop_path = steamapps / "workshop" / "content" / "311210";
+  auto workshop_path = steamapps / "workshop" / "content" / game::APP_ID_STR;
   if (std::filesystem::exists(workshop_path)) {
     return workshop_path;
   }
@@ -1273,33 +1344,52 @@ std::string normalize_option_token(std::string token) {
   return token;
 }
 
-void relaunch_with_launch_options(const std::vector<std::string> &options);
+bool has_launch_option(const std::vector<std::string> &options,
+                       const std::string_view wanted) {
+  return std::ranges::any_of(options, [wanted](const std::string &option) {
+    return normalize_option_token(option) == wanted;
+  });
+}
 
-void relaunch_exe_with_launch_options(const std::string &exe_path,
+bool relaunch_with_launch_options(const std::vector<std::string> &options);
+
+bool relaunch_exe_with_launch_options(const std::string &exe_path,
                                       const std::vector<std::string> &options) {
   STARTUPINFOA startup_info;
   PROCESS_INFORMATION process_info;
   ZeroMemory(&startup_info, sizeof(startup_info));
   ZeroMemory(&process_info, sizeof(process_info));
   startup_info.cb = sizeof(startup_info);
+  char console_title[] = "ALTERBO3 V" SHORTVERSION;
+  startup_info.lpTitle = console_title;
 
   char current_dir[MAX_PATH];
   GetCurrentDirectoryA(sizeof(current_dir), current_dir);
 
   std::string command_line = "\"" + exe_path + "\"";
+  command_line += " \"-launch\"";
+
+  if (utils::flags::has_flag("noupdate") &&
+      std::find(options.begin(), options.end(), "noupdate") == options.end()) {
+    command_line += " -noupdate";
+  }
 
   for (const auto &option : options) {
     command_line += " -";
     command_line += option;
   }
 
+  const DWORD creation_flags =
+      has_launch_option(options, "noconsole") ? 0 : CREATE_NEW_CONSOLE;
   if (CreateProcessA(exe_path.c_str(), command_line.data(), nullptr, nullptr,
-                     FALSE, CREATE_NEW_CONSOLE, nullptr, current_dir,
-                     &startup_info, &process_info)) {
+                     FALSE, creation_flags, nullptr, current_dir, &startup_info,
+                     &process_info)) {
     CloseHandle(process_info.hProcess);
     CloseHandle(process_info.hThread);
-    TerminateProcess(GetCurrentProcess(), 0);
+    return true;
   }
+
+  return false;
 }
 
 bool handle_version_launch(const std::string &exe_name,
@@ -1309,18 +1399,27 @@ bool handle_version_launch(const std::string &exe_name,
     return false;
   }
 
-  // Beta is handled by the main updater upon restart
-  if (exe_name == "boiii-beta.exe") {
-    utils::properties::store("selectedVersion", "beta");
-    relaunch_with_launch_options(options);
-    return true;
+  const auto executable_name = std::filesystem::path(exe_name).filename();
+  if (executable_name.empty() || executable_name.extension() != ".exe") {
+    return false;
   }
 
-  // Specific version download
-  if (!utils::io::file_exists(exe_name)) {
+  const auto game_path = game::get_game_path();
+  const auto executable_path = game_path / "versions" / executable_name;
+  const auto refresh_beta =
+      executable_path.filename().string() == "boiii-beta.exe";
+  if (!utils::io::file_exists(executable_path)) {
+    const auto legacy_path = game_path / executable_name;
+    if (utils::io::file_exists(legacy_path)) {
+      utils::io::create_directory(executable_path.parent_path());
+      utils::io::move_file(legacy_path, executable_path);
+    }
+  }
+
+  if (refresh_beta || !utils::io::file_exists(executable_path)) {
     const auto data = utils::http::get_data(exe_url);
     if (data) {
-      utils::io::write_file(exe_name, *data);
+      utils::io::write_file(executable_path, *data);
     } else {
       game::show_error(utils::string::va("Failed to download version: %s",
                                          exe_name.c_str()));
@@ -1328,12 +1427,10 @@ bool handle_version_launch(const std::string &exe_name,
     }
   }
 
-  utils::properties::store("selectedVersion", exe_name);
-  relaunch_exe_with_launch_options(exe_name, options);
-  return true;
+  return relaunch_exe_with_launch_options(executable_path.string(), options);
 }
 
-void relaunch_with_launch_options(const std::vector<std::string> &options) {
+bool relaunch_with_launch_options(const std::vector<std::string> &options) {
   const auto self =
       utils::nt::library::get_by_address(relaunch_with_launch_options);
   const auto exe_path = self.get_path().generic_string();
@@ -1343,6 +1440,8 @@ void relaunch_with_launch_options(const std::vector<std::string> &options) {
   ZeroMemory(&startup_info, sizeof(startup_info));
   ZeroMemory(&process_info, sizeof(process_info));
   startup_info.cb = sizeof(startup_info);
+  char console_title[] = "ALTERBO3 V" SHORTVERSION;
+  startup_info.lpTitle = console_title;
 
   char current_dir[MAX_PATH];
   GetCurrentDirectoryA(sizeof(current_dir), current_dir);
@@ -1377,9 +1476,11 @@ void relaunch_with_launch_options(const std::vector<std::string> &options) {
     command_line += " \"-" + token + "\"";
   }
 
+  const DWORD creation_flags =
+      has_launch_option(options, "noconsole") ? 0 : CREATE_NEW_CONSOLE;
   if (CreateProcessA(exe_path.data(), command_line.data(), nullptr, nullptr,
-                     false, CREATE_NEW_CONSOLE, nullptr, current_dir,
-                     &startup_info, &process_info)) {
+                     false, creation_flags, nullptr, current_dir, &startup_info,
+                     &process_info)) {
     if (process_info.hThread && process_info.hThread != INVALID_HANDLE_VALUE) {
       CloseHandle(process_info.hThread);
     }
@@ -1389,12 +1490,10 @@ void relaunch_with_launch_options(const std::vector<std::string> &options) {
       CloseHandle(process_info.hProcess);
     }
 
-    // AlterBO3 (IKAAM) fix: terminate the current launcher process right after
-    // spawning the new (game) instance. Without this, the old process survived
-    // and later launched the game a SECOND time when its window was closed by
-    // hand. Mirrors relaunch_exe_with_launch_options which already does this.
-    TerminateProcess(GetCurrentProcess(), 0);
+    return true;
   }
+
+  return false;
 }
 } // namespace
 
@@ -1437,1387 +1536,1630 @@ bool is_game_process_running() {
 }
 
 bool run() {
-  // AlterBO3 (IKAAM): self-update. First remove the leftover old exe from a
-  // previous update, then check if a newer launcher build is available.
-  // Both are wrapped in try/catch because utils::http::get_data throws on any
-  // non-2xx status or curl error (CURLOPT_FAILONERROR). An unhandled throw here
-  // would kill the process BEFORE the window is created — the launcher would
-  // simply never appear, with no error. Network/update problems must never
-  // prevent the launcher from opening.
-  try {
-    cleanup_old_launcher();
-  } catch (...) {
-  }
-  try {
-    check_launcher_update();
-  } catch (...) {
-    // Update check failed (server down, bad status, etc.): ignore and continue
-    // to the launcher window as normal.
-  }
-
   // Use shared pointers for results to avoid capture-by-reference crashes on
   // exit
   auto run_game = std::make_shared<bool>(false);
   auto launch_options = std::make_shared<std::vector<std::string>>();
+  auto pending_exe_name = std::make_shared<std::string>();
+  auto pending_exe_url = std::make_shared<std::string>();
 
-  html_window window("AlterBO3", 1260, 680);
+  {
+    html_window window("AlterBO3", 1260, 680);
 
-  window.get_html_frame()->register_callback(
-      "getVersion",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        return CComVariant(SHORTVERSION);
-      });
+    window.get_html_frame()->register_callback(
+        "getVersion",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(SHORTVERSION);
+        });
 
-  window.get_html_frame()->register_callback(
-      "openUrl", [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty())
+    window.get_html_frame()->register_callback(
+        "isWine",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          CComVariant result;
+          result.vt = VT_BOOL;
+          result.boolVal = utils::nt::is_wine() ? VARIANT_TRUE : VARIANT_FALSE;
+          return result;
+        });
+
+    window.get_html_frame()->register_callback(
+        "openUrl", [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty())
+            return {};
+
+          const auto &param = params[0];
+          if (!param.is_string())
+            return {};
+
+          const auto url = param.get_string();
+          ShellExecuteA(nullptr, "open", url.data(), nullptr, nullptr,
+                        SW_SHOWNORMAL);
+
           return {};
+        });
 
-        const auto &param = params[0];
-        if (!param.is_string())
-          return {};
-
-        const auto url = param.get_string();
-        ShellExecuteA(nullptr, "open", url.data(), nullptr, nullptr,
-                      SW_SHOWNORMAL);
-
-        return {};
-      });
-
-  window.get_html_frame()->register_callback(
-      "getGamePath",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        char cwd[MAX_PATH];
-        GetCurrentDirectoryA(sizeof(cwd), cwd);
-        return CComVariant(cwd);
-      });
-
-  window.get_html_frame()->register_callback(
-      "openFolderPicker",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        if (folder_picker_busy.exchange(true)) {
-          return CComVariant("busy");
-        }
-        folder_picker_done = false;
-        {
-          std::lock_guard lock(folder_picker_mutex);
-          folder_picker_result.clear();
-        }
-
-        std::thread([]() {
-          CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-          std::string selected;
-          try {
-            IFileOpenDialog *pfd = nullptr;
-            HRESULT hr =
-                CoCreateInstance(CLSID_FileOpenDialog, nullptr,
-                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
-            if (SUCCEEDED(hr) && pfd) {
-              DWORD opts = 0;
-              pfd->GetOptions(&opts);
-              pfd->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-              pfd->SetTitle(L"Select your Black Ops 3 installation folder");
-
-              hr = pfd->Show(nullptr);
-              if (SUCCEEDED(hr)) {
-                IShellItem *psi = nullptr;
-                if (SUCCEEDED(pfd->GetResult(&psi))) {
-                  LPWSTR path_buf = nullptr;
-                  if (SUCCEEDED(
-                          psi->GetDisplayName(SIGDN_FILESYSPATH, &path_buf)) &&
-                      path_buf) {
-                    const std::wstring wp(path_buf);
-                    const int len =
-                        WideCharToMultiByte(CP_UTF8, 0, wp.c_str(), -1, nullptr,
-                                            0, nullptr, nullptr);
-                    if (len > 0) {
-                      selected.resize(len - 1);
-                      WideCharToMultiByte(CP_UTF8, 0, wp.c_str(), -1,
-                                          &selected[0], len, nullptr, nullptr);
-                    }
-                    CoTaskMemFree(path_buf);
-                  }
-                  psi->Release();
-                }
-              }
-              pfd->Release();
-            }
-          } catch (...) {
-          }
-
-          if (!selected.empty()) {
-            const std::filesystem::path sel(selected);
-            const bool has_client =
-                std::filesystem::exists(sel / "BlackOps3.exe");
-            const bool has_server = std::filesystem::exists(
-                sel / "BlackOps3_UnrankedDedicatedServer.exe");
-            if (!has_client && !has_server) {
-              std::lock_guard lock(folder_picker_mutex);
-              folder_picker_result = "invalid";
-            } else {
-              const auto path_file =
-                  game::get_appdata_path() / "user" / "game_path.txt";
-              std::error_code ec;
-              std::filesystem::create_directories(path_file.parent_path(), ec);
-              utils::io::write_file(path_file.string(), selected);
-              SetCurrentDirectoryA(selected.c_str());
-
-              std::lock_guard lock(folder_picker_mutex);
-              folder_picker_result = selected;
-            }
-          } else {
-            std::lock_guard lock(folder_picker_mutex);
-            folder_picker_result = "cancelled";
-          }
-
-          CoUninitialize();
-          folder_picker_done = true;
-          folder_picker_busy = false;
-        }).detach();
-
-        return CComVariant("ok");
-      });
-
-  window.get_html_frame()->register_callback(
-      "getFolderPickerResult",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        if (!folder_picker_done.load())
-          return CComVariant("pending");
-        std::lock_guard lock(folder_picker_mutex);
-        return CComVariant(folder_picker_result.c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "workshopRemove",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return {};
-        if (remove_running.load())
-          return CComVariant("already_running");
-        remove_running = true;
-        std::string folder = params[0].get_string();
-        std::thread([folder]() {
-          set_remove_status("Removing mod...", -1.0, folder);
-          workshop_remove_one(folder);
-          {
-            std::lock_guard lock(library_list_mutex);
-            library_list_cache.clear();
-          }
-          set_remove_status("Removal complete", 100.0);
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
-          reset_remove_status();
-          remove_running = false;
-        }).detach();
-        return CComVariant("started");
-      });
-
-  window.get_html_frame()->register_callback(
-      "workshopRemoveAll",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        if (remove_running.load())
-          return CComVariant("already_running");
-        remove_running = true;
-        std::thread([]() {
-          set_remove_status("Preparing removal...", -1.0);
-
+    window.get_html_frame()->register_callback(
+        "getGamePath",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
           char cwd[MAX_PATH];
           GetCurrentDirectoryA(sizeof(cwd), cwd);
-          std::filesystem::path base(cwd);
+          return CComVariant(cwd);
+        });
 
-          // Collect all directories to remove
-          std::vector<std::filesystem::path> dirs_to_remove;
-          std::error_code ec;
-          auto collect = [&](const std::filesystem::path &dir) {
-            if (!std::filesystem::exists(dir, ec))
-              return;
-            for (const auto &entry :
-                 std::filesystem::directory_iterator(dir, ec))
-              if (entry.is_directory())
-                dirs_to_remove.push_back(entry.path());
-          };
-          collect(base / "mods");
-          collect(base / "usermaps");
-          std::filesystem::path steam_ws = get_steam_workshop_path();
-          if (!steam_ws.empty() && std::filesystem::exists(steam_ws, ec))
-            collect(steam_ws);
-
-          const int total = static_cast<int>(dirs_to_remove.size());
-          if (total == 0) {
-            set_remove_status("Nothing to remove", 100.0);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            reset_remove_status();
-            remove_running = false;
-            return;
+    window.get_html_frame()->register_callback(
+        "openFolderPicker",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          if (folder_picker_busy.exchange(true)) {
+            return CComVariant("busy");
           }
-
-          for (int i = 0; i < total; ++i) {
-            const double pct = (static_cast<double>(i) / total) * 100.0;
-            const auto name = dirs_to_remove[i].filename().string();
-            set_remove_status("Removing mods...", pct,
-                              name + "  (" + std::to_string(i + 1) + "/" +
-                                  std::to_string(total) + ")");
-            std::error_code ec2;
-            std::filesystem::remove_all(dirs_to_remove[i], ec2);
-          }
-
+          folder_picker_done = false;
           {
-            std::lock_guard lock(library_list_mutex);
-            library_list_cache.clear();
+            std::lock_guard lock(folder_picker_mutex);
+            folder_picker_result.clear();
           }
-          set_remove_status("Removal complete", 100.0,
-                            std::to_string(total) + " item" +
-                                (total != 1 ? "s" : "") + " removed");
-          launcher::workshop::try_refresh_workshop_content();
-          std::this_thread::sleep_for(std::chrono::milliseconds(800));
-          reset_remove_status();
-          remove_running = false;
-        }).detach();
-        return CComVariant("started");
-      });
 
-  window.get_html_frame()->register_callback(
-      "workshopRemoveByPath",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return {};
-        if (remove_running.load())
-          return CComVariant("already_running");
-        remove_running = true;
-        std::string path = params[0].get_string();
-        std::thread([path]() {
-          set_remove_status("Removing mod...", -1.0, path);
-          workshop_remove_by_path(path);
-          {
-            std::lock_guard lock(library_list_mutex);
-            library_list_cache.clear();
-          }
-          set_remove_status("Removal complete", 100.0);
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
-          reset_remove_status();
-          remove_running = false;
-        }).detach();
-        return CComVariant("started");
-      });
+          std::thread([]() {
+            CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            std::string selected;
+            try {
+              IFileOpenDialog *pfd = nullptr;
+              HRESULT hr =
+                  CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
+              if (SUCCEEDED(hr) && pfd) {
+                DWORD opts = 0;
+                pfd->GetOptions(&opts);
+                pfd->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+                pfd->SetTitle(L"Select your Black Ops 3 installation folder");
 
-  window.get_html_frame()->register_callback(
-      "workshopList",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::lock_guard lock(library_list_mutex);
-        if (!library_list_cache.empty())
-          return launcher::workshop::utf8_variant(library_list_cache);
-        return CComVariant("[]");
-      });
-
-  window.get_html_frame()->register_callback(
-      "workshopListAsync",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        if (library_list_loading.load())
-          return CComVariant("already_loading");
-        library_list_loading = true;
-        std::thread([]() {
-          try {
-            auto json = workshop_list_json();
-            {
-              std::lock_guard lock(library_list_mutex);
-              library_list_cache = std::move(json);
+                hr = pfd->Show(nullptr);
+                if (SUCCEEDED(hr)) {
+                  IShellItem *psi = nullptr;
+                  if (SUCCEEDED(pfd->GetResult(&psi))) {
+                    LPWSTR path_buf = nullptr;
+                    if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH,
+                                                      &path_buf)) &&
+                        path_buf) {
+                      const std::wstring wp(path_buf);
+                      const int len =
+                          WideCharToMultiByte(CP_UTF8, 0, wp.c_str(), -1,
+                                              nullptr, 0, nullptr, nullptr);
+                      if (len > 0) {
+                        selected.resize(len - 1);
+                        WideCharToMultiByte(CP_UTF8, 0, wp.c_str(), -1,
+                                            &selected[0], len, nullptr,
+                                            nullptr);
+                      }
+                      CoTaskMemFree(path_buf);
+                    }
+                    psi->Release();
+                  }
+                }
+                pfd->Release();
+              }
+            } catch (...) {
             }
-          } catch (...) {
-          }
-          library_list_loading = false;
-        }).detach();
-        return CComVariant("started");
-      });
 
-  window.get_html_frame()->register_callback(
-      "workshopListIsLoading",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        return CComVariant(library_list_loading.load() ? "true" : "false");
-      });
+            if (!selected.empty()) {
+              const std::filesystem::path sel(selected);
+              const bool has_client =
+                  std::filesystem::exists(sel / "BlackOps3.exe");
+              const bool has_server = std::filesystem::exists(
+                  sel / "BlackOps3_UnrankedDedicatedServer.exe");
+              if (!has_client && !has_server) {
+                std::lock_guard lock(folder_picker_mutex);
+                folder_picker_result = "invalid";
+              } else {
+                const auto path_file =
+                    game::get_appdata_path() / "user" / "game_path.txt";
+                std::error_code ec;
+                std::filesystem::create_directories(path_file.parent_path(),
+                                                    ec);
+                utils::io::write_file(path_file.string(), selected);
+                SetCurrentDirectoryA(selected.c_str());
 
-  window.get_html_frame()->register_callback(
-      "getModeFilesInfo",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        return CComVariant(get_mode_files_info().c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "removeModeFiles",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("{}");
-        auto result = remove_mode_files(params[0].get_string());
-        return CComVariant(result.c_str());
-      });
-
-  launcher::workshop::register_callbacks(window.get_html_frame());
-
-  window.get_html_frame()->register_callback(
-      "verifyGameFiles",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("");
-        std::string modes = params[0].get_string();
-        utils::string::trim(modes);
-        if (modes.empty())
-          return CComVariant("");
-        if (verify_running.exchange(true))
-          return CComVariant("already_running");
-        reset_verify_status();
-        std::thread(verify_game_thread, modes).detach();
-        return CComVariant("started");
-      });
-
-  window.get_html_frame()->register_callback(
-      "getVerifyStatus",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::lock_guard lock(verify_mutex);
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        w.StartObject();
-        w.Key("message");
-        w.String(verify_status_message.c_str());
-        w.Key("progress");
-        w.Double(verify_progress_percent);
-        w.Key("details");
-        w.String(verify_progress_details.c_str());
-        w.Key("running");
-        w.Bool(verify_running.load());
-        w.Key("changedFiles");
-        w.StartArray();
-        for (const auto &f : verify_changed_files)
-          w.String(f.c_str());
-        w.EndArray();
-        w.EndObject();
-        return CComVariant(std::string(buf.GetString(), buf.GetSize()).c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "cancelVerify",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        verify_cancel_requested = true;
-        return CComVariant("cancel_requested");
-      });
-
-  window.get_html_frame()->register_callback(
-      "getRemoveStatus",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::lock_guard lock(remove_status_mutex);
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        w.StartObject();
-        w.Key("message");
-        w.String(remove_status_message.c_str());
-        w.Key("progress");
-        w.Double(remove_progress_percent);
-        w.Key("details");
-        w.String(remove_progress_details.c_str());
-        w.Key("running");
-        w.Bool(remove_running.load());
-        w.EndObject();
-        return CComVariant(std::string(buf.GetString(), buf.GetSize()).c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "invoke", [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.size() < 1 || !params[0].is_string())
-          return {};
-        const std::string method = params[0].get_string();
-        const std::string arg = (params.size() >= 2 && params[1].is_string())
-                                    ? params[1].get_string()
-                                    : "";
-        if (method == "workshopRemove") {
-          if (remove_running.load())
-            return CComVariant("already_running");
-          remove_running = true;
-          std::thread([a = arg]() {
-            set_remove_status("Removing mod...", -1.0, a);
-            workshop_remove_one(a);
-            {
-              std::lock_guard lock(library_list_mutex);
-              library_list_cache.clear();
+                std::lock_guard lock(folder_picker_mutex);
+                folder_picker_result = selected;
+              }
+            } else {
+              std::lock_guard lock(folder_picker_mutex);
+              folder_picker_result = "cancelled";
             }
-            set_remove_status("Removal complete", 100.0);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            reset_remove_status();
-            remove_running = false;
+
+            CoUninitialize();
+            folder_picker_done = true;
+            folder_picker_busy = false;
           }).detach();
-          return CComVariant("started");
-        }
-        if (method == "workshopRemoveAll") {
-          // Delegate to the workshopRemoveAll callback logic
-          // (handled by the dedicated callback now)
-          return CComVariant("use_callback");
-        }
-        if (method == "workshopRemoveByPath") {
-          if (remove_running.load())
-            return CComVariant("already_running");
-          remove_running = true;
-          std::thread([a = arg]() {
-            set_remove_status("Removing mod...", -1.0, a);
-            workshop_remove_by_path(a);
-            {
-              std::lock_guard lock(library_list_mutex);
-              library_list_cache.clear();
-            }
-            set_remove_status("Removal complete", 100.0);
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            reset_remove_status();
-            remove_running = false;
-          }).detach();
-          return CComVariant("started");
-        }
-        return {};
-      });
 
-  window.get_html_frame()->register_callback(
-      "readLaunchOptions",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        const auto stored = utils::properties::load("launchOptions");
-        if (!stored) {
-          return CComVariant("");
-        }
-        return CComVariant(stored->c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "setSelectedVersion",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (!params.empty() && params[0].is_string()) {
-          utils::properties::store("selectedVersion", params[0].get_string());
-        }
-        return {};
-      });
-
-  window.get_html_frame()->register_callback(
-      "getSelectedVersion",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        const auto stored = utils::properties::load("selectedVersion");
-        return CComVariant(stored ? stored->c_str() : "latest");
-      });
-
-  window.get_html_frame()->register_callback(
-      "readPlayerName",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        const auto stored_name = utils::properties::load("playerName");
-        std::string name;
-        if (stored_name)
-          name = sanitize_player_name(*stored_name);
-        if (name.empty())
-          name = sanitize_player_name(utils::nt::get_user_name());
-        if (name.empty())
-          name = "Unknown Soldier";
-        return CComVariant(name.c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "savePlayerName",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (!params.empty() && params[0].is_string()) {
-          auto name = sanitize_player_name(params[0].get_string());
-          utils::string::trim(name);
-          if (!name.empty()) {
-            if (name.size() > 16)
-              name.resize(16);
-            utils::properties::store("playerName", name);
-          }
-        }
-        return CComVariant("");
-      });
-
-  const auto friends_file =
-      std::filesystem::path("boiii_players") / "user" / "friends.json";
-
-  // AlterCOD session bridge (IKAAM): the launcher stores the friends account
-  // token in localStorage, which the game cannot read. This callback writes it
-  // to boiii_players/user/altercod_session.json so the in-game heartbeat can
-  // pick it up. Called on login (with token) and logout (empty clears it).
-  const auto altercod_session_file =
-      std::filesystem::path("boiii_players") / "user" / "altercod_session.json";
-
-  window.get_html_frame()->register_callback(
-      "saveFriendsSession",
-      [altercod_session_file](
-          const std::vector<html_argument> &params) -> CComVariant {
-        std::string token = params.size() > 0 && params[0].is_string()
-                                ? params[0].get_string()
-                                : "";
-        std::string pseudo = params.size() > 1 && params[1].is_string()
-                                 ? params[1].get_string()
-                                 : "";
-
-        std::error_code ec;
-        std::filesystem::create_directories(altercod_session_file.parent_path(),
-                                            ec);
-
-        if (token.empty()) {
-          // Logout: remove the session file.
-          std::filesystem::remove(altercod_session_file, ec);
           return CComVariant("ok");
-        }
+        });
 
-        rapidjson::Document doc;
-        doc.SetObject();
-        auto &al = doc.GetAllocator();
-        doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(), al);
-        doc.AddMember("pseudo", rapidjson::Value(pseudo.c_str(), al).Move(),
-                      al);
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
-        doc.Accept(writer);
+    window.get_html_frame()->register_callback(
+        "getFolderPickerResult",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          if (!folder_picker_done.load())
+            return CComVariant("pending");
+          std::lock_guard lock(folder_picker_mutex);
+          return CComVariant(folder_picker_result.c_str());
+        });
 
-        utils::io::write_file(altercod_session_file.string(), buf.GetString());
-        return CComVariant("ok");
-      });
+    window.get_html_frame()->register_callback(
+        "workshopRemove",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return {};
+          if (remove_running.load())
+            return CComVariant("already_running");
+          remove_running = true;
+          std::string folder = params[0].get_string();
+          std::thread([folder]() {
+            set_remove_status("Removing mod...", -1.0, folder);
+            workshop_remove_one(folder);
+            {
+              std::lock_guard lock(library_list_mutex);
+              library_list_cache.clear();
+            }
+            set_remove_status("Removal complete", 100.0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            reset_remove_status();
+            remove_running = false;
+          }).detach();
+          return CComVariant("started");
+        });
 
-  // AlterCOD friends API bridge (IKAAM): MSHTML's XHR blocks cross-zone
-  // requests to the friends API (returns status 0). We route them through
-  // native curl instead (same path the auto-updater uses successfully). JS
-  // passes the full URL and gets the raw response body back (or "" on error).
-  window.get_html_frame()->register_callback(
-      "friendsApiGet",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("");
-        const auto url = params[0].get_string();
-        // Basic safety: only allow our own API host.
-        if (url.find("https://ikaam.fr/amis/") != 0)
-          return CComVariant("");
+    window.get_html_frame()->register_callback(
+        "workshopRemoveAll",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          if (remove_running.load())
+            return CComVariant("already_running");
+          remove_running = true;
+          std::thread([]() {
+            set_remove_status("Preparing removal...", -1.0);
 
-        // Split "endpoint?query" so we can POST the query as the body. We use
-        // post_data (not get_data) because get_data sets CURLOPT_FAILONERROR
-        // and throws on non-2xx, and requests an octet-stream Accept header
-        // meant for binary downloads. post_data is throw-free, returns the body
-        // on 200, and our PHP API accepts params via GET or POST identically.
-        std::string endpoint = url;
-        std::string body;
-        const auto qpos = url.find('?');
-        if (qpos != std::string::npos) {
-          endpoint = url.substr(0, qpos);
-          body = url.substr(qpos + 1);
-        }
+            char cwd[MAX_PATH];
+            GetCurrentDirectoryA(sizeof(cwd), cwd);
+            std::filesystem::path base(cwd);
 
-        try {
-          const auto response = utils::http::post_data(endpoint, body, 10);
-          if (!response.has_value())
-            return CComVariant("");
-          return CComVariant(response.value().c_str());
-        } catch (...) {
-          return CComVariant("");
-        }
-      });
+            // Collect all directories to remove
+            std::vector<std::filesystem::path> dirs_to_remove;
+            std::error_code ec;
+            auto collect = [&](const std::filesystem::path &dir) {
+              if (!std::filesystem::exists(dir, ec))
+                return;
+              for (const auto &entry :
+                   std::filesystem::directory_iterator(dir, ec))
+                if (entry.is_directory())
+                  dirs_to_remove.push_back(entry.path());
+            };
+            collect(base / "mods");
+            collect(base / "usermaps");
+            std::filesystem::path steam_ws = get_steam_workshop_path();
+            if (!steam_ws.empty() && std::filesystem::exists(steam_ws, ec))
+              collect(steam_ws);
 
-  // AlterCOD OAuth login (IKAAM): the JS calls startOAuthLogin() when the user
-  // clicks "Se connecter avec le forum". To avoid freezing the MSHTML UI thread
-  // (a blocking call here makes the window unresponsive and the launcher can
-  // end up launching the game), we run the flow on a DETACHED background thread
-  // and let the JS poll checkOAuthResult() for the outcome.
-  //   startOAuthLogin()   -> "started" | "busy"
-  //   checkOAuthResult()  -> "pending" | "" (failed) | "token|pseudo" (success)
-  auto oauth_state =
-      std::make_shared<std::atomic<int>>(0); // 0 idle,1 running,2 done
-  auto oauth_result = std::make_shared<std::string>();
-  auto oauth_mutex = std::make_shared<std::mutex>();
+            const int total = static_cast<int>(dirs_to_remove.size());
+            if (total == 0) {
+              set_remove_status("Nothing to remove", 100.0);
+              std::this_thread::sleep_for(std::chrono::milliseconds(500));
+              reset_remove_status();
+              remove_running = false;
+              return;
+            }
 
-  window.get_html_frame()->register_callback(
-      "startOAuthLogin",
-      [oauth_state, oauth_result, oauth_mutex](
-          const std::vector<html_argument> & /*params*/) -> CComVariant {
-        int expected = 0;
-        if (!oauth_state->compare_exchange_strong(expected, 1)) {
-          return CComVariant("busy"); // already running
-        }
-        std::thread([oauth_state, oauth_result, oauth_mutex]() {
-          std::string r;
-          try {
-            r = run_oauth_login();
-          } catch (...) {
-            r = "";
-          }
-          {
-            std::lock_guard<std::mutex> lock(*oauth_mutex);
-            *oauth_result = r;
-          }
-          oauth_state->store(2); // done
-        }).detach();
-        return CComVariant("started");
-      });
+            for (int i = 0; i < total; ++i) {
+              const double pct = (static_cast<double>(i) / total) * 100.0;
+              const auto name = dirs_to_remove[i].filename().string();
+              set_remove_status("Removing mods...", pct,
+                                name + "  (" + std::to_string(i + 1) + "/" +
+                                    std::to_string(total) + ")");
+              std::error_code ec2;
+              std::filesystem::remove_all(dirs_to_remove[i], ec2);
+            }
 
-  window.get_html_frame()->register_callback(
-      "checkOAuthResult",
-      [oauth_state, oauth_result, oauth_mutex](
-          const std::vector<html_argument> & /*params*/) -> CComVariant {
-        const int st = oauth_state->load();
-        if (st == 1) {
-          return CComVariant("pending");
-        }
-        if (st == 2) {
-          std::string r;
-          {
-            std::lock_guard<std::mutex> lock(*oauth_mutex);
-            r = *oauth_result;
-          }
-          oauth_state->store(0); // reset for next time
-          return CComVariant(r.c_str());
-        }
-        return CComVariant(""); // idle / nothing running
-      });
+            {
+              std::lock_guard lock(library_list_mutex);
+              library_list_cache.clear();
+            }
+            set_remove_status("Removal complete", 100.0,
+                              std::to_string(total) + " item" +
+                                  (total != 1 ? "s" : "") + " removed");
+            launcher::workshop::try_refresh_workshop_content();
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+            reset_remove_status();
+            remove_running = false;
+          }).detach();
+          return CComVariant("started");
+        });
 
-  window.get_html_frame()->register_callback(
-      "readFriends",
-      [friends_file](
-          const std::vector<html_argument> & /*params*/) -> CComVariant {
-        std::string data;
-        if (!utils::io::read_file(friends_file.string(), &data) || data.empty())
+    window.get_html_frame()->register_callback(
+        "workshopRemoveByPath",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return {};
+          if (remove_running.load())
+            return CComVariant("already_running");
+          remove_running = true;
+          std::string path = params[0].get_string();
+          std::thread([path]() {
+            set_remove_status("Removing mod...", -1.0, path);
+            workshop_remove_by_path(path);
+            {
+              std::lock_guard lock(library_list_mutex);
+              library_list_cache.clear();
+            }
+            set_remove_status("Removal complete", 100.0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            reset_remove_status();
+            remove_running = false;
+          }).detach();
+          return CComVariant("started");
+        });
+
+    window.get_html_frame()->register_callback(
+        "workshopList",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::lock_guard lock(library_list_mutex);
+          if (!library_list_cache.empty())
+            return launcher::workshop::utf8_variant(library_list_cache);
           return CComVariant("[]");
+        });
 
-        // Normalize: ensure all steam_id values are JSON strings so JS
-        // doesn't lose precision on large uint64 values.
-        rapidjson::Document doc;
-        if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray())
-          return CComVariant(data.c_str());
+    window.get_html_frame()->register_callback(
+        "workshopListAsync",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          if (library_list_loading.load())
+            return CComVariant("already_loading");
+          library_list_loading = true;
+          std::thread([]() {
+            try {
+              auto json = workshop_list_json();
+              {
+                std::lock_guard lock(library_list_mutex);
+                library_list_cache = std::move(json);
+              }
+            } catch (...) {
+            }
+            library_list_loading = false;
+          }).detach();
+          return CComVariant("started");
+        });
 
-        bool modified = false;
-        for (auto &item : doc.GetArray()) {
-          if (!item.IsObject())
-            continue;
-          auto si = item.FindMember("steam_id");
-          if (si == item.MemberEnd())
-            continue;
-          if (si->value.IsUint64()) {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "%llu", si->value.GetUint64());
-            si->value.SetString(buf, doc.GetAllocator());
-            modified = true;
-          } else if (si->value.IsInt64()) {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "%lld", si->value.GetInt64());
-            si->value.SetString(buf, doc.GetAllocator());
-            modified = true;
+    window.get_html_frame()->register_callback(
+        "workshopListIsLoading",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(library_list_loading.load() ? "true" : "false");
+        });
+
+    window.get_html_frame()->register_callback(
+        "getModeFilesInfo",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(get_mode_files_info().c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "removeModeFiles",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("{}");
+          auto result = remove_mode_files(params[0].get_string());
+          return CComVariant(result.c_str());
+        });
+
+    launcher::workshop::register_callbacks(window.get_html_frame());
+
+    window.get_html_frame()->register_callback(
+        "verifyGameFiles",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("");
+          std::string modes = params[0].get_string();
+          utils::string::trim(modes);
+          if (modes.empty())
+            return CComVariant("");
+          if (verify_running.exchange(true))
+            return CComVariant("already_running");
+          reset_verify_status();
+          std::thread(verify_game_thread, modes).detach();
+          return CComVariant("started");
+        });
+
+    window.get_html_frame()->register_callback(
+        "getVerifyStatus",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::lock_guard lock(verify_mutex);
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+          w.StartObject();
+          w.Key("message");
+          w.String(verify_status_message.c_str());
+          w.Key("progress");
+          w.Double(verify_progress_percent);
+          w.Key("details");
+          w.String(verify_progress_details.c_str());
+          w.Key("running");
+          w.Bool(verify_running.load());
+          w.Key("changedFiles");
+          w.StartArray();
+          for (const auto &f : verify_changed_files)
+            w.String(f.c_str());
+          w.EndArray();
+          w.EndObject();
+          return CComVariant(
+              std::string(buf.GetString(), buf.GetSize()).c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "cancelVerify",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          verify_cancel_requested = true;
+          return CComVariant("cancel_requested");
+        });
+
+    window.get_html_frame()->register_callback(
+        "getRemoveStatus",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::lock_guard lock(remove_status_mutex);
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+          w.StartObject();
+          w.Key("message");
+          w.String(remove_status_message.c_str());
+          w.Key("progress");
+          w.Double(remove_progress_percent);
+          w.Key("details");
+          w.String(remove_progress_details.c_str());
+          w.Key("running");
+          w.Bool(remove_running.load());
+          w.EndObject();
+          return CComVariant(
+              std::string(buf.GetString(), buf.GetSize()).c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "invoke", [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.size() < 1 || !params[0].is_string())
+            return {};
+          const std::string method = params[0].get_string();
+          const std::string arg = (params.size() >= 2 && params[1].is_string())
+                                      ? params[1].get_string()
+                                      : "";
+          if (method == "workshopRemove") {
+            if (remove_running.load())
+              return CComVariant("already_running");
+            remove_running = true;
+            std::thread([a = arg]() {
+              set_remove_status("Removing mod...", -1.0, a);
+              workshop_remove_one(a);
+              {
+                std::lock_guard lock(library_list_mutex);
+                library_list_cache.clear();
+              }
+              set_remove_status("Removal complete", 100.0);
+              std::this_thread::sleep_for(std::chrono::milliseconds(500));
+              reset_remove_status();
+              remove_running = false;
+            }).detach();
+            return CComVariant("started");
           }
-        }
+          if (method == "workshopRemoveAll") {
+            // Delegate to the workshopRemoveAll callback logic
+            // (handled by the dedicated callback now)
+            return CComVariant("use_callback");
+          }
+          if (method == "workshopRemoveByPath") {
+            if (remove_running.load())
+              return CComVariant("already_running");
+            remove_running = true;
+            std::thread([a = arg]() {
+              set_remove_status("Removing mod...", -1.0, a);
+              workshop_remove_by_path(a);
+              {
+                std::lock_guard lock(library_list_mutex);
+                library_list_cache.clear();
+              }
+              set_remove_status("Removal complete", 100.0);
+              std::this_thread::sleep_for(std::chrono::milliseconds(500));
+              reset_remove_status();
+              remove_running = false;
+            }).detach();
+            return CComVariant("started");
+          }
+          return {};
+        });
 
-        if (modified) {
-          // Write back the normalized JSON so future reads are clean
-          rapidjson::StringBuffer sb;
-          rapidjson::Writer<rapidjson::StringBuffer> w(sb);
-          doc.Accept(w);
-          std::string fixed(sb.GetString(), sb.GetSize());
-          utils::io::write_file(friends_file.string(), fixed);
-          return CComVariant(fixed.c_str());
-        }
+    window.get_html_frame()->register_callback(
+        "readLaunchOptions",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto stored = utils::properties::load("launchOptions");
+          if (!stored) {
+            return CComVariant("");
+          }
+          return CComVariant(stored->c_str());
+        });
 
-        return CComVariant(data.c_str());
-      });
+    window.get_html_frame()->register_callback(
+        "saveLaunchOptions",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          utils::properties::store("launchOptions", params[0].get_string());
+          return CComVariant("ok");
+        });
 
-  window.get_html_frame()->register_callback(
-      "writeFriends",
-      [friends_file](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-        const auto json_str = params[0].get_string();
+    window.get_html_frame()->register_callback(
+        "readLauncherSettings",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto stored = utils::properties::load("launcherUiSettings");
+          return CComVariant(stored ? stored->c_str() : "");
+        });
 
-        rapidjson::Document doc;
-        if (doc.Parse(json_str.c_str()).HasParseError() || !doc.IsArray()) {
-          return CComVariant("error");
-        }
+    window.get_html_frame()->register_callback(
+        "saveLauncherSettings",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const auto data = params[0].get_string();
+          rapidjson::Document document;
+          if (document.Parse(data.c_str()).HasParseError() ||
+              !document.IsObject())
+            return CComVariant("invalid_json");
+          utils::properties::store("launcherUiSettings", data);
+          return CComVariant("ok");
+        });
 
-        const auto parent = friends_file.parent_path();
-        if (!std::filesystem::exists(parent)) {
-          std::filesystem::create_directories(parent);
-        }
+    window.get_html_frame()->register_callback(
+        "readBinds",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(launcher_binds_json().c_str());
+        });
 
-        utils::io::write_file(friends_file.string(), json_str);
-        return CComVariant("ok");
-      });
+    window.get_html_frame()->register_callback(
+        "saveBind",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.size() < 2 || !params[0].is_string() ||
+              !params[1].is_string())
+            return CComVariant("error");
+          auto key = utils::string::to_lower(params[0].get_string());
+          auto command = params[1].get_string();
+          utils::string::trim(key);
+          utils::string::trim(command);
+          if (!valid_bind_key(key))
+            return CComVariant("invalid_key");
+          if (!valid_bind_command(command))
+            return CComVariant("invalid_command");
+          auto binds = read_launcher_binds();
+          binds[key] = command;
+          return CComVariant(write_launcher_binds(binds) ? "ok"
+                                                         : "write_error");
+        });
 
-  window.get_html_frame()->register_callback(
-      "addFriend",
-      [friends_file](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.size() < 2 || !params[0].is_string() ||
-            !params[1].is_string())
-          return CComVariant("error");
+    window.get_html_frame()->register_callback(
+        "removeBind",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          auto key = utils::string::to_lower(params[0].get_string());
+          utils::string::trim(key);
+          auto binds = read_launcher_binds();
+          binds.erase(key);
+          return CComVariant(write_launcher_binds(binds) ? "ok"
+                                                         : "write_error");
+        });
 
-        const auto steam_id_str = params[0].get_string();
-        const auto name = params[1].get_string();
+    window.get_html_frame()->register_callback(
+        "setSelectedVersion",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (!params.empty() && params[0].is_string()) {
+            utils::properties::store("selectedVersion", params[0].get_string());
+          }
+          return {};
+        });
 
-        const auto steam_id = std::strtoull(steam_id_str.c_str(), nullptr, 10);
-        if (steam_id == 0)
-          return CComVariant("error");
+    window.get_html_frame()->register_callback(
+        "getSelectedVersion",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto stored = utils::properties::load("selectedVersion");
+          return CComVariant(stored ? stored->c_str() : "latest");
+        });
 
-        rapidjson::Document doc;
-        std::string data;
-        if (utils::io::read_file(friends_file.string(), &data) &&
-            !data.empty()) {
-          if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray()) {
+    window.get_html_frame()->register_callback(
+        "readPlayerName",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto stored_name = utils::properties::load("playerName");
+          std::string name;
+          if (stored_name)
+            name = sanitize_player_name(*stored_name);
+          if (name.empty())
+            name = sanitize_player_name(utils::nt::get_user_name());
+          if (name.empty())
+            name = "Unknown Soldier";
+          return CComVariant(name.c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "savePlayerName",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (!params.empty() && params[0].is_string()) {
+            auto name = sanitize_player_name(params[0].get_string());
+            utils::string::trim(name);
+            if (!name.empty()) {
+              if (name.size() > 16)
+                name.resize(16);
+              utils::properties::store("playerName", name);
+            }
+          }
+          return CComVariant("");
+        });
+
+    const auto friends_file =
+        std::filesystem::path("boiii_players") / "user" / "friends.json";
+
+    window.get_html_frame()->register_callback(
+        "readFriendIdentity",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto friend_code = auth::get_client_guid();
+          if (friend_code == 0)
+            return CComVariant("{}");
+
+          rapidjson::Document doc(rapidjson::kObjectType);
+          auto &allocator = doc.GetAllocator();
+          const auto friend_code_string = std::to_string(friend_code);
+          doc.AddMember("friend_code",
+                        rapidjson::Value(friend_code_string.c_str(), allocator),
+                        allocator);
+          doc.AddMember("name",
+                        rapidjson::Value("Your BOIII identity", allocator),
+                        allocator);
+
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          doc.Accept(writer);
+          return CComVariant(buffer.GetString());
+        });
+
+    window.get_html_frame()->register_callback(
+        "readFriends",
+        [friends_file](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::string data;
+          if (!utils::io::read_file(friends_file.string(), &data) ||
+              data.empty())
+            return CComVariant("[]");
+
+          rapidjson::Document doc;
+          if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray())
+            return CComVariant(data.c_str());
+
+          bool modified = false;
+          for (auto &item : doc.GetArray()) {
+            if (!item.IsObject())
+              continue;
+            auto si = item.FindMember("steam_id");
+            if (si == item.MemberEnd())
+              continue;
+            if (si->value.IsUint64()) {
+              char buf[32];
+              std::snprintf(buf, sizeof(buf), "%llu", si->value.GetUint64());
+              si->value.SetString(buf, doc.GetAllocator());
+              modified = true;
+            } else if (si->value.IsInt64()) {
+              char buf[32];
+              std::snprintf(buf, sizeof(buf), "%lld", si->value.GetInt64());
+              si->value.SetString(buf, doc.GetAllocator());
+              modified = true;
+            }
+          }
+
+          if (modified) {
+            rapidjson::StringBuffer sb;
+            rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+            doc.Accept(w);
+            std::string fixed(sb.GetString(), sb.GetSize());
+            utils::io::write_file(friends_file.string(), fixed);
+            return CComVariant(fixed.c_str());
+          }
+
+          return CComVariant(data.c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "writeFriends",
+        [friends_file](
+            const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const auto json_str = params[0].get_string();
+
+          rapidjson::Document doc;
+          if (doc.Parse(json_str.c_str()).HasParseError() || !doc.IsArray()) {
+            return CComVariant("error");
+          }
+
+          const auto parent = friends_file.parent_path();
+          if (!std::filesystem::exists(parent)) {
+            std::filesystem::create_directories(parent);
+          }
+
+          utils::io::write_file(friends_file.string(), json_str);
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "addFriend",
+        [friends_file](
+            const std::vector<html_argument> &params) -> CComVariant {
+          if (params.size() < 2 || !params[0].is_string() ||
+              !params[1].is_string())
+            return CComVariant("error");
+
+          const auto steam_id_str = params[0].get_string();
+          const auto name = params[1].get_string();
+
+          const auto steam_id =
+              std::strtoull(steam_id_str.c_str(), nullptr, 10);
+          if (steam_id == 0)
+            return CComVariant("error");
+
+          rapidjson::Document doc;
+          std::string data;
+          if (utils::io::read_file(friends_file.string(), &data) &&
+              !data.empty()) {
+            if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray()) {
+              doc.SetArray();
+            }
+          } else {
             doc.SetArray();
           }
-        } else {
-          doc.SetArray();
-        }
 
-        for (auto &item : doc.GetArray()) {
-          if (!item.IsObject())
-            continue;
-          auto si = item.FindMember("steam_id");
-          if (si != item.MemberEnd()) {
+          for (auto &item : doc.GetArray()) {
+            if (!item.IsObject())
+              continue;
+            auto si = item.FindMember("steam_id");
+            if (si != item.MemberEnd()) {
+              std::uint64_t existing = 0;
+              if (si->value.IsUint64())
+                existing = si->value.GetUint64();
+              else if (si->value.IsString())
+                existing = std::strtoull(si->value.GetString(), nullptr, 10);
+              if (existing == steam_id)
+                return CComVariant("duplicate");
+            }
+          }
+
+          rapidjson::Value entry(rapidjson::kObjectType);
+          entry.AddMember(
+              "steam_id",
+              rapidjson::Value(steam_id_str.c_str(), doc.GetAllocator()),
+              doc.GetAllocator());
+          entry.AddMember("name",
+                          rapidjson::Value(name.c_str(), doc.GetAllocator()),
+                          doc.GetAllocator());
+          doc.PushBack(entry, doc.GetAllocator());
+
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+          doc.Accept(w);
+
+          const auto parent = friends_file.parent_path();
+          if (!std::filesystem::exists(parent))
+            std::filesystem::create_directories(parent);
+          utils::io::write_file(friends_file.string(),
+                                std::string(buf.GetString(), buf.GetSize()));
+
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "removeFriend",
+        [friends_file](
+            const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+
+          const auto steam_id =
+              std::strtoull(params[0].get_string().c_str(), nullptr, 10);
+          if (steam_id == 0)
+            return CComVariant("error");
+
+          rapidjson::Document doc;
+          std::string data;
+          if (!utils::io::read_file(friends_file.string(), &data) ||
+              data.empty())
+            return CComVariant("ok");
+          if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray())
+            return CComVariant("ok");
+
+          for (rapidjson::SizeType i = 0; i < doc.Size(); ++i) {
+            if (!doc[i].IsObject())
+              continue;
+            auto si = doc[i].FindMember("steam_id");
+            if (si == doc[i].MemberEnd())
+              continue;
+
             std::uint64_t existing = 0;
             if (si->value.IsUint64())
               existing = si->value.GetUint64();
             else if (si->value.IsString())
               existing = std::strtoull(si->value.GetString(), nullptr, 10);
-            if (existing == steam_id)
-              return CComVariant("duplicate");
-          }
-        }
 
-        rapidjson::Value entry(rapidjson::kObjectType);
-        entry.AddMember(
-            "steam_id",
-            rapidjson::Value(steam_id_str.c_str(), doc.GetAllocator()),
-            doc.GetAllocator());
-        entry.AddMember("name",
-                        rapidjson::Value(name.c_str(), doc.GetAllocator()),
-                        doc.GetAllocator());
-        doc.PushBack(entry, doc.GetAllocator());
-
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        doc.Accept(w);
-
-        const auto parent = friends_file.parent_path();
-        if (!std::filesystem::exists(parent))
-          std::filesystem::create_directories(parent);
-        utils::io::write_file(friends_file.string(),
-                              std::string(buf.GetString(), buf.GetSize()));
-
-        return CComVariant("ok");
-      });
-
-  window.get_html_frame()->register_callback(
-      "removeFriend",
-      [friends_file](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-
-        const auto steam_id =
-            std::strtoull(params[0].get_string().c_str(), nullptr, 10);
-        if (steam_id == 0)
-          return CComVariant("error");
-
-        rapidjson::Document doc;
-        std::string data;
-        if (!utils::io::read_file(friends_file.string(), &data) || data.empty())
-          return CComVariant("ok");
-        if (doc.Parse(data.c_str()).HasParseError() || !doc.IsArray())
-          return CComVariant("ok");
-
-        for (rapidjson::SizeType i = 0; i < doc.Size(); ++i) {
-          if (!doc[i].IsObject())
-            continue;
-          auto si = doc[i].FindMember("steam_id");
-          if (si == doc[i].MemberEnd())
-            continue;
-
-          std::uint64_t existing = 0;
-          if (si->value.IsUint64())
-            existing = si->value.GetUint64();
-          else if (si->value.IsString())
-            existing = std::strtoull(si->value.GetString(), nullptr, 10);
-
-          if (existing == steam_id) {
-            doc.Erase(doc.Begin() + i);
-            break;
-          }
-        }
-
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        doc.Accept(w);
-        utils::io::write_file(friends_file.string(),
-                              std::string(buf.GetString(), buf.GetSize()));
-
-        return CComVariant("ok");
-      });
-
-  window.get_html_frame()->register_callback(
-      "getGameSettings",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        rapidjson::StringBuffer buf;
-        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-        w.StartObject();
-
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        const auto config_path =
-            std::filesystem::path(cwd) / "boiii_players" / "config.ini";
-
-        if (std::filesystem::exists(config_path)) {
-          std::string content;
-          if (utils::io::read_file(config_path.string(), &content)) {
-            auto extract = [&](const char *key) -> std::string {
-              std::string pattern = std::string(key) + " = \"";
-              auto pos = content.find(pattern);
-              if (pos == std::string::npos)
-                return "";
-              auto val_start = pos + pattern.size();
-              auto val_end = content.find('"', val_start);
-              if (val_end == std::string::npos)
-                return "";
-              return content.substr(val_start, val_end - val_start);
-            };
-
-            const char *keys[] = {"MaxFPS",
-                                  "FOV",
-                                  "FullScreenMode",
-                                  "WindowSize",
-                                  "RefreshRate",
-                                  "Vsync",
-                                  "DrawFPS",
-                                  "SmoothFramerate",
-                                  "RestrictGraphicsOptions",
-                                  "MaxFrameLatency",
-                                  "VideoMemory",
-                                  "StreamMinResident"};
-            for (const auto &k : keys) {
-              auto val = extract(k);
-              if (!val.empty()) {
-                w.Key(k);
-                w.String(val.c_str());
-              }
+            if (existing == steam_id) {
+              doc.Erase(doc.Begin() + i);
+              break;
             }
           }
-        }
 
-        // Read g_password from config.cfg (server hosting password)
-        const auto cfg_path = std::filesystem::path(cwd) / "boiii_players" /
-                              "user" / "config.cfg";
-        if (std::filesystem::exists(cfg_path)) {
-          std::string cfg_data;
-          if (utils::io::read_file(cfg_path.string(), &cfg_data)) {
-            auto extract_dvar = [&](const char *dvar_name) -> std::string {
-              std::string pattern = std::string("set ") + dvar_name + " \"";
-              auto pos = cfg_data.find(pattern);
-              if (pos == std::string::npos)
-                return "";
-              auto val_start = pos + pattern.size();
-              auto val_end = cfg_data.find('"', val_start);
-              if (val_end == std::string::npos)
-                return "";
-              return cfg_data.substr(val_start, val_end - val_start);
-            };
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+          doc.Accept(w);
+          utils::io::write_file(friends_file.string(),
+                                std::string(buf.GetString(), buf.GetSize()));
 
-            auto pw = extract_dvar("g_password");
-            w.Key("networkpassword");
-            w.String(pw.c_str());
+          return CComVariant("ok");
+        });
 
-            auto net_pw = extract_dvar("net_password");
-            w.Key("netpassword");
-            w.String(net_pw.c_str());
+    // AlterCOD session bridge (IKAAM): the launcher stores the friends account
+    // token in localStorage, which the game cannot read. This callback writes it
+    // to boiii_players/user/altercod_session.json so the in-game heartbeat can
+    // pick it up. Called on login (with token) and logout (empty clears it).
+    const auto altercod_session_file =
+        std::filesystem::path("boiii_players") / "user" / "altercod_session.json";
 
-            auto retry = extract_dvar("workshop_retry_attempts");
-            w.Key("workshop_retry_attempts");
-            w.String(retry.empty() ? "30" : retry.c_str());
+    window.get_html_frame()->register_callback(
+        "saveFriendsSession",
+        [altercod_session_file](
+            const std::vector<html_argument> &params) -> CComVariant {
+          std::string token = params.size() > 0 && params[0].is_string()
+                                  ? params[0].get_string()
+                                  : "";
+          std::string pseudo = params.size() > 1 && params[1].is_string()
+                                   ? params[1].get_string()
+                                   : "";
 
-            auto timeout = extract_dvar("workshop_timeout");
-            w.Key("workshop_timeout");
-            w.String(timeout.empty() ? "300" : timeout.c_str());
-          }
-        }
-
-        const auto dll_bak =
-            std::filesystem::path(cwd) / "d3dcompiler_46.dll.bak";
-        w.Key("reduceStutter");
-        w.Bool(std::filesystem::exists(dll_bak));
-
-        const auto video_dir = std::filesystem::path(cwd) / "video";
-        const auto intro_bak =
-            video_dir / "BO3_Global_Logo_LogoSequence.mkv.bak";
-        w.Key("skipIntro");
-        w.Bool(std::filesystem::exists(intro_bak));
-
-        bool all_skipped = false;
-        if (std::filesystem::exists(video_dir)) {
-          int mkv_count = 0, bak_count = 0;
-          for (const auto &entry :
-               std::filesystem::directory_iterator(video_dir)) {
-            auto ext = entry.path().extension().string();
-            auto fn = entry.path().filename().string();
-            if (ext == ".mkv")
-              mkv_count++;
-            if (fn.size() > 8 && fn.substr(fn.size() - 8) == ".mkv.bak")
-              bak_count++;
-          }
-          all_skipped = (bak_count > 0 && mkv_count == 0);
-        }
-        w.Key("skipAllIntros");
-        w.Bool(all_skipped);
-
-        const auto settings_file = std::filesystem::path("boiii_players") /
-                                   "user" / "launcher_settings.json";
-        if (std::filesystem::exists(settings_file)) {
-          std::string sdata;
-          if (utils::io::read_file(settings_file.string(), &sdata)) {
-            rapidjson::Document sdoc;
-            if (!sdoc.Parse(sdata.c_str()).HasParseError() && sdoc.IsObject()) {
-              auto al = sdoc.FindMember("asset_limits_enabled");
-              if (al != sdoc.MemberEnd() && al->value.IsString()) {
-                w.Key("assetLimits");
-                w.String(al->value.GetString());
-              }
-
-              auto fo = sdoc.FindMember("friends_only");
-              if (fo != sdoc.MemberEnd() && fo->value.IsString()) {
-                w.Key("friendsOnly");
-                w.String(fo->value.GetString());
-              }
-            }
-          }
-        }
-
-        w.EndObject();
-        return CComVariant(std::string(buf.GetString(), buf.GetSize()).c_str());
-      });
-
-  window.get_html_frame()->register_callback(
-      "setGameSetting",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.size() < 2 || !params[0].is_string() ||
-            !params[1].is_string())
-          return CComVariant("error");
-
-        const auto key = params[0].get_string();
-        const auto value = params[1].get_string();
-
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-
-        if (key == "asset_limits_enabled") {
-          const auto path = std::filesystem::path("boiii_players") / "user" /
-                            "launcher_settings.json";
           std::error_code ec;
-          std::filesystem::create_directories(path.parent_path(), ec);
+          std::filesystem::create_directories(
+              altercod_session_file.parent_path(), ec);
+
+          if (token.empty()) {
+            // Logout: remove the session file.
+            std::filesystem::remove(altercod_session_file, ec);
+            return CComVariant("ok");
+          }
 
           rapidjson::Document doc;
-          std::string data;
-          if (utils::io::read_file(path.string(), &data) && !data.empty()) {
-            if (doc.Parse(data.c_str()).HasParseError())
-              doc.SetObject();
-          } else {
-            doc.SetObject();
+          doc.SetObject();
+          auto &al = doc.GetAllocator();
+          doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(),
+                        al);
+          doc.AddMember("pseudo", rapidjson::Value(pseudo.c_str(), al).Move(),
+                        al);
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+          doc.Accept(writer);
+
+          utils::io::write_file(altercod_session_file.string(),
+                                buf.GetString());
+          return CComVariant("ok");
+        });
+
+    // AlterCOD friends API bridge (IKAAM): the browser XHR can block
+    // cross-zone requests to the friends API (returns status 0). We route them
+    // through native curl instead. JS passes the full URL and gets the raw
+    // response body back (or "" on error).
+    window.get_html_frame()->register_callback(
+        "friendsApiGet",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("");
+          const auto url = params[0].get_string();
+          // Basic safety: only allow our own API host.
+          if (url.find("https://ikaam.fr/amis/") != 0)
+            return CComVariant("");
+
+          // Split "endpoint?query" so we can POST the query as the body. We use
+          // post_data (not get_data) because get_data sets CURLOPT_FAILONERROR
+          // and throws on non-2xx; post_data is throw-free and our PHP API
+          // accepts params via GET or POST identically.
+          std::string endpoint = url;
+          std::string body;
+          const auto qpos = url.find('?');
+          if (qpos != std::string::npos) {
+            endpoint = url.substr(0, qpos);
+            body = url.substr(qpos + 1);
           }
 
-          if (doc.HasMember("asset_limits_enabled"))
-            doc["asset_limits_enabled"].SetString(value.c_str(),
-                                                  doc.GetAllocator());
-          else
-            doc.AddMember("asset_limits_enabled",
-                          rapidjson::Value(value.c_str(), doc.GetAllocator()),
-                          doc.GetAllocator());
+          try {
+            const auto response = utils::http::post_data(endpoint, body, 10);
+            if (!response.has_value())
+              return CComVariant("");
+            return CComVariant(response.value().c_str());
+          } catch (...) {
+            return CComVariant("");
+          }
+        });
 
-          rapidjson::StringBuffer sb;
-          rapidjson::Writer<rapidjson::StringBuffer> w(sb);
-          doc.Accept(w);
-          utils::io::write_file(path.string(),
-                                std::string(sb.GetString(), sb.GetSize()));
-          return CComVariant("ok");
-        }
+    // AlterCOD OAuth login (IKAAM): the JS calls startOAuthLogin() when the
+    // user clicks "Se connecter avec le forum". To avoid freezing the UI thread
+    // (a blocking call makes the window unresponsive and the launcher can end
+    // up launching the game), we run the flow on a DETACHED background thread
+    // and let the JS poll checkOAuthResult() for the outcome.
+    //   startOAuthLogin()   -> "started" | "busy"
+    //   checkOAuthResult()  -> "pending" | "" (failed) | "token|pseudo" (success)
+    auto oauth_state =
+        std::make_shared<std::atomic<int>>(0); // 0 idle,1 running,2 done
+    auto oauth_result = std::make_shared<std::string>();
+    auto oauth_mutex = std::make_shared<std::mutex>();
 
-        if (key == "networkpassword" || key == "netpassword" ||
-            key == "workshop_retry_attempts" || key == "workshop_timeout") {
-          // Map setting key to dvar name
-          std::string dvar_name;
-          if (key == "networkpassword")
-            dvar_name = "g_password";
-          else if (key == "netpassword")
-            dvar_name = "net_password";
-          else
-            dvar_name = key; // workshop_retry_attempts, workshop_timeout
+    window.get_html_frame()->register_callback(
+        "startOAuthLogin",
+        [oauth_state, oauth_result, oauth_mutex](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          int expected = 0;
+          if (!oauth_state->compare_exchange_strong(expected, 1)) {
+            return CComVariant("busy"); // already running
+          }
+          std::thread([oauth_state, oauth_result, oauth_mutex]() {
+            std::string r;
+            try {
+              r = run_oauth_login();
+            } catch (...) {
+              r = "";
+            }
+            {
+              std::lock_guard<std::mutex> lock(*oauth_mutex);
+              *oauth_result = r;
+            }
+            oauth_state->store(2); // done
+          }).detach();
+          return CComVariant("started");
+        });
 
+    window.get_html_frame()->register_callback(
+        "checkOAuthResult",
+        [oauth_state, oauth_result, oauth_mutex](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const int st = oauth_state->load();
+          if (st == 1) {
+            return CComVariant("pending");
+          }
+          if (st == 2) {
+            std::string r;
+            {
+              std::lock_guard<std::mutex> lock(*oauth_mutex);
+              r = *oauth_result;
+            }
+            oauth_state->store(0); // reset for next time
+            return CComVariant(r.c_str());
+          }
+          return CComVariant(""); // idle / nothing running
+        });
+
+    window.get_html_frame()->register_callback(
+        "getGameSettings",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          rapidjson::StringBuffer buf;
+          rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+          w.StartObject();
+
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
+          const auto config_path =
+              std::filesystem::path(cwd) / "boiii_players" / "config.ini";
+
+          if (std::filesystem::exists(config_path)) {
+            std::string content;
+            if (utils::io::read_file(config_path.string(), &content)) {
+              auto extract = [&](const char *key) -> std::string {
+                std::string pattern = std::string(key) + " = \"";
+                auto pos = content.find(pattern);
+                if (pos == std::string::npos)
+                  return "";
+                auto val_start = pos + pattern.size();
+                auto val_end = content.find('"', val_start);
+                if (val_end == std::string::npos)
+                  return "";
+                return content.substr(val_start, val_end - val_start);
+              };
+
+              const char *keys[] = {"MaxFPS",
+                                    "FOV",
+                                    "FullScreenMode",
+                                    "WindowSize",
+                                    "RefreshRate",
+                                    "Vsync",
+                                    "DrawFPS",
+                                    "SmoothFramerate",
+                                    "RestrictGraphicsOptions",
+                                    "MaxFrameLatency",
+                                    "VideoMemory",
+                                    "StreamMinResident"};
+              for (const auto &k : keys) {
+                auto val = extract(k);
+                if (!val.empty()) {
+                  w.Key(k);
+                  w.String(val.c_str());
+                }
+              }
+            }
+          }
+
+          // Read g_password from config.cfg (server hosting password)
           const auto cfg_path = std::filesystem::path(cwd) / "boiii_players" /
                                 "user" / "config.cfg";
-          std::string cfg_data;
-          if (std::filesystem::exists(cfg_path))
-            utils::io::read_file(cfg_path.string(), &cfg_data);
+          if (std::filesystem::exists(cfg_path)) {
+            std::string cfg_data;
+            if (utils::io::read_file(cfg_path.string(), &cfg_data)) {
+              auto extract_dvar = [&](const char *dvar_name) -> std::string {
+                std::string pattern = std::string("set ") + dvar_name + " \"";
+                auto pos = cfg_data.find(pattern);
+                if (pos == std::string::npos)
+                  return "";
+                auto val_start = pos + pattern.size();
+                auto val_end = cfg_data.find('"', val_start);
+                if (val_end == std::string::npos)
+                  return "";
+                return cfg_data.substr(val_start, val_end - val_start);
+              };
 
-          std::string dvar_line = "set " + dvar_name + " \"" + value + "\"";
-          std::string search = "set " + dvar_name + " \"";
-          auto pos = cfg_data.find(search);
-          if (pos != std::string::npos) {
-            auto line_end = cfg_data.find('\n', pos);
-            if (line_end == std::string::npos)
-              line_end = cfg_data.size();
-            cfg_data.replace(pos, line_end - pos, dvar_line);
-          } else {
-            if (!cfg_data.empty() && cfg_data.back() != '\n')
-              cfg_data += "\n";
-            cfg_data += dvar_line + "\n";
-          }
-          utils::io::write_file(cfg_path.string(), cfg_data);
-          return CComVariant("ok");
-        }
+              auto pw = extract_dvar("g_password");
+              w.Key("networkpassword");
+              w.String(pw.c_str());
 
-        if (key == "friendsOnly") {
-          // Store friends-only in launcher_settings.json (no game-side
-          // equivalent)
-          const auto path = std::filesystem::path("boiii_players") / "user" /
-                            "launcher_settings.json";
-          std::error_code ec;
-          std::filesystem::create_directories(path.parent_path(), ec);
+              auto net_pw = extract_dvar("net_password");
+              w.Key("netpassword");
+              w.String(net_pw.c_str());
 
-          rapidjson::Document doc;
-          std::string data;
-          if (utils::io::read_file(path.string(), &data) && !data.empty()) {
-            if (doc.Parse(data.c_str()).HasParseError())
-              doc.SetObject();
-          } else {
-            doc.SetObject();
-          }
+              auto retry = extract_dvar("workshop_retry_attempts");
+              w.Key("workshop_retry_attempts");
+              w.String(retry.empty() ? "30" : retry.c_str());
 
-          if (doc.HasMember("friends_only"))
-            doc["friends_only"].SetString(value.c_str(), doc.GetAllocator());
-          else
-            doc.AddMember("friends_only",
-                          rapidjson::Value(value.c_str(), doc.GetAllocator()),
-                          doc.GetAllocator());
-
-          rapidjson::StringBuffer sb;
-          rapidjson::Writer<rapidjson::StringBuffer> w(sb);
-          doc.Accept(w);
-          utils::io::write_file(path.string(),
-                                std::string(sb.GetString(), sb.GetSize()));
-          return CComVariant("ok");
-        }
-
-        const auto config_path =
-            std::filesystem::path(cwd) / "boiii_players" / "config.ini";
-        if (!std::filesystem::exists(config_path))
-          return CComVariant("no_config");
-
-        std::string content;
-        if (!utils::io::read_file(config_path.string(), &content))
-          return CComVariant("read_error");
-
-        std::string pattern = key + " = \"";
-        auto pos = content.find(pattern);
-        if (pos != std::string::npos) {
-          auto val_start = pos + pattern.size();
-          auto val_end = content.find('"', val_start);
-          if (val_end != std::string::npos) {
-            content.replace(val_start, val_end - val_start, value);
-          }
-        } else {
-          if (!content.empty() && content.back() != '\n')
-            content += "\n";
-          content += key + " = \"" + value + "\"\n";
-        }
-
-        utils::io::write_file(config_path.string(), content);
-        return CComVariant("ok");
-      });
-
-  window.get_html_frame()->register_callback(
-      "toggleReduceStutter",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-        const bool enable = params[0].get_string() == "1";
-
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        const auto dll_file = std::filesystem::path(cwd) / "d3dcompiler_46.dll";
-        const auto dll_bak =
-            std::filesystem::path(cwd) / "d3dcompiler_46.dll.bak";
-
-        try {
-          if (enable) {
-            if (std::filesystem::exists(dll_file))
-              std::filesystem::rename(dll_file, dll_bak);
-          } else {
-            if (std::filesystem::exists(dll_bak))
-              std::filesystem::rename(dll_bak, dll_file);
-          }
-          return CComVariant("ok");
-        } catch (...) {
-          return CComVariant("error");
-        }
-      });
-
-  window.get_html_frame()->register_callback(
-      "toggleSkipIntro",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-        const bool enable = params[0].get_string() == "1";
-
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        const auto video_dir = std::filesystem::path(cwd) / "video";
-        const auto intro = video_dir / "BO3_Global_Logo_LogoSequence.mkv";
-        const auto intro_bak =
-            video_dir / "BO3_Global_Logo_LogoSequence.mkv.bak";
-
-        try {
-          if (enable) {
-            if (std::filesystem::exists(intro))
-              std::filesystem::rename(intro, intro_bak);
-          } else {
-            if (std::filesystem::exists(intro_bak))
-              std::filesystem::rename(intro_bak, intro);
-          }
-          return CComVariant("ok");
-        } catch (...) {
-          return CComVariant("error");
-        }
-      });
-
-  window.get_html_frame()->register_callback(
-      "toggleSkipAllIntros",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-        const bool enable = params[0].get_string() == "1";
-
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        const auto video_dir = std::filesystem::path(cwd) / "video";
-
-        if (!std::filesystem::exists(video_dir))
-          return CComVariant("no_video_dir");
-
-        try {
-          if (enable) {
-            for (const auto &entry :
-                 std::filesystem::directory_iterator(video_dir)) {
-              if (entry.path().extension() == ".mkv") {
-                auto bak = entry.path();
-                bak += ".bak";
-                if (!std::filesystem::exists(bak))
-                  std::filesystem::rename(entry.path(), bak);
-              }
+              auto timeout = extract_dvar("workshop_timeout");
+              w.Key("workshop_timeout");
+              w.String(timeout.empty() ? "300" : timeout.c_str());
             }
-          } else {
+          }
+
+          const auto dll_bak =
+              std::filesystem::path(cwd) / "d3dcompiler_46.dll.bak";
+          w.Key("reduceStutter");
+          w.Bool(std::filesystem::exists(dll_bak));
+
+          const auto video_dir = std::filesystem::path(cwd) / "video";
+          const auto intro_bak =
+              video_dir / "BO3_Global_Logo_LogoSequence.mkv.bak";
+          w.Key("skipIntro");
+          w.Bool(std::filesystem::exists(intro_bak));
+
+          bool all_skipped = false;
+          if (std::filesystem::exists(video_dir)) {
+            int mkv_count = 0, bak_count = 0;
             for (const auto &entry :
                  std::filesystem::directory_iterator(video_dir)) {
+              auto ext = entry.path().extension().string();
               auto fn = entry.path().filename().string();
-              if (fn.size() > 8 && fn.substr(fn.size() - 8) == ".mkv.bak") {
-                auto restored =
-                    entry.path().parent_path() / fn.substr(0, fn.size() - 4);
-                if (!std::filesystem::exists(restored))
-                  std::filesystem::rename(entry.path(), restored);
+              if (ext == ".mkv")
+                mkv_count++;
+              if (fn.size() > 8 && fn.substr(fn.size() - 8) == ".mkv.bak")
+                bak_count++;
+            }
+            all_skipped = (bak_count > 0 && mkv_count == 0);
+          }
+          w.Key("skipAllIntros");
+          w.Bool(all_skipped);
+
+          const auto settings_file = std::filesystem::path("boiii_players") /
+                                     "user" / "launcher_settings.json";
+          if (std::filesystem::exists(settings_file)) {
+            std::string sdata;
+            if (utils::io::read_file(settings_file.string(), &sdata)) {
+              rapidjson::Document sdoc;
+              if (!sdoc.Parse(sdata.c_str()).HasParseError() &&
+                  sdoc.IsObject()) {
+                for (auto it = sdoc.MemberBegin(); it != sdoc.MemberEnd();
+                     ++it) {
+                  if (!it->value.IsString())
+                    continue;
+
+                  const std::string key = it->name.GetString();
+                  if (key == "asset_limits_enabled") {
+                    w.Key("assetLimits");
+                  } else if (key == "friends_only") {
+                    w.Key("friendsOnly");
+                  } else if (key == "disable_asset_pools" ||
+                             key.starts_with("ap_")) {
+                    w.Key(key.c_str());
+                  } else {
+                    continue;
+                  }
+                  w.String(it->value.GetString());
+                }
               }
             }
           }
-          return CComVariant("ok");
-        } catch (...) {
-          return CComVariant("error");
-        }
-      });
 
-  window.get_html_frame()->register_callback(
-      "applyGraphicsPreset",
-      [](const std::vector<html_argument> &params) -> CComVariant {
-        if (params.empty() || !params[0].is_string())
-          return CComVariant("error");
-        const auto preset = params[0].get_string();
+          w.EndObject();
+          return CComVariant(
+              std::string(buf.GetString(), buf.GetSize()).c_str());
+        });
 
-        char cwd[MAX_PATH] = {};
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        const auto config_path =
-            std::filesystem::path(cwd) / "boiii_players" / "config.ini";
+    window.get_html_frame()->register_callback(
+        "setGameSetting",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.size() < 2 || !params[0].is_string() ||
+              !params[1].is_string())
+            return CComVariant("error");
 
-        if (!std::filesystem::exists(config_path))
-          return CComVariant("no_config");
+          const auto key = params[0].get_string();
+          const auto value = params[1].get_string();
 
-        std::string content;
-        if (!utils::io::read_file(config_path.string(), &content))
-          return CComVariant("read_error");
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
 
-        auto set_value = [&](const std::string &k, const std::string &v) {
-          std::string pat = k + " = \"";
-          auto pos = content.find(pat);
+          if (key == "asset_limits_enabled" || key == "disable_asset_pools" ||
+              key.starts_with("ap_")) {
+            const auto path = std::filesystem::path("boiii_players") / "user" /
+                              "launcher_settings.json";
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+
+            rapidjson::Document doc;
+            std::string data;
+            if (utils::io::read_file(path.string(), &data) && !data.empty()) {
+              if (doc.Parse(data.c_str()).HasParseError() || !doc.IsObject())
+                doc.SetObject();
+            } else {
+              doc.SetObject();
+            }
+
+            if (doc.HasMember(key.c_str()))
+              doc[key.c_str()].SetString(value.c_str(), doc.GetAllocator());
+            else
+              doc.AddMember(rapidjson::Value(key.c_str(), doc.GetAllocator()),
+                            rapidjson::Value(value.c_str(), doc.GetAllocator()),
+                            doc.GetAllocator());
+
+            rapidjson::StringBuffer sb;
+            rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+            doc.Accept(w);
+            return CComVariant(
+                utils::io::write_file(path.string(),
+                                      std::string(sb.GetString(), sb.GetSize()))
+                    ? "ok"
+                    : "write_error");
+          }
+
+          if (key == "networkpassword" || key == "netpassword" ||
+              key == "workshop_retry_attempts" || key == "workshop_timeout") {
+            // Map setting key to dvar name
+            std::string dvar_name;
+            if (key == "networkpassword")
+              dvar_name = "g_password";
+            else if (key == "netpassword")
+              dvar_name = "net_password";
+            else
+              dvar_name = key; // workshop_retry_attempts, workshop_timeout
+
+            const auto cfg_path = std::filesystem::path(cwd) / "boiii_players" /
+                                  "user" / "config.cfg";
+            std::string cfg_data;
+            if (std::filesystem::exists(cfg_path))
+              utils::io::read_file(cfg_path.string(), &cfg_data);
+
+            std::string dvar_line = "set " + dvar_name + " \"" + value + "\"";
+            std::string search = "set " + dvar_name + " \"";
+            auto pos = cfg_data.find(search);
+            if (pos != std::string::npos) {
+              auto line_end = cfg_data.find('\n', pos);
+              if (line_end == std::string::npos)
+                line_end = cfg_data.size();
+              cfg_data.replace(pos, line_end - pos, dvar_line);
+            } else {
+              if (!cfg_data.empty() && cfg_data.back() != '\n')
+                cfg_data += "\n";
+              cfg_data += dvar_line + "\n";
+            }
+            utils::io::write_file(cfg_path.string(), cfg_data);
+            return CComVariant("ok");
+          }
+
+          if (key == "friendsOnly") {
+            // Store friends-only in launcher_settings.json (no game-side
+            // equivalent)
+            const auto path = std::filesystem::path("boiii_players") / "user" /
+                              "launcher_settings.json";
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+
+            rapidjson::Document doc;
+            std::string data;
+            if (utils::io::read_file(path.string(), &data) && !data.empty()) {
+              if (doc.Parse(data.c_str()).HasParseError())
+                doc.SetObject();
+            } else {
+              doc.SetObject();
+            }
+
+            if (doc.HasMember("friends_only"))
+              doc["friends_only"].SetString(value.c_str(), doc.GetAllocator());
+            else
+              doc.AddMember("friends_only",
+                            rapidjson::Value(value.c_str(), doc.GetAllocator()),
+                            doc.GetAllocator());
+
+            rapidjson::StringBuffer sb;
+            rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+            doc.Accept(w);
+            utils::io::write_file(path.string(),
+                                  std::string(sb.GetString(), sb.GetSize()));
+            return CComVariant("ok");
+          }
+
+          const auto config_path =
+              std::filesystem::path(cwd) / "boiii_players" / "config.ini";
+          if (!std::filesystem::exists(config_path))
+            return CComVariant("no_config");
+
+          std::string content;
+          if (!utils::io::read_file(config_path.string(), &content))
+            return CComVariant("read_error");
+
+          std::string pattern = key + " = \"";
+          auto pos = content.find(pattern);
           if (pos != std::string::npos) {
-            auto vs = pos + pat.size();
-            auto ve = content.find('"', vs);
-            if (ve != std::string::npos)
-              content.replace(vs, ve - vs, v);
+            auto val_start = pos + pattern.size();
+            auto val_end = content.find('"', val_start);
+            if (val_end != std::string::npos) {
+              content.replace(val_start, val_end - val_start, value);
+            }
           } else {
             if (!content.empty() && content.back() != '\n')
               content += "\n";
-            content += k + " = \"" + v + "\"\n";
+            content += key + " = \"" + value + "\"\n";
           }
-        };
 
-        if (preset == "smooth") {
-          set_value("SmoothFramerate", "1");
-          set_value("MaxFrameLatency", "4");
-          set_value("SerializeRender", "0");
-          set_value("VideoMemory", "1");
-          set_value("StreamMinResident", "0");
-          set_value("RestrictGraphicsOptions", "0");
-          set_value("Vsync", "1");
-          set_value("BackbufferCount", "3");
-          set_value("DisableDynamicLightShadows", "1");
-          set_value("DisableDynamicSunShadows", "1");
-          set_value("VolumetricLightingEnabled", "0");
-          set_value("AATechnique", "FXAA");
-          set_value("SSAOTechnique", "GTAO Low Quality");
-          set_value("MotionBlur", "Off");
-          set_value("SubsurfaceScattering", "0");
-        } else if (preset == "lowlatency") {
-          set_value("SmoothFramerate", "0");
-          set_value("MaxFrameLatency", "1");
-          set_value("SerializeRender", "2");
-          set_value("VideoMemory", "0.75");
-          set_value("StreamMinResident", "1");
-          set_value("RestrictGraphicsOptions", "0");
-          set_value("Vsync", "0");
-          set_value("BackbufferCount", "2");
-          set_value("DisableDynamicLightShadows", "1");
-          set_value("DisableDynamicSunShadows", "1");
-          set_value("VolumetricLightingEnabled", "0");
-          set_value("AATechnique", "FXAA");
-          set_value("SSAOTechnique", "GTAO Low Quality");
-          set_value("MotionBlur", "Off");
-          set_value("SubsurfaceScattering", "0");
-        } else {
-          return CComVariant("unknown_preset");
-        }
+          utils::io::write_file(config_path.string(), content);
+          return CComVariant("ok");
+        });
 
-        utils::io::write_file(config_path.string(), content);
-        return CComVariant("ok");
-      });
+    window.get_html_frame()->register_callback(
+        "toggleReduceStutter",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const bool enable = params[0].get_string() == "1";
 
-  window.get_html_frame()->register_callback(
-      "isGameRunning",
-      [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-        return CComVariant(is_game_process_running() ? "1" : "0");
-      });
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
+          const auto dll_file =
+              std::filesystem::path(cwd) / "d3dcompiler_46.dll";
+          const auto dll_bak =
+              std::filesystem::path(cwd) / "d3dcompiler_46.dll.bak";
 
-  window.get_html_frame()->register_callback(
-      "launchGame",
-      [&](const std::vector<html_argument> &params) -> CComVariant {
-        std::string new_name{};
-        if (!params.empty() && params[0].is_string()) {
-          new_name = sanitize_player_name(params[0].get_string());
-          utils::string::trim(new_name);
-        }
-
-        if (new_name.empty()) {
-          new_name = sanitize_player_name(utils::nt::get_user_name());
-          if (new_name.empty())
-            new_name = "Unknown Soldier";
-        }
-        if (new_name.size() > 16)
-          new_name.resize(16);
-        utils::properties::store("playerName", new_name);
-
-        std::string option_list{};
-        if (params.size() >= 2 && params[1].is_string()) {
-          option_list = params[1].get_string();
-          utils::string::trim(option_list);
-        }
-        utils::properties::store("launchOptions", option_list);
-
-        std::string exe_name{};
-        std::string exe_url{};
-        if (params.size() >= 3 && params[2].is_string())
-          exe_name = params[2].get_string();
-        if (params.size() >= 4 && params[3].is_string())
-          exe_url = params[3].get_string();
-
-        std::vector<std::string> opts;
-        if (!option_list.empty()) {
-          for (auto &part : utils::string::split(option_list, ' ')) {
-            auto token = normalize_option_token(std::move(part));
-            if (!token.empty())
-              opts.emplace_back(std::move(token));
-          }
-        }
-
-        if (!exe_name.empty() && !exe_url.empty()) {
-          if (handle_version_launch(exe_name, exe_url, opts)) {
+          try {
+            if (enable) {
+              if (std::filesystem::exists(dll_file))
+                std::filesystem::rename(dll_file, dll_bak);
+            } else {
+              if (std::filesystem::exists(dll_bak))
+                std::filesystem::rename(dll_bak, dll_file);
+            }
             return CComVariant("ok");
+          } catch (...) {
+            return CComVariant("error");
           }
-        }
+        });
 
-        relaunch_with_launch_options(opts);
-        return CComVariant("ok");
-      });
+    window.get_html_frame()->register_callback(
+        "toggleSkipIntro",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const bool enable = params[0].get_string() == "1";
 
-  window.get_html_frame()->register_callback(
-      "runGame", [&](const std::vector<html_argument> &params) -> CComVariant {
-        std::string new_name{};
-        if (!params.empty() && params[0].is_string()) {
-          new_name = sanitize_player_name(params[0].get_string());
-          utils::string::trim(new_name);
-        }
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
+          const auto video_dir = std::filesystem::path(cwd) / "video";
+          const auto intro = video_dir / "BO3_Global_Logo_LogoSequence.mkv";
+          const auto intro_bak =
+              video_dir / "BO3_Global_Logo_LogoSequence.mkv.bak";
 
-        if (new_name.empty()) {
-          new_name = sanitize_player_name(utils::nt::get_user_name());
+          try {
+            if (enable) {
+              if (std::filesystem::exists(intro))
+                std::filesystem::rename(intro, intro_bak);
+            } else {
+              if (std::filesystem::exists(intro_bak))
+                std::filesystem::rename(intro_bak, intro);
+            }
+            return CComVariant("ok");
+          } catch (...) {
+            return CComVariant("error");
+          }
+        });
+
+    window.get_html_frame()->register_callback(
+        "toggleSkipAllIntros",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const bool enable = params[0].get_string() == "1";
+
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
+          const auto video_dir = std::filesystem::path(cwd) / "video";
+
+          if (!std::filesystem::exists(video_dir))
+            return CComVariant("no_video_dir");
+
+          try {
+            if (enable) {
+              for (const auto &entry :
+                   std::filesystem::directory_iterator(video_dir)) {
+                if (entry.path().extension() == ".mkv") {
+                  auto bak = entry.path();
+                  bak += ".bak";
+                  if (!std::filesystem::exists(bak))
+                    std::filesystem::rename(entry.path(), bak);
+                }
+              }
+            } else {
+              for (const auto &entry :
+                   std::filesystem::directory_iterator(video_dir)) {
+                auto fn = entry.path().filename().string();
+                if (fn.size() > 8 && fn.substr(fn.size() - 8) == ".mkv.bak") {
+                  auto restored =
+                      entry.path().parent_path() / fn.substr(0, fn.size() - 4);
+                  if (!std::filesystem::exists(restored))
+                    std::filesystem::rename(entry.path(), restored);
+                }
+              }
+            }
+            return CComVariant("ok");
+          } catch (...) {
+            return CComVariant("error");
+          }
+        });
+
+    window.get_html_frame()->register_callback(
+        "applyGraphicsPreset",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("error");
+          const auto preset = params[0].get_string();
+
+          char cwd[MAX_PATH] = {};
+          GetCurrentDirectoryA(MAX_PATH, cwd);
+          const auto config_path =
+              std::filesystem::path(cwd) / "boiii_players" / "config.ini";
+
+          if (!std::filesystem::exists(config_path))
+            return CComVariant("no_config");
+
+          std::string content;
+          if (!utils::io::read_file(config_path.string(), &content))
+            return CComVariant("read_error");
+
+          auto set_value = [&](const std::string &k, const std::string &v) {
+            std::string pat = k + " = \"";
+            auto pos = content.find(pat);
+            if (pos != std::string::npos) {
+              auto vs = pos + pat.size();
+              auto ve = content.find('"', vs);
+              if (ve != std::string::npos)
+                content.replace(vs, ve - vs, v);
+            } else {
+              if (!content.empty() && content.back() != '\n')
+                content += "\n";
+              content += k + " = \"" + v + "\"\n";
+            }
+          };
+
+          if (preset == "smooth") {
+            set_value("SmoothFramerate", "1");
+            set_value("MaxFrameLatency", "4");
+            set_value("SerializeRender", "0");
+            set_value("VideoMemory", "1");
+            set_value("StreamMinResident", "0");
+            set_value("RestrictGraphicsOptions", "0");
+            set_value("Vsync", "1");
+            set_value("BackbufferCount", "3");
+            set_value("DisableDynamicLightShadows", "1");
+            set_value("DisableDynamicSunShadows", "1");
+            set_value("VolumetricLightingEnabled", "0");
+            set_value("AATechnique", "FXAA");
+            set_value("SSAOTechnique", "GTAO Low Quality");
+            set_value("MotionBlur", "Off");
+            set_value("SubsurfaceScattering", "0");
+          } else if (preset == "lowlatency") {
+            set_value("SmoothFramerate", "0");
+            set_value("MaxFrameLatency", "1");
+            set_value("SerializeRender", "2");
+            set_value("VideoMemory", "0.75");
+            set_value("StreamMinResident", "1");
+            set_value("RestrictGraphicsOptions", "0");
+            set_value("Vsync", "0");
+            set_value("BackbufferCount", "2");
+            set_value("DisableDynamicLightShadows", "1");
+            set_value("DisableDynamicSunShadows", "1");
+            set_value("VolumetricLightingEnabled", "0");
+            set_value("AATechnique", "FXAA");
+            set_value("SSAOTechnique", "GTAO Low Quality");
+            set_value("MotionBlur", "Off");
+            set_value("SubsurfaceScattering", "0");
+          } else {
+            return CComVariant("unknown_preset");
+          }
+
+          utils::io::write_file(config_path.string(), content);
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "isGameRunning",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(is_game_process_running() ? "1" : "0");
+        });
+
+    window.get_html_frame()->register_callback(
+        "runDiagnostics",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto game_path = game::get_game_path();
+          const auto appdata_path = game::get_appdata_path();
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          writer.StartObject();
+          writer.Key("gamePath");
+          writer.String(game_path.string().c_str());
+          writer.Key("appDataPath");
+          writer.String(appdata_path.string().c_str());
+          writer.Key("checks");
+          writer.StartArray();
+
+          const auto add_check = [&](const char *name, const char *status,
+                                     const std::string &details) {
+            writer.StartObject();
+            writer.Key("name");
+            writer.String(name);
+            writer.Key("status");
+            writer.String(status);
+            writer.Key("details");
+            writer.String(details.c_str());
+            writer.EndObject();
+          };
+
+          std::error_code filesystem_error;
+          const auto game_exe = game_path / "BlackOps3.exe";
+          const auto has_game =
+              std::filesystem::is_regular_file(game_exe, filesystem_error);
+          add_check("Game executable", has_game ? "ok" : "error",
+                    has_game ? game_exe.string()
+                             : "BlackOps3.exe was not found");
+
+          const auto ui_file = appdata_path / "data" / "launcher" / "main.html";
+          filesystem_error.clear();
+          const auto has_ui =
+              std::filesystem::is_regular_file(ui_file, filesystem_error);
+          add_check("Launcher data", has_ui ? "ok" : "error",
+                    has_ui ? ui_file.parent_path().string()
+                           : "Launcher UI data is missing or incomplete");
+
+          const auto steamcmd_exe = game_path / "steamcmd" / "steamcmd.exe";
+          filesystem_error.clear();
+          const auto has_steamcmd =
+              std::filesystem::is_regular_file(steamcmd_exe, filesystem_error);
+          add_check("SteamCMD", has_steamcmd ? "ok" : "warning",
+                    has_steamcmd
+                        ? steamcmd_exe.string()
+                        : "Not installed yet; it will download when needed");
+
+          const auto workshop_root = game_path / "steamcmd" / "steamapps" /
+                                     "workshop" / "downloads" /
+                                     game::APP_ID_STR;
+          filesystem_error.clear();
+          const auto has_workshop_root =
+              std::filesystem::is_directory(workshop_root, filesystem_error);
+          add_check("Workshop staging folder",
+                    has_workshop_root ? "ok" : "warning",
+                    has_workshop_root
+                        ? workshop_root.string()
+                        : "Folder is missing; use Repair Workshop Folders");
+
+          const auto binds_file = get_binds_file();
+          filesystem_error.clear();
+          add_check(
+              "Custom binds", "ok",
+              std::filesystem::is_regular_file(binds_file, filesystem_error)
+                  ? binds_file.string()
+                  : "No custom binds saved yet");
+
+          ULARGE_INTEGER available{};
+          if (GetDiskFreeSpaceExW(game_path.c_str(), &available, nullptr,
+                                  nullptr)) {
+            const auto free_space = available.QuadPart;
+            add_check("Free disk space",
+                      free_space >= 5ULL * 1024ULL * 1024ULL * 1024ULL
+                          ? "ok"
+                          : "warning",
+                      human_readable_size(free_space) + " available");
+          }
+
+          if (utils::nt::is_wine())
+            add_check("Wine compatibility", "warning",
+                      "Workshop downloads through SteamCMD may be unavailable");
+
+          writer.EndArray();
+          writer.EndObject();
+          return CComVariant(
+              std::string(buffer.GetString(), buffer.GetSize()).c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "repairWorkshopFolders",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const auto game_path = game::get_game_path();
+          const std::array paths = {
+              game_path / "mods", game_path / "usermaps",
+              game_path / "boiii_players" / "user",
+              game_path / "steamcmd" / "steamapps" / "workshop" / "downloads" /
+                  game::APP_ID_STR,
+              game_path / "steamcmd" / "steamapps" / "workshop" / "content" /
+                  game::APP_ID_STR};
+          for (const auto &path : paths) {
+            std::error_code ec;
+            std::filesystem::create_directories(path, ec);
+            if (ec)
+              return CComVariant("error");
+          }
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "clearProfileData",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          if (is_game_process_running())
+            return CComVariant("game_running");
+          const auto profile_path = game::get_game_path() / "boiii_players";
+          if (profile_path.filename() != "boiii_players")
+            return CComVariant("invalid_path");
+          std::error_code ec;
+          if (std::filesystem::exists(profile_path, ec))
+            std::filesystem::remove_all(profile_path, ec);
+          return CComVariant(ec ? "error" : "ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "launchGame",
+        [&](const std::vector<html_argument> &params) -> CComVariant {
+          std::string new_name{};
+          if (!params.empty() && params[0].is_string()) {
+            new_name = sanitize_player_name(params[0].get_string());
+            utils::string::trim(new_name);
+          }
+
           if (new_name.empty()) {
-            new_name = "Unknown Soldier";
+            new_name = sanitize_player_name(utils::nt::get_user_name());
+            if (new_name.empty())
+              new_name = "Unknown Soldier";
           }
-        }
+          if (new_name.size() > 16)
+            new_name.resize(16);
+          utils::properties::store("playerName", new_name);
 
-        if (new_name.size() > 16) {
-          new_name.resize(16);
-        }
+          std::string option_list{};
+          if (params.size() >= 2 && params[1].is_string()) {
+            option_list = params[1].get_string();
+            utils::string::trim(option_list);
+          }
+          utils::properties::store("launchOptions", option_list);
 
-        utils::properties::store("playerName", new_name);
+          std::string exe_name{};
+          std::string exe_url{};
+          if (params.size() >= 3 && params[2].is_string())
+            exe_name = params[2].get_string();
+          if (params.size() >= 4 && params[3].is_string())
+            exe_url = params[3].get_string();
 
-        std::string option_list{};
-        if (params.size() >= 2 && params[1].is_string()) {
-          option_list = params[1].get_string();
-          utils::string::trim(option_list);
-        }
-
-        utils::properties::store("launchOptions", option_list);
-
-        std::string exe_name{};
-        std::string exe_url{};
-        if (params.size() >= 3 && params[2].is_string())
-          exe_name = params[2].get_string();
-        if (params.size() >= 4 && params[3].is_string())
-          exe_url = params[3].get_string();
-
-        launch_options->clear();
-        if (!option_list.empty()) {
-          for (auto &part : utils::string::split(option_list, ' ')) {
-            auto token = normalize_option_token(std::move(part));
-            if (!token.empty()) {
-              launch_options->emplace_back(std::move(token));
+          std::vector<std::string> opts;
+          if (!option_list.empty()) {
+            for (auto &part : utils::string::split(option_list, ' ')) {
+              auto token = normalize_option_token(std::move(part));
+              if (!token.empty())
+                opts.emplace_back(std::move(token));
             }
           }
-        }
 
-        if (!exe_name.empty() && !exe_url.empty()) {
-          if (handle_version_launch(exe_name, exe_url, *launch_options)) {
+          if (!exe_name.empty() && !exe_url.empty()) {
+            if (handle_version_launch(exe_name, exe_url, opts)) {
+              return CComVariant("ok");
+            }
+          }
+
+          relaunch_with_launch_options(opts);
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "runGame",
+        [&](const std::vector<html_argument> &params) -> CComVariant {
+          std::string new_name{};
+          if (!params.empty() && params[0].is_string()) {
+            new_name = sanitize_player_name(params[0].get_string());
+            utils::string::trim(new_name);
+          }
+
+          if (new_name.empty()) {
+            new_name = sanitize_player_name(utils::nt::get_user_name());
+            if (new_name.empty()) {
+              new_name = "Unknown Soldier";
+            }
+          }
+
+          if (new_name.size() > 16) {
+            new_name.resize(16);
+          }
+
+          utils::properties::store("playerName", new_name);
+
+          std::string option_list{};
+          if (params.size() >= 2 && params[1].is_string()) {
+            option_list = params[1].get_string();
+            utils::string::trim(option_list);
+          }
+
+          utils::properties::store("launchOptions", option_list);
+
+          std::string exe_name{};
+          std::string exe_url{};
+          if (params.size() >= 3 && params[2].is_string())
+            exe_name = params[2].get_string();
+          if (params.size() >= 4 && params[3].is_string())
+            exe_url = params[3].get_string();
+
+          launch_options->clear();
+          if (!option_list.empty()) {
+            for (auto &part : utils::string::split(option_list, ' ')) {
+              auto token = normalize_option_token(std::move(part));
+              if (!token.empty()) {
+                launch_options->emplace_back(std::move(token));
+              }
+            }
+          }
+
+          if (!exe_name.empty() && !exe_url.empty()) {
+            *pending_exe_name = exe_name;
+            *pending_exe_url = exe_url;
+            *run_game = false;
+            window.get_window()->close();
             return {};
           }
-        }
 
-        if (!launch_options->empty()) {
-          *run_game = false;
-        } else {
-          *run_game = true;
-        }
+          if (!launch_options->empty()) {
+            *run_game = false;
+          } else {
+            *run_game = true;
+          }
 
-        window.get_window()->close();
-        return {};
-      });
+          window.get_window()->close();
+          return {};
+        });
 
-  // window.get_html_frame()->load_html(utils::nt::load_resource(MENU_MAIN));
-  // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if
-  // missing). Wrapped so a network hiccup can never stop the launcher from
-  // loading its (possibly cached) UI.
-  try {
-    ensure_launcher_ui();
-  } catch (...) {
+    // window.get_html_frame()->load_html(utils::nt::load_resource(MENU_MAIN));
+    // AlterBO3 (IKAAM): make sure the custom UI exists (downloads it once if
+    // missing). Wrapped so a network hiccup can never stop the launcher from
+    // loading its (possibly cached) UI.
+    try {
+      ensure_launcher_ui();
+    } catch (...) {
+    }
+    window.get_html_frame()->load_url(utils::string::va(
+        "file:///%ls", get_launcher_ui_file().wstring().c_str()));
+
+    window::run();
   }
-  window.get_html_frame()->load_url(utils::string::va(
-      "file:///%ls", get_launcher_ui_file().wstring().c_str()));
 
-  window::run();
+  if (!pending_exe_name->empty() && !pending_exe_url->empty()) {
+    handle_version_launch(*pending_exe_name, *pending_exe_url, *launch_options);
+    return false;
+  }
+
   if (!launch_options->empty()) {
     relaunch_with_launch_options(*launch_options);
     return false;
@@ -2828,163 +3170,6 @@ bool run() {
 std::filesystem::path get_launcher_ui_file() {
   return game::get_appdata_path() / "data/launcher/main.html";
 }
-
-// AlterBO3 (IKAAM): launcher self-update.
-//
-// The launcher knows its own build number (LAUNCHER_BUILD below). On startup
-// it fetches a small text file from ikaam.fr that holds the latest build
-// number. If the remote number is higher, it asks the user (Yes/No) and, on
-// Yes, downloads the new AlterBOIII.exe and swaps it in WITHOUT needing a
-// .bat or a second updater process.
-//
-// The swap trick: a running .exe cannot be overwritten, but it CAN be renamed.
-// So we rename the current exe to AlterBOIII_old.exe, write the freshly
-// downloaded bytes to AlterBOIII.exe, launch it, and quit. The new instance
-// deletes AlterBOIII_old.exe on startup (handled at the top of run()).
-//
-// To ship an update: bump LAUNCHER_BUILD (top of this file), upload the new
-// AlterBOIII.exe to https://ikaam.fr/COD/AlterBOIII.exe and set the same number
-// inside https://ikaam.fr/COD/launcher_ver.txt
-
-void cleanup_old_launcher() {
-  // Remove the leftover AlterBOIII_old.exe from a previous self-update.
-  std::error_code ec;
-  const auto self = utils::nt::library::get_by_address(cleanup_old_launcher);
-  const auto dir = std::filesystem::path(self.get_path()).parent_path();
-  const auto old_exe = dir / "AlterBOIII_old.exe";
-  if (std::filesystem::exists(old_exe, ec)) {
-    std::filesystem::remove(old_exe, ec);
-  }
-}
-
-void check_launcher_update() {
-  // Anti-loop guard: the freshly updated exe is relaunched with this flag so
-  // it does NOT immediately check again. Without it, if the server still serves
-  // the same build (or the user forgot to bump the exe), the popup would loop
-  // forever.
-  if (utils::flags::has_flag("noupdatecheck")) {
-    return;
-  }
-
-  static const char *ver_url = "https://ikaam.fr/COD/launcher_ver.txt";
-  static const char *exe_url = "https://ikaam.fr/COD/AlterBOIII.exe";
-
-  // 1) Fetch the remote build number.
-  // get_data throws on non-2xx / curl errors (CURLOPT_FAILONERROR). Catch it so
-  // a server hiccup on launcher_ver.txt never crashes startup.
-  std::optional<std::string> rev_data;
-  try {
-    rev_data = utils::http::get_data(ver_url);
-  } catch (...) {
-    return; // treat any error as "no update", launcher opens normally
-  }
-  if (!rev_data || rev_data->empty()) {
-    return; // network down or file missing: skip silently, launcher still works
-  }
-
-  std::string remote_str = *rev_data;
-  while (!remote_str.empty() &&
-         (remote_str.back() == '\n' || remote_str.back() == '\r' ||
-          remote_str.back() == ' ' || remote_str.back() == '\t')) {
-    remote_str.pop_back();
-  }
-
-  int remote_build = 0;
-  try {
-    remote_build = std::stoi(remote_str);
-  } catch (...) {
-    return; // malformed file: ignore
-  }
-
-  if (remote_build <= LAUNCHER_BUILD) {
-    return; // already up to date
-  }
-
-  // 2) Ask the user.
-  const int answer = MessageBoxA(
-      nullptr,
-      "Une nouvelle mise a jour du launcher AlterBO3 est disponible.\n\n"
-      "Voulez-vous la telecharger et l'installer maintenant ?",
-      "Mise a jour disponible", MB_YESNO | MB_ICONINFORMATION);
-  if (answer != IDYES) {
-    return; // user declined: keep current version
-  }
-
-  // 3) Download the new exe into memory.
-  // Download the new exe (throw-safe: get_data throws on non-2xx).
-  std::optional<std::string> exe_data;
-  try {
-    exe_data = utils::http::get_data(exe_url);
-  } catch (...) {
-    game::show_error("Echec du telechargement de la mise a jour.\n"
-                     "Reessayez plus tard.");
-    return;
-  }
-  if (!exe_data || exe_data->empty()) {
-    game::show_error("Echec du telechargement de la mise a jour.\n"
-                     "Reessayez plus tard.");
-    return;
-  }
-
-  // 3b) Sanity check: a real Windows .exe starts with the "MZ" magic bytes.
-  // If the server returned an HTML error page (404/403) instead of the file,
-  // this guard prevents overwriting the launcher with garbage (which would
-  // make the update popup loop forever).
-  if (exe_data->size() < 2 || (*exe_data)[0] != 'M' || (*exe_data)[1] != 'Z') {
-    game::show_error(
-        "La mise a jour telechargee est invalide (fichier introuvable "
-        "sur le serveur ou corrompu).\n\n"
-        "Verifiez que AlterBOIII.exe est bien present a l'adresse "
-        "configuree, puis reessayez.");
-    return;
-  }
-
-  // 4) Swap: rename current exe, write the new one in its place.
-  const auto self = utils::nt::library::get_by_address(check_launcher_update);
-  const auto exe_path = std::filesystem::path(self.get_path());
-  const auto dir = exe_path.parent_path();
-  const auto old_path = dir / "AlterBOIII_old.exe";
-  const auto new_path = dir / "AlterBOIII.exe";
-
-  std::error_code ec;
-  // Clear any stale _old from a previous run, then rename current -> _old.
-  std::filesystem::remove(old_path, ec);
-  std::filesystem::rename(exe_path, old_path, ec);
-  if (ec) {
-    game::show_error("Impossible de remplacer le launcher.\n"
-                     "Fermez les autres instances et reessayez.");
-    return;
-  }
-
-  if (!utils::io::write_file_executable(new_path, *exe_data)) {
-    // Roll back so the user is not left without a launcher.
-    std::filesystem::rename(old_path, exe_path, ec);
-    game::show_error("Echec de l'ecriture de la mise a jour.");
-    return;
-  }
-
-  // 5) Launch the new exe and quit this one. The -noupdatecheck flag stops the
-  // new instance from re-checking immediately (anti-loop safety).
-  STARTUPINFOA si{};
-  PROCESS_INFORMATION pi{};
-  si.cb = sizeof(si);
-  std::string cmd = "\"" + new_path.string() + "\" \"-noupdatecheck\"";
-  char dir_buf[MAX_PATH];
-  GetCurrentDirectoryA(sizeof(dir_buf), dir_buf);
-  if (CreateProcessA(new_path.string().c_str(), cmd.data(), nullptr, nullptr,
-                     FALSE, 0, nullptr, dir_buf, &si, &pi)) {
-    if (pi.hThread)
-      CloseHandle(pi.hThread);
-    if (pi.hProcess)
-      CloseHandle(pi.hProcess);
-    TerminateProcess(GetCurrentProcess(), 0);
-  }
-}
-
-// AlterBO3 (IKAAM): on first launch the custom UI files may be missing.
-// Download them once from the IKAAM GitHub (raw) so the launcher renders.
-// This NEVER overwrites existing files — it only fills in what's absent,
-// so it can't undo local edits.
 
 void ensure_launcher_ui() {
   // AlterBO3 (IKAAM): the launcher UI updates itself WITHOUT recompiling the
@@ -3007,11 +3192,6 @@ void ensure_launcher_ui() {
   // Read the remote revision (trimmed). If the network fails we just skip the
   // forced refresh and fall back to "download only what's missing".
   std::string remote_rev;
-  // get_data throws on non-2xx / curl errors (CURLOPT_FAILONERROR). If the rev
-  // fetch throws, the whole UI refresh was silently skipped, leaving the
-  // launcher stuck on an old cached UI forever. Catch it so we still fall back
-  // to "download only what's missing", and so a transient error can't freeze
-  // the UI version.
   std::optional<std::string> rev_data;
   try {
     rev_data = utils::http::get_data(rev_url);
@@ -3072,6 +3252,6 @@ void ensure_launcher_ui() {
 // the launcher UI is fetched on first launch only (see ensure_launcher_ui).
 void check_self_update() {
   // Intentionally does nothing — kept so the declaration in launcher.hpp stays
-  // valid. The exe is distributed via the .7z release, not auto-updated.
+  // valid. The exe is distributed via the release archive, not auto-updated.
 }
 } // namespace launcher

@@ -1,14 +1,26 @@
 #pragma once
-#include "../../../game/game.hpp"
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 namespace game {
 namespace scr {
 
-level::gentity_t *GetEntity_Impl(const scr_entref_t *entref);
-level::gentity_t *Scr_GetEntity_Impl(uint32_t index);
-const char *Scr_TypeName(ScrVarType type);
-bool Scr_IsTrue_Impl(scriptInstance_t inst, ScrVarValue_t *value);
-void Scr_PlaySoundAtPosition_Impl(scriptInstance_t inst);
+inline level::gentity_t *GetEntity_Impl(const scr_entref_t *entref) {
+  if (entref->classnum == 0) {
+    return level::entity(entref->u.entnum);
+  }
+  Scr_ObjectError(SCRIPTINSTANCE_SERVER, "not an entity");
+  return nullptr;
+}
 
+inline level::gentity_t *Scr_GetEntity_Impl(uint32_t index) {
+  scr_entref_t entref;
+  Scr_GetEntityRef(&entref, SCRIPTINSTANCE_SERVER, index);
+  return GetEntity_Impl(&entref);
+}
+
+void Scr_PlaySoundAtPosition_Impl(scriptInstance_t inst);
+std::vector<volatile var::ScrVarValue_t *> Scr_GetArray(scriptInstance_t inst,
+                                                        var::ScrVarIndex_t idx);
 } // namespace scr
 } // namespace game

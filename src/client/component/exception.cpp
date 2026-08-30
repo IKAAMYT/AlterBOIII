@@ -1,13 +1,12 @@
-#include "../std_include.hpp"
+#include <std_include.hpp>
 #include <cstdint>
 
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
-#include "game/game.hpp"
+#include <game/game.hpp>
 #include "scheduler.hpp"
 
 #include <errhandlingapi.h>
-#include <utils/flags.hpp>
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
@@ -16,7 +15,17 @@
 
 #include <exception/minidump.hpp>
 
-#include <version.hpp>
+// In case of clangd compilation
+#if __has_include("version.hpp")
+#include "version.hpp"
+#else
+#ifndef VERSION
+#define VERSION "0"
+#endif
+#ifndef SHORTVERSION
+#define SHORTVERSION "0"
+#endif
+#endif
 
 #include <dbghelp.h>
 #pragma comment(lib, "dbghelp.lib")
@@ -125,7 +134,7 @@ capture_stackwalk(const LPEXCEPTION_POINTERS exceptioninfo,
   const HANDLE process = GetCurrentProcess();
   const HANDLE thread = GetCurrentThread();
 
-  for (int i = 0; i < max_frames; ++i) {
+  for (int32_t i = 0; i < max_frames; ++i) {
     if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame,
                      &ctx, nullptr, SymFunctionTableAccess64,
                      SymGetModuleBase64, nullptr))
@@ -159,7 +168,7 @@ qboolean WINAPI mini_dump_write_dump_stub(
     const PMINIDUMP_USER_STREAM_INFORMATION user_stream_param,
     const PMINIDUMP_CALLBACK_INFORMATION callback_param) {
   wchar_t filename[MAX_PATH];
-  if (GetFinalPathNameByHandleW(h_file, filename, ARRAYSIZE(filename),
+  if (GetFinalPathNameByHandleW(h_file, filename, std::size(filename),
                                 VOLUME_NAME_DOS)) {
     std::wstring path = filename;
     if (path.find(L"\\\\?\\") == 0) {
@@ -235,8 +244,10 @@ void display_error_dialog() {
   const resolved_frame frame = resolve_address(exception_data.address);
   const char *exception_name = get_exception_string(exception_data.code);
   const std::string location = get_crash_module_info(exception_data.address);
+  const std::string minidumps_out =
+      (game::get_appdata_path() / "minidumps").string();
 
-  const std::string error_str = utils::string::va(
+  const char *error_str = utils::string::va(
       "%s (0x%08X) at %s\n\n"
       "Address: 0x%p (RVA: 0x%llX)\n"
       "Module: %s\n"
@@ -248,19 +259,18 @@ void display_error_dialog() {
       exception_data.address, frame.rva, frame.module_name.c_str(),
       frame.function_name.empty() ? "" : "Function: ",
       frame.function_name.empty() ? "" : (frame.function_name + "\n").c_str(),
-      (game::get_appdata_path() / "minidumps").string().c_str());
+      minidumps_out.c_str());
 
   utils::thread::suspend_other_threads();
   show_mouse_cursor();
 
-  game::show_error(error_str.data(), "AlterBOIII ERROR");
+  game::show_error(error_str, "Ezz ERROR");
 
-  if (utils::flags::has_flag("quiet-crash")) {
+  if (game::quiet_crash()) {
     utils::thread::terminate_other_threads(exception_data.code);
   } else {
-    ShellExecuteA(nullptr, "open",
-                  (game::get_appdata_path() / "minidumps").string().c_str(),
-                  nullptr, nullptr, SW_SHOWNORMAL);
+    ShellExecuteA(nullptr, "open", minidumps_out.c_str(), nullptr, nullptr,
+                  SW_SHOWNORMAL);
   }
 
   TerminateProcess(GetCurrentProcess(), exception_data.code);
@@ -298,7 +308,7 @@ void reset_state() {
         0, game::consoleLabel_e::DEFAULT,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "AlterBOIII has tried to recover your game, but it may be unstable.\n\n"
+        "Ezz has tried to recover your game, but it may be unstable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"
@@ -311,7 +321,7 @@ void reset_state() {
         game::errorParm::DROP,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "AlterBOIII has tried to recover your game, but it may be unstable.\n\n"
+        "Ezz has tried to recover your game, but it may be unstable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"
@@ -452,7 +462,7 @@ std::string generate_crash_info(const LPEXCEPTION_POINTERS exceptioninfo) {
   const resolved_frame crash_frame =
       resolve_address(exceptioninfo->ExceptionRecord->ExceptionAddress);
 
-  line("AlterBOIII Crash Dump");
+  line("Ezz Crash Dump");
   line(std::string{});
   line("Version: "s + VERSION);
   line("Timestamp: "s + get_timestamp());
@@ -483,16 +493,41 @@ std::string generate_crash_info(const LPEXCEPTION_POINTERS exceptioninfo) {
         target < 0x10000 ? " (NULL pointer dereference)" : ""));
   }
 
-#pragma warning(push)
-#pragma warning(disable : 4996)
-  OSVERSIONINFOEXA version_info;
-  ZeroMemory(&version_info, sizeof(version_info));
+  RTL_OSVERSIONINFOW version_info{};
   version_info.dwOSVersionInfoSize = sizeof(version_info);
-  GetVersionExA(reinterpret_cast<LPOSVERSIONINFOA>(&version_info));
-#pragma warning(pop)
 
-  line(utils::string::va("OS Version: %u.%u", version_info.dwMajorVersion,
-                         version_info.dwMinorVersion));
+  // Clang/GCC warnings with -Weverything
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored                                               \
+    "-Wcast-function-type" // warning: cast between incompatible function types
+                           // (for loader)
+#endif
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored                                                 \
+    "-Wpragmas" // warning: unknown option after '#pragma GCC diagnostic' kind
+#pragma GCC diagnostic ignored                                                 \
+    "-Wcast-function-type" // warning: cast between incompatible function types
+                           // (for loader)
+#endif
+  const auto rtl_get_version =
+      reinterpret_cast<NTSTATUS(NTAPI *)(PRTL_OSVERSIONINFOW)>(
+          GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
+  if (rtl_get_version && NT_SUCCESS(rtl_get_version(&version_info))) {
+    line(utils::string::va("OS Version: %u.%u.%u", version_info.dwMajorVersion,
+                           version_info.dwMinorVersion,
+                           version_info.dwBuildNumber));
+  } else {
+    line("OS Version: unavailable");
+  }
   line(std::string{});
   line(get_callstack_summary(exceptioninfo));
   const std::string registers = get_memory_registers(exceptioninfo);
@@ -507,13 +542,13 @@ std::string generate_crash_info(const LPEXCEPTION_POINTERS exceptioninfo) {
 void write_minidump(const LPEXCEPTION_POINTERS exceptioninfo) {
   const std::string crash_name =
       (game::get_appdata_path() / "minidumps" /
-       utils::string::va("alterboiii-crash-%s.zip", get_timestamp().data()))
+       utils::string::va("ezz-crash-%s.zip", get_timestamp().data()))
           .string();
 
   utils::compression::zip::archive zip_file{};
   zip_file.add("crash.dmp", create_minidump(exceptioninfo));
   zip_file.add("info.txt", generate_crash_info(exceptioninfo));
-  if (!zip_file.write(crash_name, "AlterBOIII Crash Dump")) {
+  if (!zip_file.write(crash_name, "Ezz Crash Dump")) {
     utils::io::remove_file(crash_name);
   }
 }
@@ -533,66 +568,88 @@ LONG WINAPI crash_fix_exception_handler(PEXCEPTION_POINTERS exception_info) {
   const uintptr_t addr = reinterpret_cast<uintptr_t>(record->ExceptionAddress);
   const uintptr_t base = game::get_base();
   const uintptr_t offset = addr - base;
+#ifndef NDEBUG
   const char *patch_name = nullptr;
+#endif
 
   switch (offset) {
   // Killcam animation crash - invalid anim data access
   case 0x234B9BD:
+#ifndef NDEBUG
     patch_name = "Killcam animation (invalid anim data)";
+#endif
     context->Rax = 0;
     context->Rip = base + 0x234D14B;
     break;
 
   // CG_ZBarrierAttachWeapon - null weapon pointer in zombie barriers
   case 0x464FEF:
+#ifndef NDEBUG
     patch_name = "ZBarrier weapon attach (null weapon)";
+#endif
     context->Rax = 0;
     context->Rip = base + 0x4651A2;
     break;
 
   // asmsetanimationrate - bad entity reference
   case 0x15E4B5A:
+#ifndef NDEBUG
     patch_name = "asmsetanimationrate (bad entity ref)";
+#endif
     context->Rip = base + 0x15E4B83;
     break;
 
   // Orphaned thread crash
   case 0x12EE4CC:
+#ifndef NDEBUG
     patch_name = "Orphaned thread";
+#endif
     context->Rip = base + 0x12EE5C8;
     break;
 
   // Character index out-of-bounds crash
   case 0x234210C:
+#ifndef NDEBUG
     patch_name = "Character index out-of-bounds";
+#endif
     context->Rip = base + 0x2342136;
     break;
 
   // HKS internal crash
   case 0x1CAB4F1:
+#ifndef NDEBUG
     patch_name = "HKS/Lua internal error";
+#endif
     context->Rip = base + 0x1CAB69E;
     break;
 
   // Null localization string crashes
   case 0x2279323:
+#ifndef NDEBUG
     patch_name = "Null localization string (UI)";
+#endif
     context->Rdx = reinterpret_cast<uintptr_t>(ui_localize_fallback);
     break;
 
   case 0x2278B96:
+#ifndef NDEBUG
     patch_name = "Null localization string (UI)";
+#endif
     context->Rsi = reinterpret_cast<uintptr_t>(ui_localize_fallback);
     break;
 
   case 0x228ED56:
+#ifndef NDEBUG
     patch_name = "Null localization string (UI)";
+#endif
     context->Rcx = reinterpret_cast<uintptr_t>(ui_localize_fallback);
     break;
 
   // Unknown UI crash
   case 0x1EAAA27:
+#ifndef NDEBUG
     patch_name = "UI crash (unknown)";
+#endif
     context->Rip = base + 0x1EAABB3;
     break;
 
@@ -600,7 +657,9 @@ LONG WINAPI crash_fix_exception_handler(PEXCEPTION_POINTERS exception_info) {
   case 0xC15B80:
   case 0xC15C50:
   case 0xC18CF5:
+#ifndef NDEBUG
     patch_name = "Non-existent clientfield (CSC)";
+#endif
     context->Rcx = 1; // CSC instance
     context->Rdx = reinterpret_cast<uintptr_t>("Clientfield does not exist");
     context->R8 = 0;
@@ -617,7 +676,9 @@ LONG WINAPI crash_fix_exception_handler(PEXCEPTION_POINTERS exception_info) {
   case 0x1A6C40D:
   case 0x1A6C697:
   case 0x1A6C894:
+#ifndef NDEBUG
     patch_name = "Non-existent clientfield (GSC)";
+#endif
     context->Rcx = 0; // GSC instance
     context->Rdx = reinterpret_cast<uintptr_t>("Clientfield does not exist");
     context->R8 = 0;
@@ -627,18 +688,24 @@ LONG WINAPI crash_fix_exception_handler(PEXCEPTION_POINTERS exception_info) {
   // Non-existent clientfield (additional crash sites)
   case 0x133EC1:
   case 0x133EEB:
+#ifndef NDEBUG
     patch_name = "Non-existent clientfield (additional)";
+#endif
     context->Rip = base + 0x133F12;
     break;
 
   case 0x133F31:
+#ifndef NDEBUG
     patch_name = "Non-existent clientfield (additional)";
+#endif
     context->Rip = base + 0x133F42;
     break;
 
   // Random crash on Zetsubou No Shima
   case 0x13591D3:
+#ifndef NDEBUG
     patch_name = "Zetsubou No Shima map bug";
+#endif
     context->Rip = base + 0x13591DA;
     break;
 
@@ -669,10 +736,13 @@ LONG WINAPI crash_fix_exception_handler(PEXCEPTION_POINTERS exception_info) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
 
+#ifndef NDEBUG
   if (patch_name) {
-    printf("^3[Exception] Known crash patched: %s (base+0x%llX)\n", patch_name,
-           offset);
+    fprintf(stderr, "^3[Exception] Known crash patched: %s (base+0x%llX)\n",
+            patch_name, offset);
+    fflush(stderr);
   }
+#endif
 
   return EXCEPTION_CONTINUE_EXECUTION;
 }
@@ -746,19 +816,19 @@ LONG WINAPI exception_filter(const LPEXCEPTION_POINTERS exceptioninfo) {
       get_exception_string(exceptioninfo->ExceptionRecord->ExceptionCode);
 
   // Detailed console crash report
-  printf("\n^1========== CRASH DETECTED ==========\n");
-  printf("^1  Exception:  %s (0x%08lX)\n", exception_name,
-         exceptioninfo->ExceptionRecord->ExceptionCode);
-  printf("^1  Module:     %s + 0x%llX\n", crash_frame.module_name.c_str(),
-         crash_frame.rva);
+  fprintf(stderr, "\n========== CRASH DETECTED ==========\n");
+  fprintf(stderr, "  Exception:  %s (0x%08lX)\n", exception_name,
+          exceptioninfo->ExceptionRecord->ExceptionCode);
+  fprintf(stderr, "  Module:     %s + 0x%llX\n",
+          crash_frame.module_name.c_str(), crash_frame.rva);
   if (!crash_frame.function_name.empty())
-    printf("^1  Function:   %s\n", crash_frame.function_name.c_str());
+    fprintf(stderr, "  Function:   %s\n", crash_frame.function_name.c_str());
   if (!crash_frame.file_name.empty() && crash_frame.line_number > 0)
-    printf("^1  Source:     %s:%u\n", crash_frame.file_name.c_str(),
-           crash_frame.line_number);
-  printf("^1  Address:    0x%llX\n", crash_frame.address);
-  printf("^1  Thread:     %lu (%s)\n", GetCurrentThreadId(),
-         is_game_thread() ? "main" : "auxiliary");
+    fprintf(stderr, "  Source:     %s:%u\n", crash_frame.file_name.c_str(),
+            crash_frame.line_number);
+  fprintf(stderr, "  Address:    0x%llX\n", crash_frame.address);
+  fprintf(stderr, "  Thread:     %lu (%s)\n", GetCurrentThreadId(),
+          is_game_thread() ? "main" : "auxiliary");
 
   if (exceptioninfo->ExceptionRecord->ExceptionCode ==
       EXCEPTION_ACCESS_VIOLATION) {
@@ -767,27 +837,32 @@ LONG WINAPI exception_filter(const LPEXCEPTION_POINTERS exceptioninfo) {
             ? "write to"
             : "read from";
     uintptr_t target = exceptioninfo->ExceptionRecord->ExceptionInformation[1];
-    printf("^1  Details:    Attempted to %s 0x%012llX%s\n", op, target,
-           target < 0x10000 ? " (NULL pointer dereference)" : "");
+    fprintf(stderr, "  Details:    Attempted to %s 0x%012llX%s\n", op, target,
+            target < 0x10000 ? " (NULL pointer dereference)" : "");
   }
+
+  fflush(stderr);
 
   // Print condensed callstack to console
   std::vector<resolved_frame> frames = capture_stackwalk(exceptioninfo, 16);
   if (!frames.empty()) {
-    printf("^1  Callstack:\n");
+    fprintf(stderr, "  Callstack:\n");
+    fflush(stderr);
     for (size_t i = 0; i < frames.size(); ++i) {
-      const resolved_frame &f = frames[i];
+      const resolved_frame *f = &frames[i];
 
-      if (!f.function_name.empty()) {
-        printf("^1    [%zu] 0x%llX - %s!%s\n", i, f.address,
-               f.module_name.c_str(), f.function_name.c_str());
+      if (!f->function_name.empty()) {
+        fprintf(stderr, "    [%zu] 0x%llX - %s!%s\n", i, f->address,
+                f->module_name.c_str(), f->function_name.c_str());
       } else {
-        printf("^1    [%zu] 0x%llX - %s + 0x%llX\n", i, f.address,
-               f.module_name.c_str(), f.rva);
+        fprintf(stderr, "    [%zu] 0x%llX - %s + 0x%llX\n", i, f->address,
+                f->module_name.c_str(), f->rva);
       }
+      fflush(stderr);
     }
   }
-  printf("^1=====================================\n\n");
+  fprintf(stderr, "=====================================\n\n");
+  fflush(stderr);
 
   if (!game::is_server()) {
     const std::string crash_info = generate_crash_info(exceptioninfo);
@@ -816,7 +891,8 @@ struct component final : generic_component {
 
   void post_load() override {
     const utils::nt::library ntdll("ntdll.dll");
-    using SetFilterFunc = fastcall_t<void(LPTOP_LEVEL_EXCEPTION_FILTER filter)>;
+    using SetFilterFunc =
+        fastcallPtr_t<void(LPTOP_LEVEL_EXCEPTION_FILTER filter)>;
     SetFilterFunc set_filter =
         ntdll.get_proc<SetFilterFunc>("RtlSetUnhandledExceptionFilter");
 
@@ -826,7 +902,8 @@ struct component final : generic_component {
     const utils::nt::library dbghelp = utils::nt::library::load("dbghelp.dll");
     if (dbghelp) {
       mini_dump_write_dump_hook.create(
-          dbghelp.get_proc<void *>("MiniDumpWriteDump"),
+          dbghelp.get_proc<decltype(mini_dump_write_dump_stub) *>(
+              "MiniDumpWriteDump"),
           mini_dump_write_dump_stub);
     }
 

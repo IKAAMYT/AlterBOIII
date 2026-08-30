@@ -1,22 +1,20 @@
-#include <atomic>
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
-#include "game/game.hpp"
-#include "game/utils.hpp"
+#include <loader/component_loader.hpp>
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
-#include "game/ui_scripting/execution.hpp"
+#include <game/ui_scripting/execution.hpp>
 
 #include "command.hpp"
 #include "ui_scripting.hpp"
 #include "scheduler.hpp"
 #include "friends.hpp"
+#include "getinfo.hpp"
 #include "discord.hpp"
-#include "network.hpp"
 #include "name.hpp"
 
-#include "../steam/steam.hpp"
-#include "../steam/interfaces/matchmaking_servers.hpp"
-#include "getinfo.hpp"
+#include <steam/steam.hpp>
+#include <steam/interfaces/matchmaking_servers.hpp>
 #include "toast.hpp"
 
 #include <utils/io.hpp>
@@ -29,6 +27,7 @@
 #include <cmath>
 #include <filesystem>
 #include <unordered_map>
+#include <atomic>
 
 using namespace game::db;
 using namespace game::db::xasset;
@@ -117,7 +116,7 @@ bool execute_raw_lua(const std::string &code,
 }
 
 void fire_debug_reload(const char *root_name) {
-  const std::string_view mapname = game::get_dvar_string("mapname");
+  const std::string_view mapname = game::get_mapname().value_or("");
   const std::string code =
       utils::string::va("pcall(function() LUI.roots.%s:processEvent({ name = "
                         "'debug_reload', mapname = '%s' }) end)",
@@ -372,6 +371,7 @@ void print_error(const std::string &error) {
 
 void print_loading_script(const std::string &name) {
   printf("Loading LUI script '%s'\n", name.data());
+  game::trace("Loading LUI script '%s'", name.data());
 }
 
 std::string get_current_script(lua_State *state) {
@@ -467,7 +467,7 @@ void setup_functions() {
   lua["game"] = table();
 
   lua["game"]["getfriendcount"] = function(
-      convert_function([]() -> int { return friends::get_friend_count(); }),
+      convert_function([]() -> int32_t { return friends::get_friend_count(); }),
       HksObjectType::TCFUNCTION);
 
   lua["game"]["getfriend"] =
@@ -480,6 +480,10 @@ void setup_functions() {
                  t.set("server", std::string(f.server_address));
                  return t;
                }),
+               HksObjectType::TCFUNCTION);
+
+  lua["game"]["refreshfriends"] =
+      function(convert_function([] { friends::refresh_presence(); }),
                HksObjectType::TCFUNCTION);
 
   lua["game"]["addfriend"] =
@@ -531,6 +535,92 @@ void setup_functions() {
                }),
                HksObjectType::TCFUNCTION);
 
+  lua["game"]["issocialfriend"] =
+      function(convert_function([](const std::string &id_hex) -> bool {
+                 try {
+                   return friends::is_friend(std::stoull(id_hex, nullptr, 16));
+                 } catch (...) {
+                   return false;
+                 }
+               }),
+               HksObjectType::TCFUNCTION);
+
+  lua["game"]["connectsocialfriend"] = function(
+      convert_function([](const std::string &id_hex) -> bool {
+        try {
+          return friends::connect_to_friend(std::stoull(id_hex, nullptr, 16));
+        } catch (...) {
+          return false;
+        }
+      }),
+      HksObjectType::TCFUNCTION);
+
+  lua["game"]["getkickableplayers"] =
+      function(convert_function([]() -> table {
+                 table players{};
+                 if (!getinfo::is_host())
+                   return players;
+
+                 int list_index = 1;
+                 game::foreach_connected_client([&players, &list_index](
+                                                    game::sv::client_s &client,
+                                                    const size_t client_index) {
+                   if (client_index == 0 ||
+                       game::sv::SV_IsTestClient(
+                           static_cast<game::ClientNum_t>(client_index))) {
+                     return;
+                   }
+
+                   char name_buffer[64]{};
+                   std::string display_name;
+                   if (game::cl::CL_GetClientName(
+                           game::LOCAL_CLIENT_0, static_cast<int>(client_index),
+                           name_buffer, sizeof(name_buffer), false) &&
+                       name_buffer[0]) {
+                     display_name = name_buffer;
+                   } else if (client.name[0]) {
+                     display_name = client.name;
+                   } else {
+                     display_name = "Player " + std::to_string(client_index);
+                   }
+
+                   table player{};
+                   player.set("client_num", static_cast<int>(client_index));
+                   player.set("name", display_name);
+                   players.set(list_index++, player);
+                 });
+                 return players;
+               }),
+               HksObjectType::TCFUNCTION);
+
+  lua["game"]["ishost"] =
+      function(convert_function([]() -> bool { return getinfo::is_host(); }),
+               HksObjectType::TCFUNCTION);
+
+  lua["game"]["kickplayer"] = function(
+      convert_function([](const int client_num) -> bool {
+        if (!getinfo::is_host() || client_num <= 0)
+          return false;
+
+        bool kicked = false;
+        std::string player_name;
+        game::access_connected_client(
+            static_cast<size_t>(client_num), [&](game::sv::client_s &client) {
+              if (game::sv::SV_IsTestClient(
+                      static_cast<game::ClientNum_t>(client_num))) {
+                return;
+              }
+              player_name = client.name;
+              game::sv::SV_DropClient(&client, "EXE_PLAYERKICKED", true, true);
+              kicked = true;
+            });
+
+        if (kicked)
+          toast::warn("PLAYER KICKED", player_name + " was removed.");
+        return kicked;
+      }),
+      HksObjectType::TCFUNCTION);
+
   // HTTP functions
   lua["game"]["httpget"] =
       function(convert_function([](const std::string &url) -> std::string {
@@ -579,7 +669,7 @@ void setup_functions() {
                HksObjectType::TCFUNCTION);
 
   lua["game"]["getclientoverridename"] = function(
-      convert_function([](const int client_num) -> std::string {
+      convert_function([](const int32_t client_num) -> std::string {
         const auto cn = static_cast<game::ClientNum_t>(client_num);
         if (!game::valid_client_num(cn) || !name::has_name_override(cn)) {
           return "";
@@ -590,7 +680,7 @@ void setup_functions() {
       HksObjectType::TCFUNCTION);
 
   lua["game"]["getclientoverridetag"] =
-      function(convert_function([](const int client_num) -> std::string {
+      function(convert_function([](const int32_t client_num) -> std::string {
                  const auto cn = static_cast<game::ClientNum_t>(client_num);
                  if (!game::valid_client_num(cn) ||
                      !name::has_clan_abbrev_override(cn)) {
@@ -602,7 +692,7 @@ void setup_functions() {
                HksObjectType::TCFUNCTION);
 
   lua["game"]["getrawservercount"] =
-      function(convert_function([]() -> int {
+      function(convert_function([]() -> int32_t {
                  return steam::get_raw_internet_server_count();
                }),
                HksObjectType::TCFUNCTION);
@@ -613,7 +703,7 @@ void setup_functions() {
                HksObjectType::TCFUNCTION);
 
   lua["game"]["getrawserverinfo"] =
-      function(convert_function([](const int index) -> table {
+      function(convert_function([](const int32_t index) -> table {
                  auto t = table();
                  const auto *item = steam::get_raw_internet_server_item(index);
                  if (!item) {
@@ -712,6 +802,53 @@ void try_start() {
   }
 }
 
+void reload_ingame_menu_scripts() {
+  const utils::nt::library host{};
+  const std::filesystem::path roots[] = {
+      game::get_appdata_path() / "data/ui_scripts",
+      host.get_folder() / "boiii/ui_scripts",
+  };
+  const char *files[] = {
+      "party/datasources_start_menu_game_options.lua",
+      "party/__init__.lua",
+      "kick_menu/__init__.lua",
+      "tweaks/__init__.lua",
+      "social_friends/__init__.lua",
+  };
+
+  for (const auto &root : roots) {
+    if (!utils::io::directory_exists(root.string())) {
+      continue;
+    }
+
+    load_local_script_files((root / "party").string());
+    load_local_script_files((root / "kick_menu").string());
+    load_local_script_files((root / "tweaks").string());
+    load_local_script_files((root / "social_friends").string());
+    for (const auto *file : files) {
+      const auto path = root / file;
+      std::string data;
+      if (!utils::io::read_file(path.string(), &data)) {
+        continue;
+      }
+
+      load_script(path.generic_string(), data, file);
+    }
+  }
+}
+
+void schedule_ingame_menu_reload() {
+  scheduler::once(
+      [] {
+        try {
+          reload_ingame_menu_scripts();
+          toast::patch_hud();
+        } catch (...) {
+        }
+      },
+      scheduler::main, 2s);
+}
+
 void ui_init_stub(lua_Alloc allocFunction, void *outOfMemoryFunction) {
   ui_init_hook.invoke(allocFunction, outOfMemoryFunction);
 
@@ -719,6 +856,7 @@ void ui_init_stub(lua_Alloc allocFunction, void *outOfMemoryFunction) {
 }
 
 std::atomic<bool> doneFirstSnapshot = false;
+std::atomic<bool> reloadIngameMenusAfterRestart = false;
 
 void ui_cod_init_stub(const bool frontend) {
   ui_cod_init_hook.invoke(frontend);
@@ -728,6 +866,7 @@ void ui_cod_init_stub(const bool frontend) {
     globals = {};
     const utils::nt::library host{};
     doneFirstSnapshot.store(false, std::memory_order_seq_cst);
+    reloadIngameMenusAfterRestart.store(false, std::memory_order_seq_cst);
 
     load_local_script_files(
         (game::get_appdata_path() / "data/ui_scripts/").string());
@@ -774,13 +913,28 @@ void inject_discord_score_subscriptions() {
 
 void cl_first_snapshot_stub(game::LocalClientNum_t localClientNum) {
   cl_first_snapshot_hook.invoke(localClientNum);
-  if (game::com::Com_IsRunningUILevel() ||
-      doneFirstSnapshot.load(std::memory_order_seq_cst)) {
+  if (game::com::Com_IsRunningUILevel()) {
     return;
   }
-  doneFirstSnapshot.store(true, std::memory_order_seq_cst);
+
+  if (doneFirstSnapshot.exchange(true, std::memory_order_seq_cst)) {
+    if (!reloadIngameMenusAfterRestart.exchange(false,
+                                                std::memory_order_seq_cst)) {
+      return;
+    }
+
+    schedule_ingame_menu_reload();
+    return;
+  }
+
   hot_reload_in_game.store(true, std::memory_order_seq_cst);
   try_start();
+  try {
+    reload_ingame_menu_scripts();
+  } catch (...) {
+  }
+
+  toast::patch_hud();
 
   try {
     inject_discord_score_subscriptions();
@@ -870,7 +1024,7 @@ void show_unsafe_lua_dialog() {
 
   scheduler::once(
       [] {
-        const int result = MessageBoxA(
+        const int32_t result = MessageBoxA(
             nullptr,
             "The map/mod you are playing tried to run code that can be "
             "unsafe.\n\n"
@@ -898,7 +1052,7 @@ void show_unsafe_lua_dialog() {
       scheduler::pipeline::main);
 }
 
-template <size_t Key> int lua_unsafe_function_stub(lua_State *l) {
+template <size_t Key> int32_t lua_unsafe_function_stub(lua_State *l) {
   if (unsafe_lua_approved_for_session) {
     return unsafe_function_detours[Key].invoke<int>(l);
   }
@@ -1121,7 +1275,7 @@ int hksi_lua_getinfo_stub(lua_State *s, const char *what, lua_Debug *ar) {
 
       uintptr_t pc = 0;
       if (!game::is_server()) {
-        using getPC_t = fastcall_t<uintptr_t, lua_State *, lua_Debug *>;
+        using getPC_t = fastcallPtr_t<uintptr_t, lua_State *, lua_Debug *>;
         getPC_t fn_getPC = reinterpret_cast<getPC_t>(0x141D46310_g);
         pc = fn_getPC(s, ar);
       }
@@ -1237,11 +1391,11 @@ std::string colorize_lua_error(const char *error_loc, const char *error_stack) {
 
 const char *safe_get_lua_error_stack(lua_State *luaVM) {
   __try {
-    auto *api_top = luaVM->m_apistack.top;
-    auto *api_bottom = luaVM->m_apistack.bottom;
+    HksObject *api_top = luaVM->m_apistack.top;
+    HksObject *api_bottom = luaVM->m_apistack.bottom;
 
     if (api_top && api_bottom && (api_top - 1) >= api_bottom) {
-      auto *top_obj = api_top - 1;
+      HksObject *top_obj = api_top - 1;
       if (top_obj->t == HksObjectType::TSTRING && top_obj->v.str) {
         return top_obj->v.str->m_data;
       }
@@ -1322,9 +1476,9 @@ void lua_cod_luastatemanager_error_stub(const char *error, lua_State *luaVM) {
     const std::string log_path = (logs_dir / "boiii_lua_errors.log").string();
 
     auto now_sys = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now_sys);
+    time_t now = std::chrono::system_clock::to_time_t(now_sys);
     tm ltime{};
-    localtime_s(&ltime, &time_t);
+    localtime_s(&ltime, &now);
     char timestamp[64]{};
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &ltime);
 
@@ -1383,17 +1537,17 @@ public:
 
     scheduler::once(
         []() {
-          game::dvar_t *dvar_callstack_ship =
-              game::get_dvar("ui_error_callstack_ship");
-          dvar_callstack_ship->flags = static_cast<game::dvarFlags_e>(0);
-          game::dvar_t *dvar_report_delay =
-              game::get_dvar("ui_error_report_delay");
-          dvar_report_delay->flags = static_cast<game::dvarFlags_e>(0);
+          game::ui_error_callstack_ship->flags().clear();
+          game::ui_error_callstack_ship->set(true);
 
-          game::Dvar_SetFromStringByName("ui_error_callstack_ship", "1", true);
-          game::Dvar_SetFromStringByName("ui_error_report_delay", "0", true);
+          game::ui_error_report_delay->flags().clear();
+          game::ui_error_report_delay->set(true);
         },
         scheduler::pipeline::renderer);
+
+    command::add("boiii_prepare_menu_restart", [](const command::params &) {
+      reloadIngameMenusAfterRestart.store(true, std::memory_order_seq_cst);
+    });
 
     command::add("luiReload", [] {
       if (game::com::Com_IsRunningUILevel()) {
@@ -1417,6 +1571,7 @@ public:
         // that opens up the loading screen that can't be easily closed
         rawfile_source_cache.clear();
         game::cg::CG_LUIHUDRestart(game::LOCAL_CLIENT_0);
+        schedule_ingame_menu_reload();
       }
     });
 
@@ -1458,31 +1613,32 @@ public:
       scheduler::once(
           [dir] {
             try {
-              int count = 0;
+              int32_t count = 0;
               std::string errors;
-              const auto reload_dir = [&](const std::string &script_dir) {
-                if (!utils::io::directory_exists(script_dir))
-                  return;
-                for (const std::filesystem::directory_entry &entry :
-                     std::filesystem::recursive_directory_iterator(
-                         script_dir)) {
-                  if (!entry.is_regular_file())
-                    continue;
-                  if (entry.path().extension() != ".lua")
-                    continue;
+              const std::function<void(const std::string &script_dir)>
+                  reload_dir = [&](const std::string &script_dir) {
+                    if (!utils::io::directory_exists(script_dir))
+                      return;
+                    for (const std::filesystem::directory_entry &entry :
+                         std::filesystem::recursive_directory_iterator(
+                             script_dir)) {
+                      if (!entry.is_regular_file())
+                        continue;
+                      if (entry.path().extension() != ".lua")
+                        continue;
 
-                  std::string data;
-                  if (utils::io::read_file(entry.path().string(), &data)) {
-                    std::string chunk = entry.path().string();
-                    if (chunk.starts_with(script_dir))
-                      chunk = chunk.substr(script_dir.size());
-                    if (execute_raw_lua(data, chunk.c_str()))
-                      count++;
-                    else
-                      errors += chunk + "\n";
-                  }
-                }
-              };
+                      std::string data;
+                      if (utils::io::read_file(entry.path().string(), &data)) {
+                        std::string chunk = entry.path().string();
+                        if (chunk.starts_with(script_dir))
+                          chunk = chunk.substr(script_dir.size());
+                        if (execute_raw_lua(data, chunk.c_str()))
+                          count++;
+                        else
+                          errors += chunk + "\n";
+                      }
+                    }
+                  };
 
               rawfile_source_cache.clear();
 
@@ -1541,7 +1697,7 @@ public:
 
       // Find the mod's content folder from the workshop pool
       std::string mod_content_path;
-      for (unsigned int i = 0; i < game::ugc::modsPool.count; ++i) {
+      for (uint32_t i = 0; i < game::ugc::modsPool.count; ++i) {
         const game::ugc::WorkshopData *mod_data = &game::ugc::modsPool.data[i];
         if (mod_data->publisherId == mod_id ||
             mod_data->internalName == mod_id) {
@@ -1564,7 +1720,7 @@ public:
       scheduler::once(
           [script_dir, mod_id] {
             try {
-              int count = 0;
+              int32_t count = 0;
               std::string errors;
               if (utils::io::directory_exists(script_dir)) {
                 for (const std::filesystem::directory_entry &entry :

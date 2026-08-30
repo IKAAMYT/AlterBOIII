@@ -36,8 +36,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Tout débloquer (Loot)",
-      "Débloque tout le loot du Black Market.",
+      "Débloquer tout le contenu",
+      "Débloque tout le contenu du Black Market.",
       "MPStatsSettings_unlock_loot",
       "cg_unlockall_loot",
       {
@@ -61,7 +61,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
         "Débloquer tous les achats",
-        "Tous les éléments à acheter avec des jetons sont débloqués.",
+        "Tous les objets achetables avec les jetons de déblocage sont débloqués.",
         "MPStatsSettings_purchase_all",
         "cg_unlockall_purchases",
         {
@@ -83,8 +83,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Débloquer tous les emplacements de classe",
-        "Débloque tous les emplacements et sets de création de classe.",
+        "Débloquer tous les slots de classes",
+        "Débloque tous les slots et sets de création de classe.",
         "MPStatsSettings_unlockall_cac_slots",
         "cg_unlockall_cac_slots",
         {
@@ -108,7 +108,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
       "Débloquer tous les accessoires",
-      "Tous les accessoires des armes sont débloqués.",
+      "Tous les accessoires d'armes sont débloqués.",
       "MPStatsSettings_unlockall_attachments",
       "cg_unlockall_attachments",
       {
@@ -130,8 +130,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Débloquer tous les camos et réticules",
-      "Tous les camos et réticules des armes sont débloqués.",
+      "Débloquer tous les camouflages et réticules",
+      "Tous les camouflages et réticules d'armes sont débloqués.",
       "MPStatsSettings_unlockall_camos_and_reticles",
       "cg_unlockall_camos_and_reticles",
       {
@@ -153,8 +153,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Débloquer toutes les cartes de visite",
-      "Toutes les cartes de visite sont débloquées.",
+      "Débloquer toutes les cartes d'appel",
+      "Toutes les cartes d'appel sont débloquées.",
       "MPStatsSettings_unlockall_calling_cards",
       "cg_unlockall_calling_cards",
       {
@@ -203,7 +203,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
         "Débloquer les Easter Eggs",
-        "Complète tous les succès Easter Egg.",
+        "Terminez tous les succès Easter Egg.",
         "MPStatsSettings_complete_ee",
         "all_ee_completed",
         {
@@ -229,22 +229,22 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
   local currentPrestige = CoD.PrestigeUtility.GetCurrentPLevel(controller, Engine.CurrentSessionMode())
   local currentRank = CoD.BlackMarketUtility.GetCurrentRank(controller) + 1
 
-  local isMasterPrestige = currentPrestige == 11
+  local isMaîtrePrestige = currentPrestige == 11
 
   if Engine.CurrentSessionMode() == Enum.eModes.MODE_MULTIPLAYER then
-    if not isMasterPrestige then
+    if not isMaîtrePrestige then
       rankLevels = { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55 }
     else
       rankLevels = { 56, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
     end
   elseif Engine.CurrentSessionMode() == Enum.eModes.MODE_ZOMBIES then
-    if not isMasterPrestige then
+    if not isMaîtrePrestige then
       rankLevels = { 1, 5, 10, 15, 20, 25, 30, 35 }
     else
       rankLevels = { 36, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
     end
   elseif Engine.CurrentSessionMode() == Enum.eModes.MODE_CAMPAIGN then
-    if not isMasterPrestige then
+    if not isMaîtrePrestige then
       rankLevels = { 1, 5, 10, 15, 20 }
     else
       rankLevels = { 21, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
@@ -265,7 +265,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       })
     end
 
-    if hasDefault and currentRank ~= minlevel and currentRank < maxlevel and not isMasterPrestige then
+    if hasDefault and currentRank ~= minlevel and currentRank < maxlevel and not isMaîtrePrestige then
       table.insert(rankObjs, {
         name = "Actuel : "
           .. tostring(currentRank <= minlevel and "Min" or currentRank >= maxlevel and "Max" or currentRank),
@@ -339,7 +339,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
             UpdateInfoModels(f1_arg1)
             local newPrestige = f1_arg1.value
             if newPrestige == 11 then
-              Engine.Exec(f1_arg2, "PrestigeStatsMaster " .. tostring(Engine.CurrentSessionMode()))
+              Engine.Exec(f1_arg2, "PrestigeStatsMaître " .. tostring(Engine.CurrentSessionMode()))
             end
             Engine.ExecNow(f1_arg2, "statsetbyname plevel " .. newPrestige)
             Engine.ExecNow(f1_arg2, "statsetbyname hasprestiged " .. (newPrestige > 0 and 1 or 0))
@@ -458,9 +458,9 @@ LUI.createMenu.BoiiiStatsMenu = function(controller)
   local GameSettingsBackground = CoD.GameSettings_Background.new(self, controller)
   GameSettingsBackground:setLeftRight(true, true, 0, 0)
   GameSettingsBackground:setTopBottom(true, true, 0, 0)
-  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES STATS"))
+  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES DES STATS"))
   GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-    Engine.Localize("PARAMÈTRES STATS")
+    Engine.Localize("PARAMÈTRES DES STATS")
   )
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeInfo:setAlpha(0)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeName:setAlpha(0)
@@ -470,7 +470,7 @@ LUI.createMenu.BoiiiStatsMenu = function(controller)
   local Options = CoD.Competitive_SettingsList.new(self, controller)
   Options:setLeftRight(true, false, 26, 741)
   Options:setTopBottom(true, false, 135, 720)
-  Options.Title.DescTitle:setText(Engine.Localize("Stats"))
+  Options.Title.DescTitle:setText(Engine.Localize("Statistiques"))
   Options.ButtonList:setVerticalCount(15)
   Options.ButtonList:setDataSource("MPStatsSettings")
   self:addElement(Options)

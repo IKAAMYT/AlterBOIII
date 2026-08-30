@@ -2,13 +2,55 @@
 
 #include "../core.hpp"
 #include "../quake/core.hpp"
+#include <charconv>
 namespace game {
 namespace net {
-struct netipv4_t {
-  uint8_t a;
-  uint8_t b;
-  uint8_t c;
-  uint8_t d;
+
+enum class connectionType_e : uint32_t {
+  UNKNOWN = 0x0,
+  WIRED = 0x1,
+  WIRELESS = 0x2,
+};
+
+constexpr size_t UINT8_STR_BUF_LEN = 3;
+constexpr size_t UINT16_STR_BUF_LEN = sizeof(uint16_t) * UINT8_STR_BUF_LEN;
+constexpr size_t NET_IPV4_STR_BUF_LEN =
+    4 /* a, b, c, d */ * UINT8_STR_BUF_LEN + 3 /* periods */ + 1 /* NULL */;
+typedef str<NET_IPV4_STR_BUF_LEN> netipv4_str_t;
+inline thread_local netipv4_str_t default_netipv4_serialization_buf;
+union netipv4_t {
+  struct {
+    uint8_t a;
+    uint8_t b;
+    uint8_t c;
+    uint8_t d;
+  };
+  uint8_t parts[4];
+
+  inline constexpr ToStringResult
+  toString(netipv4_str_t buf = default_netipv4_serialization_buf,
+           bool terminate = true) const noexcept {
+    // a
+    char *ptr = std::to_chars(buf, buf + UINT8_STR_BUF_LEN, a).ptr;
+
+    // b
+    ptr[0] = '.';
+    ptr = std::to_chars(ptr + 1, ptr + 1 + UINT8_STR_BUF_LEN, b).ptr;
+
+    // c
+    ptr[0] = '.';
+    ptr = std::to_chars(ptr + 1, ptr + 1 + UINT8_STR_BUF_LEN, c).ptr;
+
+    // d
+    ptr[0] = '.';
+    ptr = std::to_chars(ptr + 1, ptr + 1 + UINT8_STR_BUF_LEN, d).ptr;
+
+    if (terminate) {
+      ptr[0] = '\0';
+      ++ptr;
+    }
+    return ToStringResult{buf, ptr};
+  }
 };
 
 enum netadrtype_t : int32_t {
@@ -30,6 +72,13 @@ enum netsrc_t : int32_t {
   NS_PACKET = 0x5,
 };
 
+constexpr size_t NETADR_STR_BUF_LEN =
+    NET_IPV4_STR_BUF_LEN + UINT16_STR_BUF_LEN /*port*/ +
+    1 /*colon*/; // +1 for NULL is included in NET_IPV4_STR_BUF_LEN - only one
+                 // can be terminated
+typedef str<NETADR_STR_BUF_LEN> netadr_str_t;
+inline thread_local netadr_str_t default_netadr_serialization_buf;
+
 struct netadr_t {
   union {
     netipv4_t ipv4;
@@ -39,6 +88,22 @@ struct netadr_t {
   uint16_t port;
   netadrtype_t type;
   netsrc_t localNetID;
+
+  inline constexpr ToStringResult
+  toString(netadr_str_t buf = default_netadr_serialization_buf,
+           bool terminate = true) const noexcept {
+    char *ptr = ipv4.toString(&buf[0], false).ptr;
+
+    ptr[0] = ':';
+    ptr = std::to_chars(ptr + 1, ptr + 1 + UINT16_STR_BUF_LEN, port).ptr;
+
+    if (terminate) {
+      ptr[0] = '\0';
+      ++ptr;
+    }
+
+    return {buf, ptr};
+  }
 };
 
 struct XNADDR {
@@ -108,23 +173,24 @@ struct HostInfo {
   uint32_t serverLocation;
 };
 enum svscmd_type {
-  SV_CMD_CAN_IGNORE_0 = 0x0,
-  SV_CMD_RELIABLE_0 = 0x1,
+  SV_CMD_CAN_IGNORE = 0x0,
+  SV_CMD_RELIABLE = 0x1,
 };
 
-enum clientState_t {
-  CS_FREE = 0x0, // can be used for a new connection
+enum class clientState_t : int32_t {
+  FREE = 0x0, // can be used for a new connection
   /*
     Client has been disconnected, but don't use connection
     for a new client for a couple seconds
     (`sv_zombietime` dvar value) in case of reconnect
   */
-  CS_ZOMBIE = 0x1,
-  CS_RECONNECTING = 0x2,
-  CS_CONNECTED = 0x3, // has been assigned to a client_t, but no gamestate yet
-  CS_PRIMED = 0x4, // gamestate has been sent, but client hasn't sent a usercmd
-  CS_ACTIVE = 0x5, // client is fully in game
+  ZOMBIE = 0x1,
+  RECONNECTING = 0x2,
+  CONNECTED = 0x3, // has been assigned to a client_t, but no gamestate yet
+  PRIMED = 0x4,    // gamestate has been sent, but client hasn't sent a usercmd
+  ACTIVE = 0x5,    // client is fully in game
 };
+IMPL_ENUM_OPERATORS(clientState_t);
 
 struct netProfilePacket_t {
   int32_t iTime;

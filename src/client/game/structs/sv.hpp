@@ -1,14 +1,14 @@
 #pragma once
 
 #include "core.hpp"
-#include "phys.hpp"
+#include "phys/core.hpp"
 #include "quake/core.hpp"
 #include "net/net.hpp"
 #include "scr/core.hpp"
 #include "scr/scr.hpp"
 #include "snd/snd.hpp"
 #include "asm.hpp"
-#include "lobby.hpp"
+#include "lobby/core.hpp"
 
 #include <cstdint>
 
@@ -38,61 +38,148 @@ typedef gentity_s gentity_t;
 
 namespace sv {
 
+constexpr auto MAXIMUM_SERVER_COMMAND_LEN = 0x3FF;
+
+constexpr auto RELIABLE_COMMAND_PREFIX_LEN =
+    2; // "%c ", where %c is the `ReliableCommand`
+constexpr auto MAXIMUM_RELIABLE_COMMAND_DATA_LEN =
+    MAXIMUM_SERVER_COMMAND_LEN - RELIABLE_COMMAND_PREFIX_LEN;
+static_assert(MAXIMUM_RELIABLE_COMMAND_DATA_LEN == 0x3FD,
+              "MAXIMUM_RELIABLE_COMMAND_DATA_LEN == 0x3FD");
+
 enum class ReliableCommand : char {
-  NOP = '\0',             // 0x00: Empty command / return
-  GIVE_ACHIEVEMENT = '#', // 0x23: LiveAchievements_GiveAchievement
-  BLUR_SERVER_CMD = '(',  // 0x28: CG_BlurServerCommand
+  NOP = '\0',                   // 0x00: Empty command / return
+  RESERVED_UNUSED_01 = '\x01',  // 0x01
+  RESERVED_UNUSED_02 = '\x02',  // 0x02
+  RESERVED_UNUSED_03 = '\x03',  // 0x03
+  RESERVED_UNUSED_04 = '\x04',  // 0x04
+  RESERVED_UNUSED_05 = '\x05',  // 0x05
+  RESERVED_UNUSED_06 = '\x06',  // 0x06
+  RESERVED_UNUSED_07 = '\x07',  // 0x07
+  RESERVED_UNUSED_08 = '\x08',  // 0x08
+  RESERVED_UNUSED_09 = '\x09',  // 0x09
+  RESERVED_UNUSED_0A = '\x0A',  // 0x0A
+  RESERVED_UNUSED_0B = '\x0B',  // 0x0B
+  RESERVED_UNUSED_0C = '\x0C',  // 0x0C
+  RESERVED_UNUSED_0D = '\x0D',  // 0x0D
+  RESERVED_UNUSED_0E = '\x0E',  // 0x0E
+  RESERVED_UNUSED_0F = '\x0F',  // 0x0F
+  RESERVED_UNUSED_10 = '\x10',  // 0x10
+  RESERVED_UNUSED_11 = '\x11',  // 0x11
+  RESERVED_UNUSED_12 = '\x12',  // 0x12
+  RESERVED_UNUSED_13 = '\x13',  // 0x13
+  RESERVED_UNUSED_14 = '\x14',  // 0x14
+  RESERVED_UNUSED_15 = '\x15',  // 0x15
+  RESERVED_UNUSED_16 = '\x16',  // 0x16
+  RESERVED_UNUSED_17 = '\x17',  // 0x17
+  RESERVED_UNUSED_18 = '\x18',  // 0x18
+  RESERVED_UNUSED_19 = '\x19',  // 0x19
+  RESERVED_UNUSED_1A = '\x1A',  // 0x1A
+  RESERVED_UNUSED_1B = '\x1B',  // 0x1B
+  RESERVED_UNUSED_1C = '\x1C',  // 0x1C
+  RESERVED_UNUSED_1D = '\x1D',  // 0x1D
+  RESERVED_UNUSED_1E = '\x1E',  // 0x1E
+  RESERVED_UNUSED_1F = '\x1F',  // 0x1F
+  RESERVED_UNUSED_SPACE = ' ',  // 0x20
+  RESERVED_UNUSED_EXCLAM = '!', // 0x21
+  RESERVED_UNUSED_QUOTE = '"',  // 0x22
+  GIVE_ACHIEVEMENT = '#',       // 0x23: LiveAchievements_GiveAchievement
+  RESERVED_UNUSED_DOLLAR = '$', // 0x24
+
+  /* Commands for `BCS` (BigConfigString) command sequence
+     BCS command sequences are used to send config strings with length exceeding
+     the per-packet combined config string, serialized index string length of
+     0x3FD.
+
+     BCS command sequences begin with a `BCS_INIT` command,
+     followed by the required number of `BCS_APPEND` commands to send
+     remaining (0x3FD - serialized index string length)-sized partitions of the
+     configstring aside from the final, then terminated with a `BCS_FINALIZE`
+     command.
+
+     Total BCS sequence joined config string length limit is 0x5000
+   */
+  BCS_INIT = '%',      // 0x25
+  BCS_APPEND = '&',    // 0x26
+  BCS_FINALIZE = '\'', // 0x27
+
+  BLUR_SERVER_CMD = '(', // 0x28: CG_BlurServerCommand
   // 0x29: CG_TranslateHudElemMessage / CG_BoldGameMessage
   ANNOUNCEMENT_MSG = ')',
-  CHAT_MSG = '+',                  // 0x2B: CG_ChatMessage
-  NITROUS_VEHICLE_TELEPPORT = '/', // 0x2F: NitrousVehicle::Teleport
-  SET_CLIENT_SYSTEM_STATE = '0',   // 0x30: CG_ParseClientSystemStateChange
-  CHECKPOINT_COMMIT = '1',         // 0x31: CL_Checkpoint_Commit
-  CONFIG_STRING_MODIFIED = '2',    // 0x32: CG_ConfigStringModified
-  DYN_ENT_DESTROY_EVENT = '7',     // 0x37: DynEntCl_DestroyEvent
-  EXPLODER = ':',                  // 0x3A: CG_ParseExploderCommand
-  GAME_MSG = ';',                  // 0x3B: CG_GameMessage
-  BOLD_GAME_MSG_CENTER = '<',      // 0x3C: CG_BoldGameMessageCenter
-  CHECKPOINT_SAVE = '=',           // 0x3D: CL_Checkpoint_Save
-  RESET_WEAPON_STATE = '>',        // 0x3E: PM_ResetWeaponState
-  CLOSE_IN_GAME_MENU = '@',        // 0x40: UI_CloseInGameMenu
-  LOCAL_SOUND = 'B',               // 0x42: LocalSound
-  LOCAL_SOUND_STOP = 'C',          // 0x43: LocalSoundStop
-  LUI_NOTIFY = 'D',                // 0x44: CG_ParseLUINotify
-  RADIANT_EXPLODER = 'E',          // 0x45: CG_ParseRadiantExploderCommand
-  MAP_RESTART = 'J',               // 0x4A: CG_MapRestart(..., 0)
-  HIT_MARKER = 'M',                // 0x4D: HitMarker
-  OPEN_SCRIPT_MENU = 'N',          // 0x4E: CG_OpenScriptMenu
+  RESERVED_UNUSED_ASTERISK = '*', // 0x2A
+  CHAT_MSG = '+',                 // 0x2B: CG_ChatMessage
+  NITROUS_VEHICLE_TELEPORT = '/', // 0x2F: NitrousVehicle::Teleport
+  SET_CLIENT_SYSTEM_STATE = '0',  // 0x30: CG_ParseClientSystemStateChange
+  CHECKPOINT_COMMIT = '1',        // 0x31: CL_Checkpoint_Commit
+  // Inline combined config string, serialized index string length limit is
+  // 0x3FD. Must use a `BCS` (BigConfigString) reliable command sequence for
+  // config strings with length > (0x3FD - serialized index string length).
+  CONFIG_STRING_MODIFIED = '2', // 0x32: CG_ConfigStringModified
+  RESERVED_UNUSED_3 = '3',      // 0x33
+  RESERVED_UNUSED_4 = '4',      // 0x34
+  // 0x35: LiveStats_GameHistory_FinishMatch, then unconditional
+  // EXE_SERVER_DISCONNECTED error
+  DISCONNECT = '5',
+  DYN_ENT_DESTROY_EVENT = '7', // 0x37: DynEntCl_DestroyEvent
+  RESERVED_UNUSED_8 = '8',     // 0x38
+  RESERVED_UNUSED_9 = '9',     // 0x39
+  EXPLODER = ':',              // 0x3A: CG_ParseExploderCommand
+  GAME_MSG = ';',              // 0x3B: CG_GameMessage
+  BOLD_GAME_MSG_CENTER = '<',  // 0x3C: CG_BoldGameMessageCenter
+  CHECKPOINT_SAVE = '=',       // 0x3D: CL_Checkpoint_Save
+  RESET_WEAPON_STATE = '>',    // 0x3E: PM_ResetWeaponState
+  CLOSE_IN_GAME_MENU = '@',    // 0x40: UI_CloseInGameMenu
+  LOCAL_SOUND_START = 'B',     // 0x42: LocalSound
+  LOCAL_SOUND_STOP = 'C',      // 0x43: LocalSoundStop
+  LUI_NOTIFY = 'D',            // 0x44: CG_ParseLUINotify
+  RADIANT_EXPLODER = 'E',      // 0x45: CG_ParseRadiantExploderCommand
+  MAP_RESTART = 'J',           // 0x4A: CG_MapRestart(..., 0)
+  HIT_MARKER = 'M',            // 0x4D: HitMarker
+  OPEN_SCRIPT_MENU = 'N',      // 0x4E: CG_OpenScriptMenu
   // 0x4F: LiveTracker_WriteForAllLocalUsers / CG_GameMessage
-  TRACKER_GAME_MSG = 'O',
-  MAP_RESTART_FAST = 'U',       // 0x55: CG_MapRestart(..., 1)
-  AIRSUPPORT = 'V',             // 0x56: CG_ParseAirsupport
-  BURN = 'W',                   // 0x57: CG_BurnServerCommand
-  SCR_CAMERA = 'X',             // 0x58: CG_ScrCamera
-  ELECTRIFIED = 'Y',            // 0x59: CG_ElectrifiedServerCommand
-  SET_EQUIPPED_OFF_HAND = '\\', // 0x5C: CG_SetEquippedOffHand
-  SET_CLIENT_DVAR = '^',        // 0x5E: CG_SetClientDvarFromServer
+  TRACKER_GAME_MSG = 'O',             // 0x4F
+  RESERVED_UNUSED_UP = 'P',           // 0x50
+  RESERVED_UNUSED_UQ = 'Q',           // 0x51
+  RESERVED_UNUSED_UR = 'R',           // 0x52
+  RESERVED_UNUSED_US = 'S',           // 0x53
+  RESERVED_UNUSED_UT = 'T',           // 0x54
+  MAP_RESTART_FAST = 'U',             // 0x55: CG_MapRestart(..., 1)
+  AIRSUPPORT = 'V',                   // 0x56: CG_ParseAirsupport
+  BURN = 'W',                         // 0x57: CG_BurnServerCommand
+  SCR_CAMERA = 'X',                   // 0x58: CG_ScrCamera
+  ELECTRIFIED = 'Y',                  // 0x59: CG_ElectrifiedServerCommand
+  RESERVED_UNUSED_UZ = 'Z',           // 0x5A
+  RESERVED_UNUSED_LBRACK = '[',       // 0x5B
+  SET_EQUIPPED_OFF_HAND = '\\',       // 0x5C: CG_SetEquippedOffHand
+  SET_CLIENT_DVAR = '^',              // 0x5E: CG_SetClientDvarFromServer
+  RESERVED_UNUSED_UNDERSCORE = '_',   // 0x5F
+  RESERVED_UNUSED_GRAVE_ACCENT = '`', // 0x60
   // // 0x61: cgameGlob->hideViewModel = 0;
   SHOW_VIEW_MODEL = 'a',
+  RESERVED_UNUSED_B = 'b', // 0x62
   // 0x63: R_Stream_ProcessHintEntity (or CG_SpawnPrediction)
   PROCESS_HINT_ENTITY = 'c',
   START_FADING_BLUR = 'd', // 0x64: CG_StartFadingBlurServerCommand
-  // // 0x65: LiveStats_SetStatChanged / LiveStats_SetStatChangedNoCache
+  // 0x65: LiveStats_SetStatChanged / LiveStats_SetStatChangedNoCache
   SET_STAT_CHANGED = 'e',
-  SET_CHECK_SUM = 'f',  // 0x66: LiveStats_SetCheckSumFromServer
+  SET_CHECK_SUM = 'f',     // 0x66: LiveStats_SetCheckSumFromServer
+  RESERVED_UNUSED_G = 'g', // 0x67
   SELECT_WEAPON = 'h',  // 0x68: CG_SwitchToLatestPrimary / CG_SelectWeaponIndex
   SET_TEAM_SCORE = 'i', // 0x69: CG_SetTeamScore
   /*
     0x6A: Falls through to '+'; (CG_ChatMessage).
     May be handled differently in CG_ChatMessage (?).
-    Unsure currentlywhy there are two commands for chat messages.
+    Unsure currently why there are two commands for chat messages.
   */
   CHAT_MSG_ALT = 'j',
-  GET_USER_SPONSOR = 'm',        // 0x6D: Live_GetUserSponsor
-  UPLOAD_STATS = 'n',            // 0x6E: LiveStats_CompareStatsVsStableBuffer /
-                                 // LiveStorage_UploadStatsForController
-  VISION_SET_LERP_TO = 'o',      // 0x6F: CG_VisionSetStartLerp_To
-  WATER_DROPS = 'p',             // 0x70: CG_WaterDropsServerCommand
+  RESERVED_UNUSED_K = 'k',  // 0x6B
+  RESERVED_UNUSED_L = 'l',  // 0x6C
+  GET_USER_SPONSOR = 'm',   // 0x6D: Live_GetUserSponsor
+  UPLOAD_STATS = 'n',       // 0x6E: LiveStats_CompareStatsVsStableBuffer /
+                            // LiveStorage_UploadStatsForController
+  VISION_SET_LERP_TO = 'o', // 0x6F: CG_VisionSetStartLerp_To
+  WATER_DROPS = 'p',        // 0x70: CG_WaterDropsServerCommand
+  RESERVED_UNUSED_Q = 'q',
   SET_WORLD_FOG_BANK = 'r',      // 0x72: CG_SetWorldFogActiveBank
   UPDATE_FOV = 's',              // 0x73: CG_UpdateFov
   TEAM_OPS = 't',                // 0x74: CG_TeamOpsSetID / Progress / ShowHUD
@@ -101,10 +188,11 @@ enum class ReliableCommand : char {
   UPDATE_ZOMBIE_DOUBLE_XP = 'w', // 0x77: Live_DoubleXPUpdateZombieDoubleXP
   INC_LOOT_CURRENCY = 'x',       // 0x78: Loot_IncCurrency (Vials or MP Loot XP)
   CONSUME_INVENTORY_ITEM = 'y',  // 0x79: LiveInventory_ConsumeItem
+  RESERVED_UNUSED_Z = 'z'        // 0x80
 };
 
 struct client_s {
-  int32_t state;
+  net::clientState_t state;
   char __pad0[0x28];
   net::netadr_t address;
   char __pad1[20468];
@@ -282,7 +370,6 @@ struct archivedEntity_s;
 typedef archivedEntity_s archivedEntity_t;
 
 #pragma pack(push, 1)
-// sizeof=0xB8
 struct serverSnapshot_t {
   lobby::LobbyClientPool<level::playerState_t *> ps;
   int32_t entityCount;
@@ -404,7 +491,7 @@ struct serverStatic_t {
     _padding12D0 but the offset is always accessed with a constant +1 increment,
     which is likely a compiler optimization.
 
-    The compiler would likely not optimize this way unless this field was
+    The compiler would not be likely to optimize this way unless this field was
     padding.
   */
   uint8_t _padding12D0[16];
@@ -447,9 +534,9 @@ struct clientsFlashbackArchive_t {
 };
 
 enum class serverState_t : uint32_t {
-  SS_DEAD = 0x0,
-  SS_LOADING = 0x1,
-  SS_GAME = 0x2,
+  DEAD = 0x0,
+  LOADING = 0x1,
+  GAME = 0x2,
 };
 
 struct recentFrame {
@@ -520,7 +607,7 @@ ASSERT_SIZE(clientsPositionArchive_t, 0x1B9C);
 
 #pragma pack(push, 1)
 struct server_t {
-  serverState_t state;
+  volatile serverState_t state;
   int32_t physicsTime;
   int32_t timeResidual;
   int32_t lastTickMS;
@@ -530,13 +617,13 @@ struct server_t {
   bool isRunnable;
   bool allowSelfTick;
   bool allowNetPackets;
-  qboolean restarting;
+  volatile qboolean restarting;
   int32_t start_frameTime;
   int32_t checksumFeed;
   qboolean wroteConfigStrings;
   scr::ScrString_t emptyConfigString;
-  scr::ScrString_t configstrings[3568];
-  svEntity_t svEntities[2048];
+  volatile scr::ScrString_t configstrings[0xdf0];
+  svEntity_t svEntities[0x800];
   level::gentity_t *gentities;
   int32_t gentitySize;
   int32_t num_entities;
@@ -548,11 +635,11 @@ struct server_t {
   int32_t checksum;
   int32_t skelTimeStamp;
   int32_t skelMemPos;
-  int32_t bpsWindow[20];
+  int32_t bpsWindow[0x14];
   int32_t bpsWindowSteps;
   int32_t bpsTotalBytes;
   int32_t bpsMaxBytes;
-  int32_t ubpsWindow[20];
+  int32_t ubpsWindow[0x14];
   int32_t ubpsTotalBytes;
   int32_t ubpsMaxBytes;
   float ucompAve;
@@ -560,21 +647,25 @@ struct server_t {
   volatile int32_t serverFrameTime;
   volatile int32_t serverFrameTimeMin;
   volatile int32_t serverFrameTimeMax;
-  recentFrame recentFrameInfo[200];
-  uint8_t _unknown139B8[36];
-  char gametype[64];
+  recentFrame recentFrameInfo[0xc8];
+  uint8_t _unknown139B8[0x24];
+  char gametype[0x40];
   qboolean killServer;
   const char *killReason;
   int32_t currentFrameNum;
   int32_t nextClientsPositionArchive;
   clientsPositionArchive_t clientsPositionArchive[40];
   int32_t nextClientsFlashbackArchive;
-  clientsFlashbackArchive_t clientsFlashBackArchive[512];
+  clientsFlashbackArchive_t clientsFlashBackArchive[0x200];
   clientsFlashbackArchive_t clientsLatestFlashBack;
   // Each field XORed with client XUID to generate client gamestate security
   // checksum
   scr::scrChecksum_t securityChecksum;
   uint8_t _padding7BEFC[4];
+
+  inline constexpr bool running() volatile noexcept {
+    return this->state == serverState_t::GAME || this->restarting;
+  }
 };
 ASSERT_SIZE(server_t, 0xBC5C0);
 #pragma pack(pop)
@@ -1147,12 +1238,41 @@ ASSERT_SIZE(clientInfo_t, 0xEE0);
 #pragma pack(push, 1)
 struct ucmd_t {
   const char *name;
-  fastcall_t<void(client_t *cl)> func;
+  fastcallPtr_t<void(client_t *cl)> func;
   qboolean fromOldServer;
   uint8_t _padding14[4];
 };
 ASSERT_SIZE(ucmd_t, 0x18);
 #pragma pack(pop)
+
+PACKED(struct BitField {
+  const uint64_t *array;
+  uint32_t rowSize;
+  uint32_t count;
+  uint32_t mbits;
+  uint8_t _padding14[4];
+});
+
+PACKED(struct NetField {
+  const char *name;
+  int offset;
+  int size;
+  int bits;
+  uint8_t changeHints;
+  uint8_t _padding15[3];
+  const char *bitsStr;
+  const char *changeHintsStr;
+});
+
+struct NetFieldList {
+  const NetField *array;
+  uint32_t count;
+  uint32_t bbPrintRandMax;
+  uint32_t bbPrintCount;
+  unsigned int bbChecksum;
+  BitField bitFields;
+  const char *fieldArrayName;
+};
 
 } // namespace sv
 } // namespace game

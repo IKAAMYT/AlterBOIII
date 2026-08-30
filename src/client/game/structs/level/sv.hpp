@@ -4,10 +4,10 @@
 #include "../core.hpp"
 #include "../vehicle.hpp"
 #include "../user.hpp"
-#include "../phys.hpp"
+#include "../phys/core.hpp"
 #include "../ai.hpp"
 #include "../scr/scr.hpp"
-#include "../lobby.hpp"
+#include "../lobby/core.hpp"
 
 namespace game {
 
@@ -71,7 +71,7 @@ struct clientSession_t {
   int32_t killCamMod;
   int32_t killCamFlag;
   int32_t archiveTime;
-  scr::ScrVarIndex_t scriptPersId;
+  scr::var::ScrVarIndex_t scriptPersId;
   clientConnected_t connected;
   user::usercmd_t cmd;
   user::usercmd_t oldcmd;
@@ -182,13 +182,14 @@ struct gclient_s {
   int32_t lastStandTime;
 };
 typedef gclient_s gclient_t;
-static_assert(sizeof(gclient_s) == 0x17200, "sizeof(gclient_s) != 0x17200");
+ASSERT_SIZE(gclient_s, 0x17200);
 
 #pragma pack(pop)
 
 #pragma pack(push, 1)
 struct SpawnVar {
-  qboolean spawnVarsValid;
+  bool spawnVarsValid;
+  uint8_t _padding01[3];
   uint32_t numSpawnVars;
   char *spawnVars[100][2];
   uint32_t numSpawnVarChars;
@@ -203,7 +204,8 @@ struct archivedEntity_t;
 struct gentity_snd_wait {
   uint32_t notifyString;
   uint32_t index;
-  qboolean stoppable;
+  bool stoppable;
+  uint8_t _padding09[3];
   int32_t basetime;
   int32_t duration;
 };
@@ -449,8 +451,8 @@ struct gentity_s {
     EntHandle grenadeOriginalOwner;
   };
   gentity_snd_wait snd_wait;
-  tagInfo_t *tagInfo;
   gentity_t *tagChildren;
+  tagInfo_t *tagInfo;
   anim::animscripted_t *scripted;
   EntityModelAttachment attachments[19];
   anim::XAnimTree *pAnimTree;
@@ -479,22 +481,17 @@ struct gentity_pool {
 };
 
 #ifdef __cplusplus
-static_assert(offsetof(gentity_s, model) == GENTITY_MODEL_OFFSET,
-              "offset of gentity_s::model must be 0x280");
-static_assert(offsetof(gentity_s, classname) == 0x288,
-              "offset of gentity_s::classname must be 0x288");
-static_assert(offsetof(gentity_s, snd_wait) == GENTITY_SND_WAIT_OFFSET,
-              "GENTITY_SND_WAIT_OFFSET must be 0x3D4");
-static_assert(offsetof(gentity_s, s) == 0,
-              "gentity_s must start with entityState_t");
+ASSERT_OFFSET(gentity_s, model, GENTITY_MODEL_OFFSET);
+ASSERT_OFFSET(gentity_s, classname, 0x288);
+ASSERT_OFFSET(gentity_s, snd_wait, GENTITY_SND_WAIT_OFFSET);
+ASSERT_OFFSET(gentity_s, s, 0);
 ASSERT_OFFSET(gentity_s, client, 0x250);
-static_assert(sizeof(gentity_s) == GENTITY_SIZE,
-              "gentity_s size must be 0x4F8 bytes");
+ASSERT_OFFSET(gentity_s, vehicle, 0x270);
+ASSERT_SIZE(gentity_s, GENTITY_SIZE);
 #endif
 
-#pragma pack(push, 16)
-// Length of level_locals_t has size 0x23A10 on both client and server
-struct level_locals_t {
+// level_locals_t has size 0x23A10 on both client and server
+PACKED(struct level_locals_t {
   gclient_s *clients;
   gentity_t *gentities;
   int32_t gentitySize;
@@ -606,9 +603,35 @@ struct level_locals_t {
   qboolean checkAnimChange;
   phys::objcamCameraTable objectiveCameras;
   uint8_t _unknown[0x7AC];
-};
+});
 ASSERT_SIZE(level_locals_t, 0x23A10);
-#pragma pack(pop)
+
+// Verified
+PACKED(struct clientSnapshot_t {
+  playerState_t ps;
+  uint8_t _paddingB56[2];
+  team_t clientTeam;
+  int32_t destructibleCount;
+  int32_t matchStateIndex;
+  int32_t entityCount;
+  int32_t clientCount;
+  int32_t actorCount;
+  int32_t casterStateIndex;
+  int32_t firstDestructibleIndex;
+  int32_t firstCasterClientIndex;
+  int32_t firstEntityIndex;
+  int32_t firstClientIndex;
+  int32_t firstActorIndex;
+  int32_t messageSent;
+  int32_t messageAcked;
+  int32_t messageSize;
+  int32_t serverTime;
+  int32_t physicsTime;
+  int32_t timeDelta;
+  qboolean baselineSnap;
+  int32_t snapFlags;
+});
+ASSERT_SIZE(clientSnapshot_t, 0xB5B8);
 
 } // namespace level
 } // namespace game

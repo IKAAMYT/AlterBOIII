@@ -1,8 +1,9 @@
 #pragma once
-#ifdef GAME_HPP
+
+#include <game/symbols/sym_include.hpp>
 
 #include <cstdint>
-#include "../macros.hpp"
+#include <winsock2.h>
 
 namespace game {
 namespace net {
@@ -25,5 +26,3 @@ WEAK symbol<bool(netsrc_t sock, netadr_t *adr, const char *data)>
     NET_OutOfBandPrint{0x142173710};
 } // namespace net
 } // namespace game
-
-#endif

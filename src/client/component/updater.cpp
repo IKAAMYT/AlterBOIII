@@ -1,15 +1,43 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 #include "updater.hpp"
-#include "game/game.hpp"
+#include <game/game.hpp>
 
 #include <utils/flags.hpp>
+#include <utils/properties.hpp>
 #include <utils/progress_ui.hpp>
 #include <updater/updater.hpp>
 
 namespace updater {
+namespace {
+bool automatic_updates_enabled() {
+  const auto stored = utils::properties::load("launcherUiSettings");
+  if (!stored)
+    return true;
+  rapidjson::Document document;
+  if (document.Parse(stored->c_str()).HasParseError() || !document.IsObject())
+    return true;
+  const auto setting = document.FindMember("autoUpdate");
+  return setting == document.MemberEnd() || !setting->value.IsBool() ||
+         setting->value.GetBool();
+}
+
+bool show_updater_errors() {
+  return !game::is_headless() && !utils::flags::has_flag("dedicated");
+}
+
+void report_updater_error(const char *message) {
+  OutputDebugStringA(message);
+  OutputDebugStringA("\n");
+  if (show_updater_errors()) {
+    utils::progress_ui::show_error("Updater Error", message);
+  }
+}
+} // namespace
+
 void update() {
-  if (utils::flags::has_flag("noupdate")) {
+  if (utils::flags::has_flag("noupdate") ||
+      (!utils::flags::has_flag("update") && !automatic_updates_enabled())) {
     return;
   }
 
@@ -18,10 +46,9 @@ void update() {
   } catch (update_cancelled &) {
     TerminateProcess(GetCurrentProcess(), 0);
   } catch (const std::exception &e) {
-    utils::progress_ui::show_error("Updater Error", e.what());
+    report_updater_error(e.what());
   } catch (...) {
-    utils::progress_ui::show_error("Updater Error",
-                                   "Unknown error occurred during update.");
+    report_updater_error("Unknown error occurred during update.");
   }
 }
 

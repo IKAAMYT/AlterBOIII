@@ -3,11 +3,10 @@
 #include <utils/io.hpp>
 #include <utils/http.hpp>
 #include <utils/string.hpp>
-#include "game/game.hpp"
+#include <game/game.hpp>
 #include "workshop.hpp"
 #include "steamcmd.hpp"
 #include "download_overlay.hpp"
-#include "fastdl.hpp"
 #include "scheduler.hpp"
 #include <curl/curl.h>
 #include "unzip.h"
@@ -271,9 +270,8 @@ int setup_steamcmd() {
       }
 
       curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-      curl_easy_setopt(curl, CURLOPT_CAINFO, "./ca-bundle.crt");
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, outFile);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);

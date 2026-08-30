@@ -3,10 +3,7 @@
 #include <cstdarg>
 #include <stdexcept>
 #include <string>
-
-template <class Type, size_t n> constexpr auto STATIC_ARRAY_COUNT(Type (&)[n]) {
-  return n;
-}
+#include <macros.hpp>
 
 namespace utils::string {
 
@@ -18,7 +15,7 @@ public:
   va_provider() : current_buffer_(0) {}
 
   char *get(const char *format, const va_list ap) {
-    ++this->current_buffer_ %= STATIC_ARRAY_COUNT(this->string_pool_);
+    ++this->current_buffer_ %= std::size(this->string_pool_);
     auto entry = &this->string_pool_[this->current_buffer_];
 
     if (!entry->size || !entry->buffer) {
@@ -81,8 +78,10 @@ std::vector<std::string> split(const std::string &s, char delim);
 
 std::string to_lower(std::string text);
 std::string to_upper(std::string text);
-bool starts_with(const std::string &text, const std::string &substring);
-bool ends_with(const std::string &text, const std::string &substring);
+bool contains(const std::string_view &text, const std::string_view &substring);
+bool starts_with(const std::string_view &text,
+                 const std::string_view &substring);
+bool ends_with(const std::string_view &text, const std::string_view &substring);
 
 bool is_numeric(const std::string &text);
 
@@ -108,5 +107,10 @@ std::string join(std::vector<std::string> strings,
 
 template <size_t Size> void copy(char (&dest)[Size], const char *src) {
   copy(dest, Size, src);
+}
+
+std::string hexdump(uintptr_t ptr, size_t size);
+template <typename T> inline std::string hexdump(const T *ptr, size_t size) {
+  return hexdump(reinterpret_cast<uintptr_t>(ptr), size);
 }
 } // namespace utils::string

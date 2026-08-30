@@ -4,6 +4,7 @@
 #include "updater_ui.hpp"
 #include "file_updater.hpp"
 
+#include <game/game.hpp>
 #include <utils/cryptography.hpp>
 #include <utils/flags.hpp>
 #include <utils/http.hpp>
@@ -33,6 +34,8 @@ std::string get_selected_version() {
   return "latest";
 }
 
+bool should_skip_host_update() { return get_selected_version() != "latest"; }
+
 std::string get_update_file() {
   if (get_selected_version() == "beta") {
     return UPDATE_FILE_BETA;
@@ -49,7 +52,7 @@ std::string get_update_folder() {
 
 std::vector<file_info> parse_file_infos(const std::string &json) {
   rapidjson::Document doc{};
-  doc.Parse(json.data(), json.size());
+  doc.Parse<rapidjson::kParseIterativeFlag>(json.data(), json.size());
 
   if (!doc.IsArray()) {
     return {};
@@ -119,6 +122,12 @@ bool is_inside_folder(const std::filesystem::path &file,
   const auto start = relative.begin();
   return start != relative.end() && start->string() != "..";
 }
+
+bool is_dedicated_server() {
+  return utils::flags::has_flag("dedicated") ||
+         (!utils::io::file_exists("BlackOps3.exe") &&
+          utils::io::file_exists("BlackOps3_UnrankedDedicatedServer.exe"));
+}
 } // namespace
 
 file_updater::file_updater(progress_listener &listener,
@@ -129,7 +138,8 @@ file_updater::file_updater(progress_listener &listener,
       dead_process_file_(process_file_) {
   this->dead_process_file_.replace_extension(".exe.old");
 
-  if (this->process_file_.extension() == ".old") {
+  if (this->process_file_.extension() == ".old" && !is_dedicated_server() &&
+      !game::is_headless()) {
     utils::progress_ui::show_error(
         "Update Error", "You are running from a backup file (boiii.exe.old). "
                         "Please restore boiii.exe and try again.");
@@ -163,11 +173,12 @@ void file_updater::create_config_file_if_not_exists() const {
     return;
   }
 
-  utils::io::write_file(config_path.string(), {}, false);
+  utils::io::write_file(config_path.string(), std::string(), false);
 }
 
 void file_updater::run() const {
   this->create_config_file_if_not_exists();
+
   const auto files = get_file_infos();
 
   OutputDebugStringA(
@@ -189,7 +200,8 @@ void file_updater::run() const {
   }
 
 #ifndef NDEBUG
-  const auto *host_file = find_host_file_info(files);
+  const auto *host_file =
+      should_skip_host_update() ? nullptr : find_host_file_info(files);
   if (host_file) {
     std::string data{};
     const auto drive_name = this->get_drive_filename(*host_file);
@@ -212,19 +224,30 @@ void file_updater::run() const {
   }
 
   this->update_host_binary(outdated_files);
-  this->update_files(outdated_files);
+
+  std::vector<file_info> remaining_files;
+  remaining_files.reserve(outdated_files.size());
+  for (const auto &file : outdated_files) {
+    if (file.name != UPDATE_HOST_BINARY) {
+      remaining_files.emplace_back(file);
+    }
+  }
+
+  if (!remaining_files.empty()) {
+    this->update_files(remaining_files);
+  }
 
   std::this_thread::sleep_for(1s);
 }
 
 void file_updater::update_file(const file_info &file) const {
-  // AlterBO3 (IKAAM): protect our custom branding from being overwritten by
-  // the upstream (Ezz) updater. We still let the updater fetch all GAME DATA
-  // files (fastfiles, zones, dw/ configs) — those are required or the game
-  // crashes at startup — but we skip our own exe and our custom launcher UI.
+  // AlterBO3 (IKAAM): protect our custom exe and launcher UI from being
+  // overwritten by the upstream (Ezz) updater. Game data files (fastfiles,
+  // zones, configs) are still downloaded — those are required.
   const bool is_our_exe = file.name.ends_with(".exe") ||
                           file.name == UPDATE_HOST_BINARY ||
-                          file.name == "alterbo3.exe";
+                          file.name == "alterbo3.exe" ||
+                          file.name == "AlterBOIII.exe";
   const bool is_our_ui =
       file.name.find("data/launcher/") != std::string::npos ||
       file.name.find("data\\launcher\\") != std::string::npos ||
@@ -334,6 +357,7 @@ file_updater::get_outdated_files(const std::vector<file_info> &files) const {
     // so without this they would re-appear in the updater on every launch.
     const bool is_our_exe = info.name.ends_with(".exe") ||
                             info.name == UPDATE_HOST_BINARY ||
+                            info.name == "alterbo3.exe" ||
                             info.name == "AlterBOIII.exe";
     const bool is_our_ui =
         info.name.find("data/launcher/") != std::string::npos ||
@@ -358,7 +382,6 @@ void file_updater::update_host_binary(
   // host-binary update path (otherwise it renames our exe to .exe.old first).
   OutputDebugStringA("Skipping host binary update (AlterBO3 custom exe)\n");
   (void)outdated_files;
-  return;
 }
 
 void file_updater::update_files(
@@ -424,6 +447,11 @@ bool file_updater::is_outdated_file(const file_info &file) const {
     return false;
   }
 
+  if (file.name == UPDATE_HOST_BINARY && should_skip_host_update()) {
+    OutputDebugStringA("Skipping host binary update for selected version\n");
+    return false;
+  }
+
 #ifndef NDEBUG
   if (file.name == UPDATE_HOST_BINARY && !utils::flags::has_flag("update")) {
     OutputDebugStringA("Skipping host binary update in debug build (use "
@@ -466,7 +494,7 @@ file_updater::get_drive_filename(const file_info &file) const {
   return this->base_ / file.name;
 }
 
-void file_updater::move_current_process_file() const {
+bool file_updater::move_current_process_file() const {
   OutputDebugStringA(("Moving exe from " + this->process_file_.string() +
                       " to " + this->dead_process_file_.string() + "\n")
                          .c_str());
@@ -484,13 +512,17 @@ void file_updater::move_current_process_file() const {
                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH |
                         MOVEFILE_COPY_ALLOWED)) {
       OutputDebugStringA("Successfully moved exe to .old\n");
-      return;
+      return true;
     }
 
     const DWORD error = GetLastError();
     OutputDebugStringA(("Failed to move exe, attempt " + std::to_string(i + 1) +
                         "/5, error: " + std::to_string(error) + "\n")
                            .c_str());
+
+    if (error == ERROR_SHARING_VIOLATION || error == ERROR_ACCESS_DENIED) {
+      return false;
+    }
 
     if (i < 4) {
       std::this_thread::sleep_for(500ms);

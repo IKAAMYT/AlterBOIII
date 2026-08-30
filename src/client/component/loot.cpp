@@ -1,23 +1,23 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
 #include <utils/hook.hpp>
 
 #include "command.hpp"
 #include "scheduler.hpp"
 #include "toast.hpp"
-#include "game/game.hpp"
-#include "game/utils.hpp"
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 namespace loot {
 namespace {
-const game::dvar_t *dvar_cg_unlockall_loot;
-const game::dvar_t *dvar_cg_unlockall_purchases;
-const game::dvar_t *dvar_cg_unlockall_attachments;
-const game::dvar_t *dvar_cg_unlockall_camos_and_reticles;
-const game::dvar_t *dvar_cg_unlockall_calling_cards;
-const game::dvar_t *dvar_cg_unlockall_specialists_outfits;
-const game::dvar_t *dvar_cg_unlockall_cac_slots;
+game::EngineDependentDvarMut dvar_cg_unlockall_loot;
+game::EngineDependentDvarMut dvar_cg_unlockall_purchases;
+game::EngineDependentDvarMut dvar_cg_unlockall_attachments;
+game::EngineDependentDvarMut dvar_cg_unlockall_camos_and_reticles;
+game::EngineDependentDvarMut dvar_cg_unlockall_calling_cards;
+game::EngineDependentDvarMut dvar_cg_unlockall_specialists_outfits;
+game::EngineDependentDvarMut dvar_cg_unlockall_cac_slots;
 
 utils::hook::detour loot_getitemquantity_hook;
 utils::hook::detour liveinventory_getitemquantity_hook;
@@ -36,7 +36,7 @@ utils::hook::detour gscr_isitempurchasedforclientnum_hook;
 
 int loot_getitemquantity_stub(const game::ControllerIndex_t controller_index,
                               const game::eModes mode, const int item_id) {
-  if (!game::get_dvar_bool(dvar_cg_unlockall_loot)) {
+  if (!dvar_cg_unlockall_loot.get_bool()) {
     return loot_getitemquantity_hook.invoke<int>(controller_index, mode,
                                                  item_id);
   }
@@ -51,14 +51,14 @@ int loot_getitemquantity_stub(const game::ControllerIndex_t controller_index,
 int liveinventory_getitemquantity_stub(
     const game::ControllerIndex_t controller_index, const int item_id) {
   // Item id's for CWL camo's and paid specialist outfits
-  if (game::get_dvar_bool(dvar_cg_unlockall_loot) &&
+  if (dvar_cg_unlockall_loot.get_bool() &&
       (item_id == 99003 || (item_id >= 99018 && item_id <= 99021) ||
        item_id == 99025 || (item_id >= 90047 && item_id <= 90064))) {
     return 1;
   }
 
   // Item id for extra CaC slots
-  if (game::get_dvar_bool(dvar_cg_unlockall_cac_slots) && item_id == 99003) {
+  if (dvar_cg_unlockall_cac_slots.get_bool() && item_id == 99003) {
     return 1;
   }
 
@@ -68,7 +68,7 @@ int liveinventory_getitemquantity_stub(
 
 bool liveinventory_areextraslotspurchased_stub(
     const game::ControllerIndex_t controller_index) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_cac_slots)) {
+  if (dvar_cg_unlockall_cac_slots.get_bool()) {
     return true;
   }
 
@@ -79,7 +79,7 @@ bool liveinventory_areextraslotspurchased_stub(
 bool bg_unlockablesisitempurchased_stub(
     game::eModes mode, const game::ControllerIndex_t controller_index,
     int item_index) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_purchases)) {
+  if (dvar_cg_unlockall_purchases.get_bool()) {
     return true;
   }
 
@@ -90,7 +90,7 @@ bool bg_unlockablesisitempurchased_stub(
 bool bg_unlockablesisitemattachmentlocked_stub(
     game::eModes mode, const game::ControllerIndex_t controller_index,
     int item_index, int attachment_num) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_attachments)) {
+  if (dvar_cg_unlockall_attachments.get_bool()) {
     return false;
   }
 
@@ -101,7 +101,7 @@ bool bg_unlockablesisitemattachmentlocked_stub(
 bool bg_unlockablesisattachmentslotlocked_stub(
     game::eModes mode, const game::ControllerIndex_t controller_index,
     int item_index, int attachment_slot_index) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_attachments)) {
+  if (dvar_cg_unlockall_attachments.get_bool()) {
     return false;
   }
 
@@ -112,7 +112,7 @@ bool bg_unlockablesisattachmentslotlocked_stub(
 bool bg_unlockablesitemoptionlocked_stub(
     game::eModes mode, const game::ControllerIndex_t controllerIndex,
     int itemIndex, int optionIndex) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_camos_and_reticles)) {
+  if (dvar_cg_unlockall_camos_and_reticles.get_bool()) {
     return false;
   }
 
@@ -123,7 +123,7 @@ bool bg_unlockablesitemoptionlocked_stub(
 bool bg_unlockablesemblemorbackinglockedbychallenge_stub(
     game::eModes mode, const game::ControllerIndex_t controllerIndex,
     game::emblemChallengeLookup_t *challengeLookup, bool otherPlayer) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_calling_cards)) {
+  if (dvar_cg_unlockall_calling_cards.get_bool()) {
     return false;
   }
 
@@ -134,7 +134,7 @@ bool bg_unlockablesemblemorbackinglockedbychallenge_stub(
 bool bg_unlockedgetchallengeunlockedforindex_stub(
     game::eModes mode, const game::ControllerIndex_t controllerIndex,
     unsigned __int16 index, int itemIndex) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_camos_and_reticles)) {
+  if (dvar_cg_unlockall_camos_and_reticles.get_bool()) {
     return true;
   }
 
@@ -145,7 +145,7 @@ bool bg_unlockedgetchallengeunlockedforindex_stub(
 bool bg_unlockablescharactercustomizationitemlocked_stub(
     game::eModes mode, const game::ControllerIndex_t controllerIndex,
     uint32_t characterIndex, game::CharacterItemType itemType, int itemIndex) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_specialists_outfits)) {
+  if (dvar_cg_unlockall_specialists_outfits.get_bool()) {
     return false;
   }
 
@@ -157,7 +157,7 @@ bool bg_emblemisentitlementbackgroundgranted_stub(
     const game::ControllerIndex_t controllerIndex,
     game::BGEmblemBackgroundID backgroundId) {
   // backgroundId's for blank CWL calling cards
-  if (game::get_dvar_bool(dvar_cg_unlockall_calling_cards) &&
+  if (dvar_cg_unlockall_calling_cards.get_bool() &&
       (backgroundId != 684 && backgroundId != 685 && backgroundId != 687 &&
        backgroundId != 693 && backgroundId != 695 && backgroundId != 701 &&
        backgroundId != 703 && backgroundId != 707 && backgroundId != 708)) {
@@ -171,8 +171,7 @@ bool bg_emblemisentitlementbackgroundgranted_stub(
 bool liveentitlements_isentitlementactiveforcontroller_stub(
     const game::ControllerIndex_t controllerIndex, int incentiveId) {
   // incentiveId for unavailable incentive
-  if (game::get_dvar_bool(dvar_cg_unlockall_calling_cards) &&
-      incentiveId != 29) {
+  if (dvar_cg_unlockall_calling_cards.get_bool() && incentiveId != 29) {
     return true;
   }
 
@@ -182,7 +181,7 @@ bool liveentitlements_isentitlementactiveforcontroller_stub(
 
 int bg_unlockablesgetcustomclasscount_stub(
     game::eModes mode, const game::ControllerIndex_t controllerIndex) {
-  if (game::get_dvar_bool(dvar_cg_unlockall_cac_slots)) {
+  if (dvar_cg_unlockall_cac_slots.get_bool()) {
     return 10;
   }
 
@@ -206,26 +205,26 @@ struct component final : generic_component {
       return;
     }
 
-    dvar_cg_unlockall_loot =
-        game::register_dvar_bool("cg_unlockall_loot", false, game::DVAR_ARCHIVE,
-                                 "Unlocks blackmarket loot");
+    dvar_cg_unlockall_loot = game::register_dvar_bool(
+        "cg_unlockall_loot", false, game::DvarFlags{.archive = 1},
+        "Unlocks blackmarket loot");
     dvar_cg_unlockall_purchases = game::register_dvar_bool(
-        "cg_unlockall_purchases", false, game::DVAR_ARCHIVE,
+        "cg_unlockall_purchases", false, game::DvarFlags{.archive = 1},
         "Unlock all purchases with tokens");
-    dvar_cg_unlockall_attachments =
-        game::register_dvar_bool("cg_unlockall_attachments", false,
-                                 game::DVAR_ARCHIVE, "Unlocks all attachments");
+    dvar_cg_unlockall_attachments = game::register_dvar_bool(
+        "cg_unlockall_attachments", false, game::DvarFlags{.archive = 1},
+        "Unlocks all attachments");
     dvar_cg_unlockall_camos_and_reticles = game::register_dvar_bool(
-        "cg_unlockall_camos_and_reticles", false, game::DVAR_ARCHIVE,
+        "cg_unlockall_camos_and_reticles", false, game::DvarFlags{.archive = 1},
         "Unlocks all camos and reticles");
     dvar_cg_unlockall_calling_cards = game::register_dvar_bool(
-        "cg_unlockall_calling_cards", false, game::DVAR_ARCHIVE,
+        "cg_unlockall_calling_cards", false, game::DvarFlags{.archive = 1},
         "Unlocks all calling cards");
     dvar_cg_unlockall_specialists_outfits = game::register_dvar_bool(
-        "cg_unlockall_specialists_outfits", false, game::DVAR_ARCHIVE,
-        "Unlocks all specialists outfits");
+        "cg_unlockall_specialists_outfits", false,
+        game::DvarFlags{.archive = 1}, "Unlocks all specialists outfits");
     dvar_cg_unlockall_cac_slots = game::register_dvar_bool(
-        "cg_unlockall_cac_slots", false, game::DVAR_ARCHIVE,
+        "cg_unlockall_cac_slots", false, game::DvarFlags{.archive = 1},
         "Unlocks all Create a Class Slots");
 
     command::add("unlockall", [](const command::params &) {
@@ -235,72 +234,75 @@ struct component final : generic_component {
             "Cannot use unlockall while in-game. Return to main menu first.");
         return;
       }
-      // Enable all unlock dvars (mode-independent)
-      game::Dvar_SetFromStringByName("cg_unlockall_loot", "1", true);
-      game::Dvar_SetFromStringByName("cg_unlockall_purchases", "1", true);
-      game::Dvar_SetFromStringByName("cg_unlockall_attachments", "1", true);
-      game::Dvar_SetFromStringByName("cg_unlockall_camos_and_reticles", "1",
-                                     true);
-      game::Dvar_SetFromStringByName("cg_unlockall_calling_cards", "1", true);
-      game::Dvar_SetFromStringByName("cg_unlockall_specialists_outfits", "1",
-                                     true);
-      game::Dvar_SetFromStringByName("cg_unlockall_cac_slots", "1", true);
-      game::Dvar_SetFromStringByName("ui_enableAllHeroes", "1", true);
-
-      // Set master prestige for all 3 modes (eModes: ZM=0, MP=1, CP=2)
-      game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 0\n"); // ZM
-      game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 1\n"); // MP
-      game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 2\n"); // CP
-
-      // statsetbyname only affects the current session mode
-      game::cbuf::Cbuf_AddText(0, "statsetbyname plevel 11\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname hasprestiged 1\n");
 
       const game::eModes mode = game::com::Com_SessionMode_GetMode();
-      const char *mode_name = "";
+      if (mode != game::eModes::MULTIPLAYER && mode != game::eModes::ZOMBIES &&
+          mode != game::eModes::CAMPAIGN) {
+        toast::error(
+            "Unlock All",
+            "Open Multiplayer, Zombies, or Campaign before using unlockall.");
+        return;
+      }
+
+      dvar_cg_unlockall_loot.set(true);
+      dvar_cg_unlockall_purchases.set(true);
+      dvar_cg_unlockall_attachments.set(true);
+      dvar_cg_unlockall_camos_and_reticles.set(true);
+      dvar_cg_unlockall_calling_cards.set(true);
+      dvar_cg_unlockall_specialists_outfits.set(true);
+      dvar_cg_unlockall_cac_slots.set(true);
+      game::ui_enableAllHeroes->set(true);
+
+      const char *mode_name = nullptr;
 
       if (mode == game::eModes::MULTIPLAYER) {
+        game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname plevel 11\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname hasprestiged 1\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname rank 54\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rank 944\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rankxp 56800000\n");
-        mode_name = " Multiplayer";
+        game::cbuf::Cbuf_AddText(0, "uploadstats 1\n");
+        mode_name = "Multiplayer";
       } else if (mode == game::eModes::ZOMBIES) {
+        game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 0\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname plevel 11\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname hasprestiged 1\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname rank 34\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rank 999\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rankxp 56800000\n");
-        mode_name = " Zombies";
-      } else if (mode == game::eModes::CAMPAIGN) {
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_zod_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_zod_super_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_factory_ee 1\n");
+        game::cbuf::Cbuf_AddText(0,
+                                 "statsetbyname darkops_factory_super_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_castle_ee 1\n");
+        game::cbuf::Cbuf_AddText(0,
+                                 "statsetbyname darkops_castle_super_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_island_ee 1\n");
+        game::cbuf::Cbuf_AddText(0,
+                                 "statsetbyname darkops_island_super_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_stalingrad_ee 1\n");
+        game::cbuf::Cbuf_AddText(
+            0, "statsetbyname darkops_stalingrad_super_ee 1\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_genesis_ee 1\n");
+        game::cbuf::Cbuf_AddText(0,
+                                 "statsetbyname DARKOPS_GENESIS_SUPER_EE 1\n");
+        game::cbuf::Cbuf_AddText(0, "uploadstats 0\n");
+        mode_name = "Zombies";
+      } else {
+        game::cbuf::Cbuf_AddText(0, "PrestigeStatsMaster 2\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname plevel 11\n");
+        game::cbuf::Cbuf_AddText(0, "statsetbyname hasprestiged 1\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname rank 19\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rank 999\n");
         game::cbuf::Cbuf_AddText(0, "statsetbyname paragon_rankxp 0\n");
-        mode_name = " Campaign";
+        game::cbuf::Cbuf_AddText(0, "uploadstats 2\n");
+        mode_name = "Campaign";
       }
 
-      // Unlock all easter eggs (zombie darkops)
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_zod_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_zod_super_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_factory_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_factory_super_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_castle_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_castle_super_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_island_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_island_super_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_stalingrad_ee 1\n");
-      game::cbuf::Cbuf_AddText(0,
-                               "statsetbyname darkops_stalingrad_super_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname darkops_genesis_ee 1\n");
-      game::cbuf::Cbuf_AddText(0, "statsetbyname DARKOPS_GENESIS_SUPER_EE 1\n");
-
-      // Upload stats for all modes (eModes: ZM=0, MP=1, CP=2)
-      game::cbuf::Cbuf_AddText(0, "uploadstats 0\n"); // ZM
-      game::cbuf::Cbuf_AddText(0, "uploadstats 1\n"); // MP
-      game::cbuf::Cbuf_AddText(0, "uploadstats 2\n"); // CP
-
-      printf("[Loot] Unlock All (%s): all items, master prestige (all modes), "
-             "max rank (%s), easter eggs\n",
-             mode_name, mode_name);
       toast::success("Unlock All",
-                     std::string("Unlocked all") + mode_name + " stats!");
+                     std::string(mode_name) + " unlocks applied.");
     });
 
     loot_getitemquantity_hook.create(0x141E82C00_g, loot_getitemquantity_stub);
@@ -331,8 +333,8 @@ struct component final : generic_component {
 
     scheduler::once(
         []() {
-          if (game::get_dvar_bool(dvar_cg_unlockall_loot)) {
-            game::Dvar_SetFromStringByName("ui_enableAllHeroes", "1", true);
+          if (dvar_cg_unlockall_loot.get_bool()) {
+            game::ui_enableAllHeroes->set(true);
           }
         },
         scheduler::pipeline::dvars_loaded);

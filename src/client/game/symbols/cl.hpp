@@ -1,7 +1,6 @@
 #pragma once
-#ifdef GAME_HPP
 
-#include "macros.hpp"
+#include <game/symbols/sym_include.hpp>
 
 namespace game {
 namespace cl {
@@ -21,11 +20,11 @@ WEAK symbol<float(void *key)> CL_KeyState{0x1412FF860};
 WEAK symbol<void(LocalClientNum_t localClientNum, const char *pszMapName,
                  const char *pszGametype)>
     CL_SetupForNewServerMap{0x14135CD20};
-WEAK symbol<LocalClientNum_t> cl_maxLocalClients{0x1453A2720};
-WEAK symbol<bool> cl_serverLoadingMap{0x1453A273F};
 WEAK symbol<void(game::LocalClientNum_t localClientNum, bool active)>
     CL_LocalClient_SetActive{0x14283AAB0};
 
+WEAK symbol<const char *(int32_t configStringIndex)> CL_GetConfigString{
+    0x141321110, 0x14017CCC0};
 WEAK symbol<int64_t(LocalClientNum_t localClientNum)> CL_ClearClientThinkPacket{
     0x1412F33D0};
 WEAK symbol<bool(const char *map)> CL_MapSwitch_IsMapPreloaded{0x14131E9F0};
@@ -59,16 +58,21 @@ WEAK symbol<void(bool restartUI)> CL_FreePerLocalClientMemory{0x14135DC00};
 
 WEAK symbol<ClientConnections *> clientConnections{0x1453D8BB8};
 WEAK symbol<ClientActives *> clients{0x1453DC188};
-WEAK symbol<clientStatic_t> cls{0x1453DC190};
+WEAK symbol<clientStatic_t> cls{0x1453DC190, 0x1428E2E40};
 // TODO: fix the clientStatic_t struct and remove these symbols
-WEAK symbol<gameState_t> cls_gamestate{0x145722828};
-WEAK symbol<int32_t> cls_serverId{0x14569B250};
+WEAK symbol<gameState_t> cls_gamestate{0x145722828, 0x142C294D8};
+WEAK symbol<int32_t> cls_serverId{0x14569B250, 0x142BA1F00};
+WEAK symbol<qboolean> cls_forceFullscreen{0x14569B254, 0x142BA1F04};
+WEAK symbol<qboolean> cls_exitFullscreen{0x14569B258, 0x142BA1F08};
+WEAK symbol<r::vidConfig_t> cls_vidConfig{0x1453E471C, 0x1428EB3CC};
 
 WEAK symbol<ClientNum_t> cl_allocatedClients{0x143326EE8};
 WEAK symbol<clientAllocFlags_t> cl_lastAllocFlags{0x1453D498C};
 WEAK symbol<void(LocalClientNum_t localClientNum)> CL_FirstSnapshot{
     0x141320E60};
+
+WEAK symbol<LocalClientNum_t> primaryLocalClientNum{0x14342155C};
+WEAK symbol<LocalClientNum_t> cl_maxLocalClients{0x1453A2720};
+WEAK symbol<bool> cl_serverLoadingMap{0x1453A273F};
 } // namespace cl
 } // namespace game
-
-#endif

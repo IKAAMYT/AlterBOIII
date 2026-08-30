@@ -464,10 +464,10 @@ function convertBBCodeToHtml(str) {
   // Links
   s = s.replace(
       /\[url=(.*?)\]([\s\S]*?)\[\/url\]/gi,
-      '<a href="$1" class="bb-link" onclick="try{window.external.openUrl(this.href)}catch(e){};return false;">$2</a>');
+      '<a href="$1" class="bb-link" onclick="try{getExternal().openUrl(this.href)}catch(e){};return false;">$2</a>');
   s = s.replace(
       /\[url\](.*?)\[\/url\]/gi,
-      '<a href="$1" class="bb-link" onclick="try{window.external.openUrl(this.href)}catch(e){};return false;">$1</a>');
+      '<a href="$1" class="bb-link" onclick="try{getExternal().openUrl(this.href)}catch(e){};return false;">$1</a>');
   // Images
   s = s.replace(
       /\[img\](.*?)\[\/img\]/gi,
@@ -483,7 +483,7 @@ function convertBBCodeToHtml(str) {
   s = s.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, '$1');
   s = s.replace(
       /\[previewyoutube=(\w+)[^\]]*\][\s\S]*?\[\/previewyoutube\]/gi,
-      '<a href="https://youtube.com/watch?v=$1" class="bb-link" onclick="try{window.external.openUrl(this.href)}catch(e){};return false;">[YouTube Video]</a>');
+      '<a href="https://youtube.com/watch?v=$1" class="bb-link" onclick="try{getExternal().openUrl(this.href)}catch(e){};return false;">[YouTube Video]</a>');
   // Color & size tags
   s = s.replace(/\[color=(#?[a-zA-Z0-9]+)\]([\s\S]*?)\[\/color\]/gi,
                 '<span style="color:$1;">$2</span>');
@@ -538,7 +538,29 @@ function loadWorkshopCache() {
   }
 }
 
+var _altercodBridge = null;
 function getExternal() {
+  if (_altercodBridge) return _altercodBridge;
+  // WebView2 (Ezz): window.chrome.webview.hostObjects.sync.external exposes
+  // the C++ bridge via __request/__response. Proxy maps method calls onto it.
+  try {
+    if (window.chrome && window.chrome.webview &&
+        window.chrome.webview.hostObjects) {
+      var rawBridge = window.chrome.webview.hostObjects.sync.external;
+      _altercodBridge = new Proxy({}, {
+        get: function (_, name) {
+          return function () {
+            var args = [];
+            for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+            rawBridge.__request = JSON.stringify({ name: String(name), args: args });
+            return rawBridge.__response;
+          };
+        }
+      });
+      return _altercodBridge;
+    }
+  } catch (e) {}
+  // Legacy bridge (MSHTML / Wine fallback)
   try {
     return window.external;
   } catch (e) {
@@ -755,7 +777,7 @@ function saveName() {
   var name = (playerName.value || '').replace(/^\s+|\s+$/g, '');
   if (name) {
     try {
-      window.external.savePlayerName(name);
+      getExternal().savePlayerName(name);
       if (window.showToast) showToast('Pseudo enregistré', 'success', 2200);
     } catch (e) {
     }
@@ -1416,7 +1438,7 @@ function showWorkshopModal(item) {
       convertBBCodeToHtml(item.description || 'Aucune description disponible.');
   workshopModalViewBtn.onclick = function() {
     try {
-      window.external.openUrl(
+      getExternal().openUrl(
           'https://steamcommunity.com/sharedfiles/filedetails/?id=' + item.id);
     } catch (e) {
     }
@@ -1527,7 +1549,7 @@ function showLibraryModModal(item) {
     libraryModalViewBtn.style.display = '';
     libraryModalViewBtn.onclick = function() {
       try {
-        window.external.openUrl(
+        getExternal().openUrl(
             'https://steamcommunity.com/sharedfiles/filedetails/?id=' +
             item.id);
       } catch (e) {
@@ -1540,7 +1562,7 @@ function showLibraryModModal(item) {
   libraryModalOpenBtn.onclick = function() {
     if (item.path) {
       try {
-        window.external.openUrl(item.path);
+        getExternal().openUrl(item.path);
       } catch (e) {
       }
     }
@@ -2040,7 +2062,7 @@ document.getElementById('progressCancel').onclick =
 progressOpenFolder.onclick = function() {
   if (_workshopDownloadFolder && _workshopDownloadFolder.length > 0) {
     try {
-      window.external.openUrl(_workshopDownloadFolder);
+      getExternal().openUrl(_workshopDownloadFolder);
     } catch (e) {
     }
   }
@@ -2469,7 +2491,7 @@ modsGrid.onclick = function(e) {
       e.preventDefault();
       e.stopPropagation();
       try {
-        window.external.openUrl(url);
+        getExternal().openUrl(url);
       } catch (err) {
       }
       return;
@@ -3039,10 +3061,10 @@ document.getElementById('playBtn').onclick = function() {
           function() {
             try {
               if (exeName && exeUrl) {
-                window.external.launchGame(window.getPlayerName(), opts,
+                getExternal().launchGame(window.getPlayerName(), opts,
                                            exeName, exeUrl);
               } else {
-                window.external.launchGame(window.getPlayerName(), opts);
+                getExternal().launchGame(window.getPlayerName(), opts);
               }
             } catch (e2) {
             }
@@ -3052,18 +3074,18 @@ document.getElementById('playBtn').onclick = function() {
 
     if (hasKeepLauncher) {
       if (exeName && exeUrl) {
-        window.external.launchGame(window.getPlayerName(), opts, exeName,
+        getExternal().launchGame(window.getPlayerName(), opts, exeName,
                                    exeUrl);
       } else {
-        window.external.launchGame(window.getPlayerName(), opts);
+        getExternal().launchGame(window.getPlayerName(), opts);
       }
       return;
     }
 
     if (exeName && exeUrl) {
-      window.external.runGame(window.getPlayerName(), opts, exeName, exeUrl);
+      getExternal().runGame(window.getPlayerName(), opts, exeName, exeUrl);
     } else {
-      window.external.runGame(window.getPlayerName(), opts);
+      getExternal().runGame(window.getPlayerName(), opts);
     }
   } catch (e) {
   }
@@ -3772,7 +3794,7 @@ if (workshopProgressFolder) {
   workshopProgressFolder.onclick = function() {
     if (_workshopDownloadFolder && _workshopDownloadFolder.length > 0) {
       try {
-        window.external.openUrl(_workshopDownloadFolder);
+        getExternal().openUrl(_workshopDownloadFolder);
       } catch (e) {
       }
     }
@@ -4721,7 +4743,7 @@ addVersionOption('beta', 'Beta (Experimental)');
   function dlPoll() {
     if (!dlActiveItem) return;
     var statusStr = '';
-    try { statusStr = window.external.getDownloadStatus(); } catch (e) { return; }
+    try { statusStr = getExternal().getDownloadStatus(); } catch (e) { return; }
     if (!statusStr) return;
     var st;
     try { st = JSON.parse(statusStr); } catch (e) { return; }
@@ -4765,7 +4787,7 @@ addVersionOption('beta', 'Beta (Experimental)');
     dlSetState(item, null);
 
     var res = '';
-    try { res = window.external.downloadModFile(url, filename); } catch (e) {
+    try { res = getExternal().downloadModFile(url, filename); } catch (e) {
       if (label) label.innerHTML = 'Erreur : bridge indisponible';
       dlSetState(item, 'error');
       if (btn) { btn.disabled = false; btn.innerHTML = '&#11015; Réessayer'; }

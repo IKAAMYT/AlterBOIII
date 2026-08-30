@@ -1,57 +1,72 @@
-#include <cstdint>
-#include <functional>
-#include <unordered_map>
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
-#include "game/game.hpp"
-#include "game/fragment_handler.hpp"
-#include "game/utils.hpp"
+#include <loader/component_loader.hpp>
+#include <game/game.hpp>
+#include <game/fragment_handler.hpp>
+#include <game/utils.hpp>
 
 #include "command.hpp"
 #include "network.hpp"
-#include "party.hpp"
 #include "scheduler.hpp"
-#include "security.hpp"
 
-#include <string>
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
 #include <utils/finally.hpp>
 #include <str.hpp>
+#include <string>
+#include <cstdint>
+#include <functional>
+#include <unordered_map>
 
 namespace network {
 namespace {
 utils::hook::detour handle_packet_internal_hook{};
 
-std::unordered_map<std::string, callback> &get_callbacks() {
-  static std::unordered_map<std::string, callback> callbacks{};
-  return callbacks;
+static std::unordered_map<std::string, callback> callbacks{};
+
+// Convenience template overload: Allows passing values directly without manual
+// sizeof/pointers
+template <typename T> std::string to_hex(const T &value) {
+  return to_hex(&value, sizeof(T));
 }
 
 int64_t handle_command(const game::net::netadr_t *address, const char *command,
                        const game::net::msg::msg_t *message,
                        game::LocalClientNum_t localClientNum) {
 
+#ifndef NDEBUG
+  game::trace(
+      "[Network] handle_command called with address: \"%s\", command: \"%s\", "
+      "localClientNum: %s",
+      address ? address->toString() : "NULL", command ? command : "NULL",
+      serialize(localClientNum));
+#endif
+
   const std::string cmd_string = utils::string::to_lower(command);
-  std::unordered_map<std::string, callback> &callbacks = get_callbacks();
   const size_t offset = cmd_string.size() + 5;
 
-  if (message->cursize < 0 || static_cast<size_t>(message->cursize) < offset ||
-      !callbacks.contains(cmd_string)) {
-    return true;
+  std::basic_string_view<uint8_t> data;
+  if (message->cursize > 0 && static_cast<size_t>(message->cursize) >= offset) {
+    data = std::basic_string_view(message->data + offset,
+                                  message->cursize - offset);
   }
 
-  const std::basic_string_view data(message->data + offset,
-                                    message->cursize - offset);
+  if (callbacks.contains(cmd_string)) {
+    try {
+      callbacks[cmd_string](*address, data, localClientNum);
+    } catch (const std::exception &e) {
+      fprintf(stderr, "[Network] handle_command error: %s\n", e.what());
+      fflush(stderr);
+#ifndef NDEBUG
+      game::trace("[Network] handle_command error: %s\n", e.what());
+#endif
 
-  try {
-    callbacks[cmd_string](*address, data, localClientNum);
-  } catch (const std::exception &e) {
-    printf("Error: %s\n", e.what());
-  } catch (...) {
+    } catch (...) {
+    }
+
+    return false;
   }
 
-  return false;
+  return true;
 }
 
 bool cl_dispatch_connectionless_packet_stub(
@@ -103,7 +118,7 @@ void create_ip_socket() {
   socket_set_blocking(s, false);
 
   const uint32_t address = htonl(INADDR_ANY);
-  uint16_t port = static_cast<uint16_t>(game::get_dvar_uint("net_port"));
+  uint16_t port = game::port();
 
   sockaddr_in server_addr{};
   server_addr.sin_family = AF_INET;
@@ -158,7 +173,7 @@ uint64_t handle_packet_internal_stub(
     const game::lobby::LobbyType lobby_type, const uint64_t dest_module,
     game::net::msg::msg_t *msg) {
   if (from_adr.type != game::net::NA_LOOPBACK && game::is_server() &&
-      !game::is_server_running()) {
+      !game::server_running()) {
     return 0;
   }
 
@@ -201,7 +216,7 @@ void com_error_oob_stub(const char *file, int32_t line, game::errorParm code,
 } // namespace
 
 void on(const std::string &command, const callback &callback) {
-  get_callbacks()[utils::string::to_lower(command)] = callback;
+  callbacks[utils::string::to_lower(command)] = callback;
 }
 
 void send(const game::net::netadr_t &address, const std::string &command,
@@ -253,6 +268,14 @@ game::net::netadr_t address_from_string(const std::string &address) {
   return addr;
 }
 
+void address_from_string_async(const std::string &address,
+                               resolvedAddrCallback_t &cb) {
+  std::thread([address, cb]() {
+    const game::net::netadr_t resolved = address_from_string(address);
+    cb(resolved);
+  }).detach();
+}
+
 game::net::netadr_t address_from_ip(const uint32_t ip, const uint16_t port) {
   game::net::netadr_t addr{};
   addr.localNetID = game::net::NS_SERVER;
@@ -274,6 +297,22 @@ bool are_addresses_equal(const game::net::netadr_t &a,
   }
 
   return a.port == b.port && a.addr == b.addr;
+}
+
+bool is_ip_address(const game::net::netadr_t &addr) {
+  return addr.type == game::net::NA_IP || addr.type == game::net::NA_RAWIP;
+}
+
+bool is_connectable_address(const game::net::netadr_t &addr) {
+  return is_ip_address(addr) && addr.addr != 0 && addr.ipv4.a != 0 &&
+         addr.ipv4.a != 127 && addr.ipv4.a < 224 && addr.port >= 1024;
+}
+
+std::string address_to_string(const game::net::netadr_t &addr) {
+  if (!is_ip_address(addr))
+    return {};
+  return utils::string::va("%u.%u.%u.%u:%hu", addr.ipv4.a, addr.ipv4.b,
+                           addr.ipv4.c, addr.ipv4.d, addr.port);
 }
 
 int32_t net_sendpacket_stub(const game::net::netsrc_t sock,
@@ -362,9 +401,8 @@ struct component final : generic_component {
       utils::hook::call(0x14134D146_g,
                         utils::hook::assemble(handle_command_stub));
 
+      // Disable `echo` command in `CL_DispatchConnectionlessPacket`
       utils::hook::set<uint8_t>(0x14134D0FB_g, 0xEB);
-
-      utils::hook::call(0x14018E698_g, cl_dispatch_connectionless_packet_stub);
     }
 
     // TODO: Fix that

@@ -1,5 +1,5 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
 #include "command.hpp"
 #include "scheduler.hpp"
@@ -132,7 +132,6 @@ int format_bot_string(char *buffer, [[maybe_unused]] const char *format,
 } // namespace
 
 struct component final : generic_component {
-  static_assert(offsetof(game::sv::client_s, bIsTestClient) == 0xBB360);
 
   void post_unpack() override {
     utils::hook::jump(game::select(0x141653B70, 0x1402732E0), get_bot_name);

@@ -1,106 +1,41 @@
-#include "../../../std_include.hpp"
+#include <std_include.hpp>
 #include "scr.hpp"
 
-#include "../../../../common/utils/string.hpp"
-#include "../../../game/utils.hpp"
-#include "../../utils.hpp"
-
-#include <string>
-#include <cstdint>
+#include <utils/string.hpp>
 
 namespace game {
 namespace scr {
-
-level::gentity_t *GetEntity_Impl(const scr_entref_t *entref) {
-  if (entref->classnum) {
-    Scr_ObjectError(SCRIPTINSTANCE_SERVER, "not an entity");
-    return nullptr;
-  }
-  return game::entity(entref->u.entnum);
-}
-
-level::gentity_t *Scr_GetEntity_Impl(uint32_t index) {
-  game::scr::scr_entref_t entref;
-  game::scr::Scr_GetEntityRef(&entref, SCRIPTINSTANCE_SERVER, index);
-  return GetEntity_Impl(&entref);
-}
-
-const char *Scr_TypeName(ScrVarType type) {
-  return (*var_typename)[static_cast<uint32_t>(type)];
-}
-
-// Scr_IsTrue impl with added support for undefined, uintptr_t, uint64 types
-// to allow graceful handling without error
-bool Scr_IsTrue_Impl([[maybe_unused]] scriptInstance_t inst,
-                     ScrVarValue_t *value) {
-  ScrVarType_t type = value->type;
-
-  switch (type) {
-  case ScrVarType::FLOAT: {
-    if (value->u.floatValue == 0.0) {
-      value->type = ScrVarType::INT;
-      value->u.uintValue = qfalse;
-      return false;
-    }
-    value->type = ScrVarType::INT;
-    value->u.uintValue = qtrue;
-    return true;
-  }
-
-  case ScrVarType::INT: {
-    if (value->u.uintValue == 0) {
-      value->type = ScrVarType::INT;
-      value->u.uintValue = qfalse;
-      return false;
-    }
-    value->type = ScrVarType::INT;
-    value->u.uintValue = qtrue;
-    return true;
-  }
-  case ScrVarType::UINT64: {
-    if (value->u.uint64Value == 0) {
-      value->type = ScrVarType::INT;
-      value->u.uintValue = qfalse;
-      return false;
-    }
-    value->type = ScrVarType::INT;
-    value->u.uintValue = qtrue;
-    return true;
-  }
-  case ScrVarType::UINTPTR_T: {
-    if (value->u.uintptrValue == 0) {
-      value->type = ScrVarType::INT;
-      value->u.uintValue = qfalse;
-      return false;
-    }
-    value->type = ScrVarType::INT;
-    value->u.uintValue = qtrue;
-    return true;
-  }
-  case ScrVarType::UNDEFINED: {
-    value->type = ScrVarType::INT;
-    value->u.uintValue = qfalse;
-    return false;
-  }
-  default: {
-    ScrVar_ReleaseValue(inst, value);
-    Scr_Error(inst,
-              utils::string::va("cannot cast %s to bool", Scr_TypeName(type)),
-              0);
-    return false;
-  }
-  }
-}
-
 void Scr_PlaySoundAtPosition_Impl(scriptInstance_t inst) {
   vec3_t origin;
-  Scr_GetVector(SCRIPTINSTANCE_SERVER, 1u, &origin);
+  Scr_GetVector(inst, 1u, &origin);
   if (!game::bg::BG_ValidateOrigin(&origin, &sv::svs->mapCenter)) {
     Scr_NetworkOriginError("sound", &origin);
   }
-  const char *alias = Scr_GetString(SCRIPTINSTANCE_SERVER, 0);
+  const char *alias = Scr_GetString(inst, 0);
   snd::SndAliasId alias_id = snd::SND_FindAliasId(alias);
   G_PlaySoundAliasAtPoint(&origin, alias_id);
+}
+
+std::vector<volatile var::ScrVarValue_t *>
+Scr_GetArray(scriptInstance_t inst, var::ScrVarIndex_t idx) {
+  if (Scr_GetPointerType(inst, idx) == var::ScrVarType::ARRAY) {
+    const var::ScrVarIndex_t arrayIdx = Scr_GetObject(inst, idx);
+    volatile var::ScrVar_t *element =
+        &vm::gScrVarGlob->instance[inst].scriptVariables[arrayIdx];
+
+    // First array element also contains size of array
+    const uint32_t len = element->size(inst);
+
+    std::vector<volatile var::ScrVarValue_t *> result = {nullptr};
+    result.resize(len);
+
+    for (uint32_t i = 0; i < len && element;
+         ++i, element = element->next_sibling(inst)) {
+      result.push_back(&element->value);
+    }
+    return result;
+  }
+  return {};
 }
 } // namespace scr
 } // namespace game

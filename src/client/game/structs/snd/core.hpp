@@ -4,8 +4,9 @@
 #include <cstdint>
 #include "../core.hpp"
 #include "../quake/core.hpp"
-#include "../db/xasset.hpp"
-#include "../scr/scr.hpp"
+#include "../db/xasset/core.hpp"
+#include "../scr/primitives.hpp"
+#include "../weapon.hpp"
 #include "../stream.hpp"
 
 namespace game {
@@ -1143,6 +1144,10 @@ struct SndBankLoad {
      progress.
   */
   uint32_t pendingIoCount;
+
+  inline constexpr const char *zone() const noexcept {
+    return bank ? bank->zone : nullptr;
+  }
 };
 
 ASSERT_SIZE(SndBankLoad, 0x1278);

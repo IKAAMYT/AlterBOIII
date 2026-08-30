@@ -39,3 +39,18 @@
 [submodule "deps/SteamworkSDK"]
 	path = deps/SteamworkSDK
 	url = https://github.com/rlabrecque/SteamworksSDK
+[submodule "deps/argparse"]
+	path = deps/argparse
+	url = https://github.com/p-ranav/argparse.git
+[submodule "deps/zstd"]
+	path = deps/zstd
+	url = https://github.com/facebook/zstd
+[submodule "deps/brotli"]
+	path = deps/brotli
+	url = https://github.com/google/brotli
+[submodule "deps/frozen"]
+	path = deps/frozen
+	url = https://github.com/serge-sans-paille/frozen
+[submodule "deps/gtl"]
+	path = deps/gtl
+	url = https://github.com/greg7mdp/gtl

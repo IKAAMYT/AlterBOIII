@@ -3,8 +3,9 @@
 #include <cassert>
 #include <cstdarg>
 #include <sstream>
+#include <windows.h>
 
-#include "nt.hpp"
+#include <str.hpp>
 
 namespace utils::string {
 const char *va(const char *fmt, ...) {
@@ -50,11 +51,17 @@ std::string to_upper(std::string text) {
   return text;
 }
 
-bool starts_with(const std::string &text, const std::string &substring) {
+bool starts_with(const std::string_view &text,
+                 const std::string_view &substring) {
   return text.find(substring) == 0;
 }
 
-bool ends_with(const std::string &text, const std::string &substring) {
+bool contains(const std::string_view &text, const std::string_view &substr) {
+  return text.find(substr) != std::string::npos;
+}
+
+bool ends_with(const std::string_view &text,
+               const std::string_view &substring) {
   if (substring.size() > text.size())
     return false;
   return std::equal(substring.rbegin(), substring.rend(), text.rbegin());
@@ -202,11 +209,10 @@ std::string &rtrim(std::string &str) {
 std::string join(std::vector<std::string> strings,
                  const std::string &separator) {
   std::string result;
-  for (size_t i = 0; i < strings.size(); ++i) {
-    if (i > 0) {
-      result += separator;
-    }
+  result += strings[0];
 
+  for (size_t i = 1; i < strings.size(); ++i) {
+    result += separator;
     result += strings[i];
   }
 
@@ -216,21 +222,26 @@ std::string join(std::vector<std::string> strings,
 void trim(std::string &str) { ltrim(rtrim(str)); }
 
 void copy(char *dest, const size_t max_size, const char *src) {
-  if (!max_size) {
-    return;
-  }
-
-  for (size_t i = 0;; ++i) {
-    if (i + 1 == max_size) {
-      dest[i] = 0;
-      break;
-    }
-
-    dest[i] = src[i];
-
-    if (!src[i]) {
-      break;
-    }
-  }
+  strscpy(dest, src, max_size);
 }
+
+std::string hexdump(uintptr_t ptr, size_t size) {
+  if (ptr && size > 0) {
+
+    static constexpr char hex_digits[] = "0123456789ABCDEF";
+    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(ptr);
+
+    std::string hex_str;
+    hex_str.reserve(size * 2);
+
+    for (size_t i = 0; i < size; ++i) {
+      hex_str.push_back(hex_digits[(bytes[i] >> 4) & 0x0F]); // High nibble
+      hex_str.push_back(hex_digits[bytes[i] & 0x0F]);        // Low nibble
+    }
+
+    return hex_str;
+  }
+  return "";
+}
+
 } // namespace utils::string

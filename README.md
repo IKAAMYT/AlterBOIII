@@ -1,6 +1,11 @@
-# Ezz BOIII ☄️: Call of Duty® Black Ops III Client
+# AlterBO3 🎮 : Call of Duty® Black Ops III Client
 
-[![github](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/Ezz-lol/boiii-free)
+> [!IMPORTANT] Fork communautaire **AlterBO3** (IKAAM) basé sur
+> [Ezz-lol/boiii-free](https://github.com/Ezz-lol/boiii-free) avec un
+> launcher **WebView2** (OAuth ikaam.fr, système d'amis, i18n FR/EN),
+> la Rich Presence Discord et le heartbeat AlterCOD. Version **2.1.0**.
+
+[![github](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/IKAAMYT/AlterBOIII)
 
 ---
 
@@ -180,31 +185,39 @@ without needing Steam ownership.
 
 Launch BOIII with these arguments for extra features:
 
-| Argument              | Description                                                                                                                                                        |
-| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-unsafe-lua`         | Allow mods to use unsafe Lua functions (required for some mods like All-Around Enhancement)                                                                        |
-| `-dedicated`          | Launch as a dedicated server                                                                                                                                       |
-| `-nosteam`            | Bypass Steam entirely                                                                                                                                              |
-| `-nointro`            | Skip intro videos                                                                                                                                                  |
-| `-windowed`           | Launch in windowed mode                                                                                                                                            |
-| `-safe`               | Launch in safe mode (disable mods)                                                                                                                                 |
-| `-console`            | Enable developer console                                                                                                                                           |
-| `-port XXXX`          | Set server port (default: 27017)                                                                                                                                   |
-| `-launch`             | Start the game immediately, skipping some launcher UI and pre-checks                                                                                               |
-| `-noupdate`           | Disable automatic updates (not recommended)                                                                                                                        |
-| `-update`             | Force enable updates (including host binary in debug builds)                                                                                                       |
-| `-norelaunch`         | Skip automatic relaunch after updates                                                                                                                              |
-| `-headless`           | Run in headless mode (no GUI)                                                                                                                                      |
-| `-nopatch`            | Disable selected runtime patches                                                                                                                                   |
-| `-plugins`            | Load additional plugins from the `plugins/` directory                                                                                                              |
-| `-trimlogs`           | Trim or rotate old log files on startup                                                                                                                            |
-| `-keep-launcher`      | Keep the launcher process running after starting the game                                                                                                          |
-| `-noconsole`          | Suppress the external launcher console window                                                                                                                      |
-| `-nobranding`         | Disable EZZ watermark and console prefix                                                                                                                           |
-| `-noratelimit`        | Disable rate limiting in dedicated server                                                                                                                          |
-| `-quiet-crash`        | On crash, disable message box and minidump directory popups.                                                                                                       |
-| `-mitigatepacketspam` | In dedicated server, attempt to reduce unnecessary reliable command packets sent by some custom maps' scripts. Fixes Kowloon and Daybreak client load-in failures. |
-| `-dump`               | Dump game or server executable to file in containing directory after Arxan unpack                                                                                  |
+| Argument              | Description                                                                                                                                                                                                                                  |
+| :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-unsafe-lua`         | Allow mods to use unsafe Lua functions (required for some mods like All-Around Enhancement).                                                                                                                                                 |
+| `-dedicated`          | Launch as a dedicated server.                                                                                                                                                                                                                |
+| `-nosteam`            | Bypass Steam entirely.                                                                                                                                                                                                                       |
+| `-nointro`            | Skip intro videos.                                                                                                                                                                                                                           |
+| `-windowed`           | Launch in windowed mode.                                                                                                                                                                                                                     |
+| `-borderless`         | Launch in borderless fullscreen mode.                                                                                                                                                                                                        |
+| `-safe`               | Launch in safe mode (disable mods).                                                                                                                                                                                                          |
+| `-console`            | Enable developer console.                                                                                                                                                                                                                    |
+| `-nologs`             | Disable all patches to developer console.                                                                                                                                                                                                    |
+| `-fulllogs`           | Disable console buffer size limit.                                                                                                                                                                                                           |
+| `-port XXXX`          | Set server port (default: 27017).                                                                                                                                                                                                            |
+| `-launch`             | Start the game immediately, skipping some launcher UI and pre-checks.                                                                                                                                                                        |
+| `-noupdate`           | Disable automatic updates (not recommended).                                                                                                                                                                                                 |
+| `-update`             | Force enable updates (including host binary in debug builds).                                                                                                                                                                                |
+| `-norelaunch`         | Skip automatic relaunch after updates.                                                                                                                                                                                                       |
+| `-headless`           | Run in headless mode (no GUI).                                                                                                                                                                                                               |
+| `-noplugins`          | Disable plugin load.                                                                                                                                                                                                                         |
+| `-plugins`            | Load additional plugins from the `plugins/` directory.                                                                                                                                                                                       |
+| `-trimlogs`           | Trim or rotate old log files on startup.                                                                                                                                                                                                     |
+| `-keep-launcher`      | Keep the launcher process running after starting the game.                                                                                                                                                                                   |
+| `-ultrawide`          | Enable ultrawide UI scaling. Note: this is unstable and commonly breaks UI alignment where implemented assuming <= 1920x1080 aspect ratio.                                                                                                   |
+| `-cheats`             | Enable cheat dvar modification and cheat command execution. Note: usage when hosting a private match in client or when running dedicated server allows non-host players to execute cheat commands (e.g. `god`, `noclip`) - use with caution. |
+| `-noconsole`          | Hide the external console window without disabling logs.                                                                                                                                                                                     |
+| `-nobranding`         | Disable EZZ watermark and console prefix.                                                                                                                                                                                                    |
+| `-nocinematics`       | Disable playing all cinematics.                                                                                                                                                                                                              |
+| `-log-script-errors`  | Log all script errors, regardless of severity or `developer` dvar value.                                                                                                                                                                     |
+| `-noratelimit`        | Disable rate limiting in dedicated server.                                                                                                                                                                                                   |
+| `-quiet-crash`        | On crash, disable message box and minidump directory popups.                                                                                                                                                                                 |
+| `-mitigatepacketspam` | In dedicated server, attempt to reduce unnecessary reliable command packets sent by some custom maps' scripts. Fixes Kowloon and Daybreak client load-in failures.                                                                           |
+| `-nosnd`              | Disable attempt to load and use sound assets in dedicated server.                                                                                                                                                                            |
+| `-dump`               | Dump game or server executable to file in containing directory after Arxan unpack.                                                                                                                                                           |
 
 **Example:**
 
@@ -360,8 +373,9 @@ Want to build Ezz BOIII yourself? Here's how! 🔨
 
 ### Prerequisites
 
-- [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Community
-  Edition is free)
+- [Visual Studio 2022 or newer](https://visualstudio.microsoft.com/downloads/)
+  (Community Edition is free), with the **Desktop development with C++**
+  workload
 - [Git](https://git-scm.com/downloads)
 - Windows 10/11 SDK
 - [clang-format](https://releases.llvm.org/) (for C/C++ formatting — install via
@@ -380,27 +394,26 @@ Want to build Ezz BOIII yourself? Here's how! 🔨
    cd boiii-free
    ```
 
-2. **Initialize submodules:**
-
-   ```bash
-   git submodule update --init --recursive
-   ```
-
-3. **Generate project files:**
+2. **Generate project files:**
 
    ```bash
    generate.bat
    ```
 
-4. **Open in Visual Studio:**
-   - Open `boiii.sln`
+   This initializes all Git submodules and downloads the pinned Premake version
+   automatically.
+
+   To generate the project and build `Release|x64` entirely from the command
+   line, run `build.bat` instead. The script pauses at the end so you can review
+   the build result.
+
+3. **Open in Visual Studio:**
+   - Open `build/boiii.sln`
    - Set configuration to `Release` and platform to `x64`
    - Build the solution (Ctrl+Shift+B)
 
-5. **Find your build:**
+4. **Find your build:**
    - Output will be in `build/bin/x64/Release/`
-
-> [!TIP] You can also use `build.bat` to compile directly from the command line!
 
 ---
 

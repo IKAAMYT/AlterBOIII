@@ -4,8 +4,7 @@
 #include "../core.hpp"
 #include "core.hpp"
 #include "../quake/core.hpp"
-#include "../db/xasset.hpp"
-#include "../scr/scr.hpp"
+#include "../db/xasset/core.hpp"
 
 namespace game {
 namespace snd {

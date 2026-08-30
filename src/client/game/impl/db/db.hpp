@@ -1,11 +1,11 @@
 #pragma once
 #include <cstdint>
-#include "../../../game/game.hpp"
+#include <game/game.hpp>
 
 namespace game {
 namespace db {
 namespace xasset {
-void reallocate_asset_pool(const XAssetType type, const unsigned int new_size);
+void reallocate_asset_pool(const XAssetType type, const uint32_t new_size);
 
 // The engine always inlines this function, so we reimplement it here for use
 // elsewhere.

@@ -1,8 +1,8 @@
 #include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 #include "server_list.hpp"
 
-#include "game/game.hpp"
+#include <game/game.hpp>
 
 #include "command.hpp"
 
@@ -98,7 +98,8 @@ void finalize_master_query(state &s) {
   }
 
   s.masters.clear();
-  cb(any_success, merged);
+  if (cb)
+    cb(any_success, merged);
 }
 
 void handle_server_list_response(const game::net::netadr_t &target,
@@ -144,7 +145,7 @@ void lua_server_info_to_table_stub(game::ui::lua::hks::lua_State *state,
     const char *campaign_str =
         game::info::Info_ValueForKey(server_info.tags, "campaign");
     const qboolean is_campaign =
-        campaign_str && std::strcmp(campaign_str, "true") == 0;
+        qboolean::from(campaign_str && std::strcmp(campaign_str, "true") == 0);
     game::ui::lua::Lua_SetTableInt("campaign", is_campaign, state);
   }
 }
@@ -303,10 +304,11 @@ void add_lan_server_from_string(const std::string &in) {
 }
 } // namespace
 
-static std::vector<std::string> master_server_hosts{"master.ezz.lol:20810",
-                                                    "m.ezz.lol:20810"};
-
+static std::vector<game::net::netadr_t> master_server_hosts{};
+constexpr const char *default_hosts[] = {"master.ezz.lol:20810",
+                                         "m.ezz.lol:20810"};
 inline void parse_master_server_hosts() {
+
   std::string data;
   if (utils::io::file_exists(get_master_servers_file_path()) &&
       utils::io::read_file(get_master_servers_file_path(), &data)) {
@@ -319,13 +321,22 @@ inline void parse_master_server_hosts() {
           master_server_hosts.clear();
           read_first = true;
         }
-        master_server_hosts.emplace_back(l);
+        const game::net::netadr_t addr =
+            network::address_from_string(l.c_str());
+        if (addr.type != game::net::NA_BAD) {
+          master_server_hosts.emplace_back(addr);
+        }
       }
     }
   } else {
     // Write defaults
     std::string write;
-    for (const std::string &host : master_server_hosts) {
+    for (const std::string &host : default_hosts) {
+      const game::net::netadr_t addr =
+          network::address_from_string(host.c_str());
+      if (addr.type != game::net::NA_BAD) {
+        master_server_hosts.emplace_back(addr);
+      }
       write.append(host);
       write.push_back('\n');
     }
@@ -333,42 +344,41 @@ inline void parse_master_server_hosts() {
   }
 }
 
-static std::atomic_bool parsed_master_servers{false};
+static std::once_flag parse_master_servers_once;
 std::vector<game::net::netadr_t> get_master_servers() {
-
-  if (!parsed_master_servers.exchange(true)) {
-    parse_master_server_hosts();
-  }
-
-  std::vector<game::net::netadr_t> servers;
-  for (const std::string &host : master_server_hosts) {
-    game::net::netadr_t addr = network::address_from_string(host.c_str());
-    if (addr.type != game::net::NA_BAD) {
-      servers.push_back(addr);
-    }
-  }
-  return servers;
+  std::call_once(parse_master_servers_once, parse_master_server_hosts);
+  return master_server_hosts;
 }
 
 void request_servers(callback callback) {
-  master_state.access([&callback](state &s) {
+  bool unavailable = false;
+  master_state.access([&](state &s) {
     std::vector<game::net::netadr_t> masters = get_master_servers();
-    if (!masters.empty()) {
-      s.requesting = true;
-      s.masters.clear();
+    if (masters.empty()) {
+      unavailable = true;
+      return;
+    }
+    if (s.requesting) {
       s.callback = std::move(callback);
-      s.query_start = std::chrono::high_resolution_clock::now();
+      return;
+    }
 
-      for (const game::net::netadr_t &addr : masters) {
-        master_query mq{};
-        mq.address = addr;
-        s.masters.push_back(mq);
+    s.requesting = true;
+    s.masters.clear();
+    s.callback = std::move(callback);
+    s.query_start = std::chrono::high_resolution_clock::now();
 
-        network::send(addr, "getservers",
-                      utils::string::va("T7 %i full empty", PROTOCOL));
-      }
+    for (const game::net::netadr_t &addr : masters) {
+      master_query mq{};
+      mq.address = addr;
+      s.masters.push_back(mq);
+      network::send(addr, "getservers",
+                    utils::string::va("T7 %i full empty", PROTOCOL));
     }
   });
+
+  if (unavailable)
+    callback(false, {});
 }
 
 void add_favorite_server(game::net::netadr_t addr) {

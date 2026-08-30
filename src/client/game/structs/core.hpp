@@ -6,9 +6,10 @@
 #include <csetjmp>
 #include <variant>
 
-#include "str.hpp"
-#include "macros.hpp"
-#include "quake/vec.hpp"
+#include <structs/str.hpp>
+#include <structs/atomic.hpp>
+#include <game/structs/macros.hpp>
+#include <game/structs/quake/vec.hpp>
 
 #define PROTOCOL 8
 #define SUB_PROTOCOL 1
@@ -47,6 +48,150 @@ typedef int64_t time64_t;
 typedef time64_t time_t;
 
 typedef uint32_t CanonHash_t;
+
+inline constexpr const char IW_ASSET_SHEBANG = '\x80';
+// Carriage return
+inline constexpr const char CR = '\r';
+// Linefeed
+inline constexpr const char LF = '\n';
+inline constexpr const char CRLF[2] = {'\r', '\n'};
+
+enum class CampaignMode : int32_t {
+  DEFAULT = 0,
+  ZOMBIES = 1,
+  COUNT = 2,
+  INVALID = 3,
+};
+
+enum class ContentFlagBits : uint32_t {
+  UNKNOWN = 0x1,
+  ORIGINALMAPS = 0x2,
+  DLC0ZM = 0x4,
+  DLC0MP = 0x8,
+  DLC1 = 0x10,
+  DLC2 = 0x20,
+  DLC3 = 0x40,
+  DLC4 = 0x80,
+  DLC5 = 0x100,
+  DLC1ZM = 0x200,
+  DLC2ZM = 0x400,
+  DLC3ZM = 0x800,
+  DLC4ZM = 0x1000,
+  DLC6 = 0x2000,
+  DLCPC = 0x4000,
+};
+IMPL_ENUM_OPERATORS(ContentFlagBits);
+
+union ContentFlags {
+  uint32_t mask;
+
+  struct {
+    uint32_t unknown : 1;      // 0x1
+    uint32_t originalMaps : 1; // 0x2
+    uint32_t dlc0zm : 1;       // 0x4
+    uint32_t dlc0mp : 1;       // 0x8
+    uint32_t dlc1 : 1;         // 0x10
+    uint32_t dlc2 : 1;         // 0x20
+    uint32_t dlc3 : 1;         // 0x40
+    uint32_t dlc4 : 1;         // 0x80
+    uint32_t dlc5 : 1;         // 0x100
+    uint32_t dlc1zm : 1;       // 0x200
+    uint32_t dlc2zm : 1;       // 0x400
+    uint32_t dlc3zm : 1;       // 0x800
+    uint32_t dlc4zm : 1;       // 0x1000
+    uint32_t dlc6 : 1;         // 0x2000
+    uint32_t dlcPC : 1;        // 0x4000
+
+    uint32_t reserved : 17;
+  } bits;
+
+  template <IntegralLike T> inline constexpr operator T() const noexcept {
+    return static_cast<T>(mask);
+  }
+
+  inline constexpr void set(ContentFlagBits bits) noexcept { mask |= +bits; }
+
+  inline constexpr ContentFlags set(ContentFlagBits bits) const noexcept {
+    return ContentFlags{mask | +bits};
+  }
+
+  inline constexpr void remove(ContentFlagBits bits) noexcept {
+    mask &= ~+bits;
+  }
+
+  inline constexpr ContentFlags remove(ContentFlagBits bits) const noexcept {
+    return ContentFlags{mask & ~+bits};
+  }
+
+  inline constexpr void clear() noexcept { mask = 0; }
+
+  inline constexpr ContentFlags remove() const noexcept {
+    return ContentFlags{0};
+  }
+
+  template <IntegralLike T> inline constexpr void operator|=(T rhs) noexcept {
+    set(rhs);
+  }
+  template <IntegralLike T>
+  inline constexpr ContentFlags operator|(T rhs) const noexcept {
+    return set(rhs);
+  }
+
+  template <IntegralLike T> inline constexpr void operator&=(T rhs) noexcept {
+    mask &= +rhs;
+  }
+  template <IntegralLike T>
+  inline constexpr ContentFlags operator&(T rhs) const noexcept {
+    return ContentFlags{mask & +rhs};
+  }
+
+  template <IntegralLike T> inline constexpr void operator^=(T rhs) noexcept {
+    mask ^= +rhs;
+  }
+  template <IntegralLike T>
+  inline constexpr ContentFlags operator^(T rhs) const noexcept {
+    return ContentFlags{mask ^ +rhs};
+  }
+
+  static inline constexpr ContentFlags allContent() noexcept {
+    return ContentFlags{.bits = {.unknown = 0,
+                                 .originalMaps = 1,
+                                 .dlc0zm = 1,
+                                 .dlc0mp = 1,
+                                 .dlc1 = 1,
+                                 .dlc2 = 1,
+                                 .dlc3 = 1,
+                                 .dlc4 = 1,
+                                 .dlc5 = 1,
+                                 .dlc1zm = 1,
+                                 .dlc2zm = 1,
+                                 .dlc3zm = 1,
+                                 .dlc4zm = 1,
+                                 .dlc6 = 1,
+                                 .dlcPC = 1,
+                                 .reserved = 0}};
+  }
+};
+
+enum class dlcIndex_t : int32_t {
+  DEV_MAP_INDEX = -1,
+  ORIGINAL_MAP_INDEX = 0,
+  DLC0ZM_INDEX = 1,
+  DLC0MP_INDEX = 2,
+  DLC1_INDEX = 3,
+  DLC2_INDEX = 4,
+  DLC3_INDEX = 5,
+  DLC4_INDEX = 6,
+  DLC5_INDEX = 7,
+  DLC1ZM_INDEX = 8,
+  DLC2ZM_INDEX = 9,
+  DLC3ZM_INDEX = 10,
+  DLC4ZM_INDEX = 11,
+  DLC6_INDEX = 12,
+  DLCPC_INDEX = 13,
+  DLC_INDEX_COUNT = 14,
+  USERMAP_INDEX = 15,
+};
 
 enum clientplatform_t : int32_t {
   CLIENT_PLATFORM_PC = 0x0,      // PC
@@ -146,6 +291,19 @@ enum LocalClientNum_t : int32_t {
 };
 IMPL_ENUM_OPERATORS(LocalClientNum_t);
 
+#ifndef NDEBUG
+inline constexpr const char *serialize(LocalClientNum_t localClientNum) {
+  switch (localClientNum) {
+  case LOCAL_CLIENT_0:
+    return "LOCAL_CLIENT_0";
+  case LOCAL_CLIENT_1:
+    return "LOCAL_CLIENT_1";
+  default:
+    return "INVALID_LOCAL_CLIENT";
+  }
+}
+#endif
+
 enum class LocalClientNum8_t : int8_t {
   INVALID_LOCAL_CLIENT = -1,
   LOCAL_CLIENT_0 = 0x0,
@@ -176,9 +334,49 @@ enum class eModes : uint32_t {
   MULTIPLAYER = 0x1,
   CAMPAIGN = 0x2,
   COUNT = 0x3,
-  INVALID = 0x3,
+  INVALID = 0x3
 };
 IMPL_ENUM_OPERATORS(eModes);
+
+inline constexpr bool valid_mode(eModes mode) noexcept {
+  return +mode < +eModes::INVALID && +mode >= +eModes::ZOMBIES;
+}
+
+namespace com {
+eModes Com_SessionMode_GetMode();
+}
+
+template <typename T> union SessionModePool {
+  T pool[+eModes::COUNT];
+  struct {
+    T zombies;
+    T multiplayer;
+    T campaign;
+  };
+
+  inline constexpr T &get(eModes mode) noexcept { return pool[+mode]; }
+  inline constexpr volatile T &get(eModes mode) volatile noexcept {
+    return pool[+mode];
+  }
+
+  inline constexpr const T &get(eModes mode) const noexcept {
+    return pool[+mode];
+  }
+  inline T &get() noexcept { return get(com::Com_SessionMode_GetMode()); }
+  inline volatile T &get() volatile noexcept {
+    return get(com::Com_SessionMode_GetMode());
+  }
+  inline const T &get() const noexcept {
+    return get(com::Com_SessionMode_GetMode());
+  }
+  inline constexpr T &operator[](eModes index) noexcept { return get(index); }
+  inline constexpr volatile T &operator[](eModes index) volatile noexcept {
+    return get(index);
+  }
+  inline constexpr const T &operator[](eModes index) const noexcept {
+    return get(index);
+  }
+};
 
 enum class eNetworkModes : uint32_t {
   OFFLINE = 0x0,
@@ -275,9 +473,21 @@ enum class ZoneType : uint32_t {
   OFFICIAL = 0x0,
 
   MOD = 0x1,
-  USERMAP = 0x2
+  USERMAP = 0x2,
+  COUNT = 0x3
 };
 IMPL_ENUM_OPERATORS(ZoneType);
+
+inline constexpr const char *dirname(ZoneType zoneType) {
+  switch (zoneType) {
+  case ZoneType::MOD:
+    return "mods";
+  case ZoneType::USERMAP:
+    return "usermaps";
+  default:
+    return "";
+  }
+}
 
 enum class StorageFileType : int32_t {
   COMMON_SETTINGS = 0,
@@ -317,137 +527,6 @@ enum class StorageFileType : int32_t {
   FILE_INVALID = -1,
 };
 IMPL_ENUM_OPERATORS(StorageFileType);
-
-enum class CriticalSection : int32_t {
-  ALLOC_MARK = 0x0,
-  FX_VIS = 0x1,
-  OCCLUSION_QUERY = 0x2,
-  PHYSICS = 0x3,
-  PHYSICS_UPDATE = 0x4,
-  PHYSICS_DESTRUCTIBLE_HIT = 0x5,
-  STREAM_ALLOC = 0x6,
-  STREAM_BACKEND_UPDATE = 0x7,
-  STREAM_CANCEL = 0x8,
-  STREAM_MODEL_BITS = 0x9,
-  FX_CHUNK_ALLOC = 0xA,
-  FX_UNIQUE_HANDLE = 0xB,
-  SOUND_COMMAND_ALLOC = 0xC,
-  SOUND_COMMAND_PUSH = 0xD,
-  SOUND_NOTIFY_ALLOC = 0xE,
-  SOUND_NOTIFY_PUSH = 0xF,
-  SOUND_BANK = 0x10,
-  SOUND_LOOKUP_CACHE = 0x11,
-  SOUND_SUBMIT = 0x12,
-  CAREER_STATS = 0x13,
-  CONSOLE = 0x14,
-  DEBUG_SOCKET = 0x15,
-  COM_ERROR = 0x16,
-  STATMON = 0x17,
-  MEM_ALLOC0 = 0x18,
-  MEM_ALLOC1 = 0x19,
-  MEM_ALLOC2 = 0x1A,
-  MEM_ALLOC3 = 0x1B,
-  MEM_ALLOC4 = 0x1C,
-  MEM_ALLOC5 = 0x1D,
-  MEM_ALLOC6 = 0x1E,
-  MEM_ALLOC7 = 0x1F,
-  MEM_ALLOC8 = 0x20,
-  MEM_ASYNC_COMMIT = 0x21,
-  CLIENT_MESSAGE = 0x22,
-  CLIENT_CMD = 0x23,
-  DOBJ_ALLOC = 0x24,
-  XANIM_ALLOC = 0x25,
-  KEY_BINDINGS = 0x26,
-  SERVER_MESSAGE = 0x27,
-  SERVER_PLAYERINFO = 0x28,
-  SERVER_TICK = 0x29,
-  SCRIPT_STRING = 0x2A,
-  MEMORY_TREE = 0x2B,
-  SCRIPT_DEBUGGER = 0x2C,
-  VM = 0x2D,
-  THREADED_NOTIFY_QUEUE = 0x2E,
-  LIVE = 0x2F,
-  PCACHE = 0x30,
-  AUDIO_PHYSICS = 0x31,
-  LUA = 0x32,
-  LUI = 0x33,
-  LOBBY_LUA = 0x34,
-  EXTRACAM = 0x35,
-  CINEMATIC = 0x36,
-  CINEMATIC_MP4 = 0x37,
-  CINEMATIC_UPDATEFRAME = 0x38,
-  SAVE_PROFILE = 0x39,
-  MEM_CONTAINER_SAVEGAME = 0x3A,
-  VIRTUALALLOC = 0x3B,
-  RB_TRANSFER = 0x3C,
-  STREAM_SYNC_COMMAND = 0x3D,
-  STREAM_FIXEDIMAGE_UPDATE = 0x3E,
-  STREAM_MODELHINT_UPDATE = 0x3F,
-  DWLSG = 0x40,
-  DWNET = 0x41,
-  IK = 0x42,
-  TL_MEMALLOC = 0x43,
-  VA_ALLOC = 0x44,
-  MEMTRACK = 0x45,
-  CBUF = 0x46,
-  CURVEALLOC = 0x47,
-  NETQUEUE = 0x48,
-  ZLIB = 0x49,
-  BLACKBOX = 0x4A,
-  GDT_COMMAND = 0x4B,
-  STRINGED_COMMAND = 0x4C,
-  RADIANT_SERVER_COMMAND = 0x4D,
-  RADIANT_CLIENT_COMMAND = 0x4E,
-  RECORDER = 0x4F,
-  SERVERDEMO = 0x50,
-  IO_SCHEDULER = 0x51,
-  FILE_ID_ARRAY = 0x52,
-  MEMFIRSTFIT = 0x53,
-  FXBEAM = 0x54,
-  GLASS_ACTIONS = 0x55,
-  DBHASH = 0x56,
-  CLUMP = 0x57,
-  SNAPSHOT_PROFILE = 0x58,
-  CRITSEC_WEBM_STREAM_ACCESS = 0x59,
-  CRITSEC_SV_LEADERBOARDS = 0x5A,
-  FONT_CACHE = 0x5B,
-  CRITSEC_NETCHAN = 0x5C,
-  SWITCHMAP_SV = 0x5D,
-  SWITCHMAP_CL = 0x5E,
-  DB_THROTTLE_DECOMPRESSION = 0x5F,
-  PROFILE_BUF = 0x60,
-  SAVE_DEVICE = 0x61,
-  WATER_INTERACTION = 0x62,
-  WATER_GRID_ALLOC = 0x63,
-  WATER_NODE_ALLOC = 0x64,
-  MEM_PAGED = 0x65,
-  ENTITY_COLL_LINK = 0x66,
-  MINIZ = 0x67,
-  COMPOSITING = 0x68,
-  CREATE_DYNENT = 0x69,
-  LENSFLARES_INSTANCE_POOL_ACCESS0 = 0x6A,
-  LENSFLARES_INSTANCE_POOL_ACCESS1 = 0x6B,
-  LENSFLARES_INSTANCE_POOL_ACCESS2 = 0x6C,
-  LENSFLARES_INSTANCE_POOL_ACCESS3 = 0x6D,
-  LENSFLARES_INSTANCE_POOL_ACCESS4 = 0x6E,
-  LENSFLARES_ACTIVE_INSTANCES_ACCESS0 = 0x6F,
-  LENSFLARES_ACTIVE_INSTANCES_ACCESS1 = 0x70,
-  LENSFLARES_ACTIVE_INSTANCES_ACCESS2 = 0x71,
-  LENSFLARES_ACTIVE_INSTANCES_ACCESS3 = 0x72,
-  LENSFLARES_ACTIVE_INSTANCES_ACCESS4 = 0x73,
-  LENSFLARES_SOURCE_ACCESS0 = 0x74,
-  LENSFLARES_SOURCE_ACCESS1 = 0x75,
-  LENSFLARES_SOURCE_ACCESS2 = 0x76,
-  LENSFLARES_SOURCE_ACCESS3 = 0x77,
-  LENSFLARES_SOURCE_ACCESS4 = 0x78,
-  COMSCORE = 0x79,
-  WEAPON_DOBJ_INFO_ALLOC = 0x7A,
-  LIVE_ALLOC = 0x7B,
-  UMBRA_SPOTOMNI_CACHE = 0x7C,
-  UMBRA_JOB = 0x7D,
-  COUNT = 0x7E,
-};
-IMPL_ENUM_OPERATORS(CriticalSection);
 
 enum class consoleLabel_e : int32_t {
   DEFAULT = 0x0,
@@ -498,7 +577,8 @@ enum class consoleLabel_e : int32_t {
   MARKETING = 0x2D,
   STORE = 0x2E,
   TESTING = 0x2F,
-  COUNT = 0x30,
+  CHANNEL_ERROR = 0x36,
+  COUNT = 0x37,
 };
 IMPL_ENUM_OPERATORS(consoleLabel_e);
 
@@ -816,81 +896,7 @@ enum class StanceState : int32_t {
 };
 IMPL_ENUM_OPERATORS(StanceState);
 
-using fileHandle_t = void *;
-
-struct DDLMember {
-  const char *name;
-  int32_t index;
-  void *parent;
-  int32_t bitSize;
-  int32_t limitSize;
-  int32_t offset;
-  int32_t type;
-  int32_t externalIndex;
-  uint32_t rangeLimit;
-  uint32_t serverDelta;
-  uint32_t clientDelta;
-  int32_t arraySize;
-  int32_t enumIndex;
-  int32_t permission;
-};
-
-struct DDLHash {
-  int32_t hash;
-  int32_t index;
-};
-
-struct DDLHashTable {
-  DDLHash *list;
-  int32_t count;
-  int32_t max;
-};
-
-struct DDLStruct {
-  const char *name;
-  int32_t bitSize;
-  int32_t memberCount;
-  DDLMember *members;
-  DDLHashTable hashTableUpper;
-  DDLHashTable hashTableLower;
-};
-
-struct DDLEnum {
-  const char *name;
-  int32_t memberCount;
-  const char **members;
-  DDLHashTable hashTable;
-};
-
-struct DDLDef {
-  char *name;
-  uint16_t version;
-  uint32_t checksum;
-  uint8_t flags;
-  int32_t bitSize;
-  int32_t byteSize;
-  DDLStruct *structList;
-  int32_t structCount;
-  DDLEnum *enumList;
-  int32_t enumCount;
-  DDLDef *next;
-  int32_t headerBitSize;
-  int32_t headerByteSize;
-  int32_t reserveSize;
-  int32_t userFlagsSize;
-  bool paddingUsed;
-};
-
-struct DDLContext;
-using DDLWriteCB = void (*)(DDLContext *, void *);
-
-struct DDLContext {
-  void *buff;
-  int32_t len;
-  const DDLDef *def;
-  DDLWriteCB writeCB;
-  void *userData;
-};
+typedef void *fileHandle_t;
 
 struct emblemChallengeLookup_t {
   int16_t challengeIndex;
@@ -907,45 +913,79 @@ IMPL_ENUM_OPERATORS(CharacterItemType);
 using BGEmblemBackgroundID = int16_t;
 
 typedef int32_t BitArrayChunk;
-constexpr const size_t BITARRAY_CHUNK_SIZE = sizeof(BitArrayChunk);
-constexpr const size_t BITS_PER_BYTE = 8;
-constexpr const size_t BITARRAY_CHUNK_BITS =
-    BITARRAY_CHUNK_SIZE * BITS_PER_BYTE;
+constexpr const size_t BITARRAY_CHUNK_BITS = bitsizeof<BitArrayChunk>();
 
 #pragma pack(push, 1)
-template <const size_t B> struct bitarray {
-  array<BitArrayChunk, (B + BITARRAY_CHUNK_BITS - 1) / BITARRAY_CHUNK_BITS>
+template <const IntegralLike<size_t> auto B> struct bitarray {
+  array<BitArrayChunk, (static_cast<size_t>(B) + BITARRAY_CHUNK_BITS - 1) /
+                           BITARRAY_CHUNK_BITS>
       data;
 
-  inline constexpr void set(size_t index) noexcept {
+  inline constexpr void assert_range(size_t index) {
+    assert(index < static_cast<size_t>(B) &&
+           "Index to bitarray must be within bounds 0 <= index < B");
+  }
+
+  template <IntegralLike<size_t> Index>
+  inline constexpr void set(Index index_arg) noexcept {
+    const size_t index = static_cast<size_t>(index_arg);
+    assert_range(index);
+
     return this->data[index / BITARRAY_CHUNK_BITS] |=
            (1 << (index % BITARRAY_CHUNK_BITS));
   }
 
-  inline constexpr void clear(size_t index) noexcept {
+  template <IntegralLike<size_t> Index>
+  inline constexpr void clear(Index index_arg) noexcept {
+    const size_t index = static_cast<size_t>(index_arg);
+    assert_range(index);
+
     return this->data[index / BITARRAY_CHUNK_BITS] &=
            ~(1 << (index % BITARRAY_CHUNK_BITS));
   }
 
-  inline constexpr bool get(size_t index) const noexcept {
+  template <IntegralLike<size_t> Index>
+  inline constexpr bool get(Index index_arg) const noexcept {
+    const size_t index = static_cast<size_t>(index_arg);
+    assert_range(index);
+
     return (this->data[index / BITARRAY_CHUNK_BITS] &
             (1 << (index % BITARRAY_CHUNK_BITS))) != 0;
   }
 
-  inline constexpr void reset() noexcept {
-    INLINE_MEMSET(&this->data, 0, sizeof(this->data));
+  // Bit indexing operator
+  template <IntegralLike Index>
+  inline constexpr bool operator[](Index index) const noexcept {
+    return get(static_cast<size_t>(index));
   }
+
+  inline constexpr const BitArrayChunk &begin() const noexcept {
+    return data[0];
+  }
+
+  inline constexpr const BitArrayChunk &end() const noexcept {
+    return data[std::size(data) - 1];
+  }
+
+  inline constexpr BitArrayChunk &begin() noexcept { return data[0]; }
+
+  inline constexpr BitArrayChunk &end() noexcept {
+    return data[std::size(data) - 1];
+  }
+
+  template <IntegralLike<BitArrayChunk> T>
+  inline constexpr void fill(const T val) noexcept {
+    std::fill(&begin(), &end(), static_cast<BitArrayChunk>(val));
+  }
+
+  inline constexpr void reset() noexcept { fill(0); }
 
   // Function name used by engine
   inline constexpr void resetAllBits() noexcept { reset(); }
 };
-ASSERT_SIZE(bitarray<32>, 0x4);
-static_assert(std::is_standard_layout_v<bitarray<32>>,
-              "bitarray must be standard layout!");
-static_assert(std::is_trivially_copyable_v<bitarray<32>>,
-              "bitarray must be trivially copyable!");
-
 #pragma pack(pop)
+ASSERT_SIZE(bitarray<32>, 0x4);
+ASSERT_CPP03_POD(bitarray<32>);
 
 typedef bitarray<72> game_button_bits_t;
 ASSERT_SIZE(game_button_bits_t, 0xC);
@@ -1170,6 +1210,28 @@ enum class consoleChannel_e : uint32_t {
   CHANNEL_INFO = 0x9,
   BUILTIN_CHANNEL_COUNT = 0xA,
   FIRST_DEBUG_CHANNEL = 0x9,
+};
+
+enum class RestartMethod_t : uint32_t {
+  FULL = 0x0,
+  ROUND = 0x1,
+  MYCHANGES = 0x2,
+};
+IMPL_ENUM_OPERATORS(RestartMethod_t);
+
+struct viewClamp {
+  vec2_t start;
+  vec2_t current;
+  vec2_t goal;
+};
+
+struct viewClampState {
+  viewClamp min;
+  viewClamp max;
+  float accelTime;
+  float decelTime;
+  float totalTime;
+  float startTime;
 };
 
 } // namespace game

@@ -2,6 +2,17 @@
 #include <thread>
 #include <mutex>
 
+#ifndef USE_SSE_TARGET_ATTRIBUTE
+#if (defined(__SSE4_1__) && defined(__SSE4_2__)) || defined(__clang__) ||      \
+    defined(__GNUC__) /*`__attribute__((target(...)))` is a language           \
+                         extension only supported by clang and G++*/
+#define USE_SSE_TARGET_ATTRIBUTE 1
+#else
+#define USE_SSE_TARGET_ATTRIBUTE 0
+#endif
+#endif
+
+#if USE_SSE_TARGET_ATTRIBUTE
 #ifdef __clang__
 #include <intrin.h>
 #elif defined(_MSC_VER)
@@ -10,6 +21,10 @@
 #include <x86intrin.h>
 #else
 #error "Unsupported compiler: Only MSVC, Clang and GCC are supported"
+#endif
+#else
+#include <cstdint>
+#include <vector>
 #endif
 
 #ifdef max
@@ -102,7 +117,8 @@ signature::process_range_linear(uint8_t *start, const size_t length) const {
   return result;
 }
 
-signature::signature_result
+#if USE_SSE_TARGET_ATTRIBUTE
+__attribute__((target("sse4.2"))) signature::signature_result
 signature::process_range_vectorized(uint8_t *start, const size_t length) const {
   std::vector<uint8_t *> result;
   __declspec(align(16)) char desired_mask[16] = {0};
@@ -111,21 +127,21 @@ signature::process_range_vectorized(uint8_t *start, const size_t length) const {
     desired_mask[i / 8] |= (this->mask_[i] == '?' ? 0 : 1) << i % 8;
   }
 
-  const auto mask =
+  const __m128i mask =
       _mm_load_si128(reinterpret_cast<const __m128i *>(desired_mask));
-  const auto comparand =
+  const __m128i comparand =
       _mm_loadu_si128(reinterpret_cast<const __m128i *>(this->pattern_.data()));
 
   for (size_t i = 0; i < length; ++i) {
-    const auto address = start + i;
-    const auto value =
+    uint8_t *address = start + i;
+    const __m128i value =
         _mm_loadu_si128(reinterpret_cast<const __m128i *>(address));
-    const auto comparison =
+    const __m128i comparison =
         _mm_cmpestrm(value, 16, comparand, static_cast<int>(this->mask_.size()),
                      _SIDD_CMP_EQUAL_EACH);
 
-    const auto matches = _mm_and_si128(mask, comparison);
-    const auto equivalence = _mm_xor_si128(mask, matches);
+    const __m128i matches = _mm_and_si128(mask, comparison);
+    const __m128i equivalence = _mm_xor_si128(mask, matches);
 
     if (_mm_test_all_zeros(equivalence, equivalence)) {
       result.push_back(address);
@@ -134,6 +150,38 @@ signature::process_range_vectorized(uint8_t *start, const size_t length) const {
 
   return result;
 }
+#else
+signature::signature_result
+signature::process_range_vectorized(uint8_t *start, const size_t length) const {
+  signature::signature_result result;
+
+  std::vector<size_t> fixed_positions;
+  fixed_positions.reserve(this->mask_.size());
+  for (size_t i = 0; i < this->mask_.size(); ++i) {
+    if (this->mask_[i] != '?') {
+      fixed_positions.push_back(i);
+    }
+  }
+
+  for (size_t i = 0; i < length; ++i) {
+    uint8_t *address = start + i;
+    bool match = true;
+
+    for (size_t pos : fixed_positions) {
+      if (address[pos] != this->pattern_[pos]) {
+        match = false;
+        break;
+      }
+    }
+
+    if (match) {
+      result.push_back(address);
+    }
+  }
+
+  return result;
+}
+#endif
 
 signature::signature_result signature::process() const {
   const auto range = this->length_ - this->mask_.size();
@@ -188,6 +236,7 @@ signature::signature_result signature::process_parallel() const {
   return moved;
 }
 
+#if defined(__SSE4_1__) && defined(__SSE4_2__)
 bool signature::has_sse_support() const {
   if (this->mask_.size() <= 16) {
     int cpu_id[4];
@@ -201,6 +250,9 @@ bool signature::has_sse_support() const {
 
   return false;
 }
+#else
+bool signature::has_sse_support() const { return false; }
+#endif
 } // namespace utils::hook
 
 utils::hook::signature::signature_result operator""_sig(const char *str,

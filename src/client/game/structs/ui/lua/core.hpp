@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "hks.hpp"
 #include "../../core.hpp"
+#include "../../sys.hpp"
 
 namespace game {
 namespace ui {
@@ -185,11 +186,7 @@ enum class GroupUpdatePrivacyType : int32_t {
   GROUP_MEMBERS = 1,
   COUNT = 2,
 };
-enum class connectionType_e : int32_t {
-  UNKNOWN = 0,
-  WIRED = 1,
-  WIRELESS = 2,
-};
+
 enum class XONLINE_NAT_TYPE : int32_t {
   UNKNOWN = 0,
   OPEN = 1,
@@ -319,122 +316,11 @@ enum class demoHighlightReelGameResultFilter : int32_t {
   FIRST = 0,
   LAST = 3,
 };
-enum class LobbyClientType : int32_t {
-  INVALID = -1,
-  ALL = 0,
-  LOCAL = 1,
-  REMOTE = 2,
-  SPLITSCREEN_ALL = 3,
-  SPLITSCREEN_REMOTE = 4,
-  GUEST = 5,
-};
-enum class LobbyType : int32_t {
-  INVALID = -1,
-  PRIVATE = 0,
-  GAME = 1,
-  COUNT = 2,
-  FIRST = 0,
-  LAST = 1,
-};
-enum class LobbyModule : int32_t {
-  INVALID = -1,
-  HOST = 0,
-  CLIENT = 1,
-  COUNT = 2,
-  FIRST = 0,
-  LAST = 1,
-  PEER_TO_PEER = 3,
-};
-enum class LobbyMode : int32_t {
-  INVALID = -1,
-  PUBLIC = 0,
-  CUSTOM = 1,
-  THEATER = 2,
-  ARENA = 3,
-  FREERUN = 4,
-  COUNT = 5,
-};
-enum class LobbyNetworkMode : int32_t {
-  INVALID = -1,
-  UNKNOWN = 0,
-  LAN = 1,
-  LIVE = 2,
-  COUNT = 3,
-  LOCAL = 1,
-};
-enum class PartyPrivacy : int32_t {
-  OPEN = 0,
-  FRIENDS_ONLY = 1,
-  INVITE_ONLY = 2,
-  CLOSED = 3,
-  COUNT = 4,
-};
-enum class LobbyJoinable : int32_t {
-  NO_NOT_IN_LOBBY = 0,
-  YES = 1,
-  YES_FRIENDS_ONLY = 2,
-  NO_PARTY_PRIVACY_INVITE_ONLY = 3,
-  NO_PARTY_PRIVACY_CLOSED = 4,
-  NO_PARTY_FULL = 5,
-  NO_GAME_FULL = 6,
-  NO_PLAYING_LOCAL = 7,
-  NO_GAME_PAUSED = 8,
-  NO = 9,
-  NO_YOU_NEED_DLC = 10,
-  COUNT = 11,
-};
-enum class LobbyMainMode : int32_t {
-  INVALID = -1,
-  CP = 0,
-  MP = 1,
-  ZM = 2,
-  COUNT = 3,
-};
-enum class LobbyHostType : int32_t {
-  INVALID = -1,
-  P2P = 0,
-  DEDICATED = 1,
-  COUNT = 2,
-};
-enum class LobbyMapVote : int32_t {
-  INVALID = -1,
-  NONE = 0,
-  NEXT = 1,
-  PREVIOUS = 2,
-  RANDOM = 3,
-};
-enum class LobbyProcessComplete : int32_t {
-  INVALID = -1,
-  SUCCESS = 0,
-  FAILURE = 1,
-  LOBBY_PROCESS_COMPLETE_ERROR = 2,
-};
-enum class LobbyDisconnectClient : int32_t {
-  INVALID = -1,
-  DROP = 0,
-  KICK = 1,
-  BADDLC = 2,
-  KICK_PARTY = 3,
-  HOSTRELOAD = 4,
-  NOPARTYCHAT = 5,
-  LOBBY_DISCONNECT_CLIENT_ERROR = 6,
-  MISSING_CONTENT = 7,
-};
 enum class LiveUserState : int32_t {
   INVALID = -1,
   SIGNED_IN = 0,
   SIGNED_OUT = 1,
   COUNT = 2,
-};
-enum class SessionStatus : int32_t {
-  INVALID = -1,
-  IDLE = 0,
-  JOIN = 1,
-  MERGE = 2,
-  MIGRATE = 3,
-  PAUSED = 4,
-  SESSION_STATUS_ERROR = 5,
-  COUNT = 6,
 };
 enum class QueryID : int32_t {
   SESSIONS_INVALID = 0,
@@ -467,16 +353,6 @@ enum class LobbyOnlineUpdateEventType : int32_t {
   PUMP = 0,
   SUCCESS = 1,
   LOBBY_ONLINE_UPDATE_ERROR = 2,
-};
-enum class SessionActive : int32_t {
-  INACTIVE = 0,
-  KEEP_ALIVE = 1,
-  ACTIVE = 2,
-};
-enum class SessionDirty : int32_t {
-  STATE = 1,
-  UI = 2,
-  CLIENT_LIST = 4,
 };
 enum class PlatformSessions : int32_t {
   OFF = 0,
@@ -565,14 +441,7 @@ enum class LobbyListComparisonType : int32_t {
   EQUAL_TO_OR_GREATER_THAN = 2,
   NOT_EQUAL = 3,
 };
-enum class GameServerStatus : int32_t {
-  IDLE = 0,
-  PRELOADING = 1,
-  STARTING_SERVER = 2,
-  MIGRATING = 3,
-  RUNNING = 4,
-  RUNNING_DEMO = 5,
-};
+
 enum class JoinType : int32_t {
   NORMAL = 0,
   PLAYLIST = 1,
@@ -1070,39 +939,7 @@ enum class eGameType : int32_t {
   COUNT = 3,
   INVALID = 3,
 };
-enum class LobbyPregameState : int32_t {
-  IDLE = 0,
-  ITEM_VOTE = 1,
-  CHARACTER_DRAFT = 2,
-  CAC_EDIT = 3,
-  SCORESTREAK_EDIT = 4,
-  LAUNCH_GAME = 5,
-  COUNT = 6,
-};
-enum class LobbyClientPregameState : int32_t {
-  IDLE = 0,
-  SELECTING = 1,
-  SELECTED = 2,
-  SELECTION_FORCED = 3,
-  SELECTION_COMPLETE = 4,
-  RESET = 5,
-  END = 6,
-  COUNT = 7,
-};
-enum class VoteType : int32_t {
-  INVALID = 0,
-  BAN = 1,
-  PROTECT = 2,
-  COUNT = 3,
-};
-enum class VoteItemType : int32_t {
-  INVALID = 0,
-  ITEM = 1,
-  ATTACHMENT = 2,
-  ITEM_ATTACHMENT = 3,
-  ATTACHMENT_GROUP = 4,
-  COUNT = 5,
-};
+
 enum class PregameSortType : int32_t {
   RANDOM = 0,
   CLIENTNUM = 1,
@@ -1127,13 +964,6 @@ enum class ProbationMode : int32_t {
   ARENA = 1,
   COUNT = 2,
 };
-enum class heroLoadoutTypes_e : int32_t {
-  INVALID = -1,
-  FIRST = 0,
-  WEAPON = 0,
-  GADGET = 1,
-  COUNT = 2,
-};
 enum class HeroState : int32_t {
   CHARGING = 0,
   READY = 1,
@@ -1155,39 +985,7 @@ enum class eWeaponOptionGroup : int32_t {
   COUNT = 7,
   INVALID = 7,
 };
-enum class itemGroup_t : int32_t {
-  SMG = 0,
-  FIRST = 0,
-  ASSAULT = 1,
-  CQB = 2,
-  LMG = 3,
-  SNIPER = 4,
-  PISTOL = 5,
-  LAUNCHER = 6,
-  KNIFE = 7,
-  SPECIAL = 8,
-  SHOTGUN = 9,
-  EXPLOSIVE = 10,
-  GRENADE = 11,
-  MASTERKEY = 12,
-  GRENADELAUNCHER = 13,
-  FLAMETHROWER = 14,
-  SPECIALTY = 15,
-  SPECIALGRENADE = 16,
-  MISCWEAPON = 17,
-  FEATURE = 18,
-  BONUSCARD = 19,
-  CYBERCOM_TACRIG = 20,
-  GLOBAL_ITEMS_START = 21,
-  KILLSTREAK = 21,
-  HERO = 22,
-  BUBBLEGUM = 23,
-  BUBBLEGUM_CONSUMABLE = 24,
-  CYBERCOM_CORE = 25,
-  CYBERCOM_ABILITIES = 26,
-  COUNT = 27,
-  INVALID = -1,
-};
+
 enum class prestigeTokenType_e : int32_t {
   RESPEC = 0,
   RESET_STATS = 1,
@@ -1378,25 +1176,7 @@ enum class ShoutcasterSettingTeamIdentityMode : int32_t {
   CUSTOM = 1,
   COUNT = 2,
 };
-enum class dlcIndex_t : int32_t {
-  DEV_MAP_INDEX = -1,
-  ORIGINAL_MAP_INDEX = 0,
-  DLC0ZM_INDEX = 1,
-  DLC0MP_INDEX = 2,
-  DLC1_INDEX = 3,
-  DLC2_INDEX = 4,
-  DLC3_INDEX = 5,
-  DLC4_INDEX = 6,
-  DLC5_INDEX = 7,
-  DLC1ZM_INDEX = 8,
-  DLC2ZM_INDEX = 9,
-  DLC3ZM_INDEX = 10,
-  DLC4ZM_INDEX = 11,
-  DLC6_INDEX = 12,
-  DLCPC_INDEX = 13,
-  DLC_INDEX_COUNT = 14,
-  USERMAP_INDEX = 15,
-};
+
 enum class LUIButton : int32_t {
   NONE = 0,
   LEFT = 1,
@@ -1618,23 +1398,7 @@ enum class LootBurnDupeState : int32_t {
   DONE = 3,
   FAILED = 4,
 };
-enum class ContentFlagBits : int32_t {
-  UNKNOWN = 1,
-  ORIGINALMAPS = 2,
-  DLC0ZM = 4,
-  DLC0MP = 8,
-  DLC1 = 16,
-  DLC2 = 32,
-  DLC3 = 64,
-  DLC4 = 128,
-  DLC5 = 256,
-  DLC1ZM = 512,
-  DLC2ZM = 1024,
-  DLC3ZM = 2048,
-  DLC4ZM = 4096,
-  DLC6 = 0x2000,
-  DLCPC = 0x4000,
-};
+
 enum class GPadButtonConfigs : int32_t {
   DEFAULT = 0,
   EXPERIMENTAL = 1,
@@ -1744,12 +1508,7 @@ enum class team_t : int32_t {
   FIRST_PLAYING_TEAM = 1,
   LAST_PLAYING_TEAM = 19,
 };
-enum class CampaignMode : int32_t {
-  DEFAULT = 0,
-  ZOMBIES = 1,
-  COUNT = 2,
-  INVALID = 3,
-};
+
 enum class FeaturedCardType : int32_t {
   NONE = 0,
   REGULAR = 1,
@@ -1781,7 +1540,7 @@ enum class CharacterTauntTypes : int32_t {
 #pragma pack(push, 1)
 struct LuaStateContext {
   hks::luaState_e stateType;
-  CriticalSection stateCritSec;
+  sys::CriticalSection stateCritSec;
   consoleChannel_e comChannel;
   consoleLabel_e comLabel;
   const char *stateName;

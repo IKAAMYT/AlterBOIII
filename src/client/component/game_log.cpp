@@ -1,10 +1,11 @@
+#include <std_include.hpp>
+
 #include <cstdarg>
 #include <cstdint>
-#include <std_include.hpp>
-#include "loader/component_loader.hpp"
+#include <loader/component_loader.hpp>
 
-#include "game/game.hpp"
-#include "game/utils.hpp"
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
@@ -12,8 +13,6 @@
 
 namespace game_log {
 namespace {
-const game::dvar_t *g_log;
-
 void g_scr_log_print() {
   char string[1024]{};
   std::size_t i_string_len = 0;
@@ -40,6 +39,14 @@ void g_scr_log_print() {
   }
 }
 
+inline const char *get_g_log_val() {
+  if (*game::g_log) {
+    return game::g_log->get_cstring();
+  }
+
+  return nullptr;
+}
+
 void g_log_printf_stub(const char *fmt, ...) {
   char va_buffer[0x400] = {0};
 
@@ -48,7 +55,8 @@ void g_log_printf_stub(const char *fmt, ...) {
   vsnprintf_s(va_buffer, _TRUNCATE, fmt, ap);
   va_end(ap);
 
-  const char *file = g_log ? g_log->current.value.string : "games_mp.log";
+  const char *g_log_val = get_g_log_val();
+  const char *file = g_log_val ? g_log_val : "games_mp.log";
   const int32_t time = *game::level::level_time / 1000;
 
   utils::io::write_file(file,
@@ -58,10 +66,9 @@ void g_log_printf_stub(const char *fmt, ...) {
                         true);
 }
 
-const game::dvar_t *register_g_log_stub() {
-  g_log = game::register_dvar_string("g_log", "games_mp.log", game::DVAR_NONE,
-                                     "Log file path");
-  return g_log;
+game::EngineDependentDvar register_g_log_stub() {
+  return game::register_dvar_string("g_log", "games_mp.log", game::DVAR_NONE,
+                                    "Log file path");
 }
 } // namespace
 

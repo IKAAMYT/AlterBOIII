@@ -1,12 +1,11 @@
-#include "../../../std_include.hpp"
+#include <std_include.hpp>
 #include "cl.hpp"
 #include <cstring>
 #include <cstdio>
 
-#include "../../utils.hpp"
 #include "../cg/cg.hpp"
 #include "../../../component/auth.hpp"
-#include "../../../../common/utils/string.hpp"
+#include <utils/string.hpp>
 
 namespace game {
 namespace cl {
@@ -163,7 +162,7 @@ void CL_CheckForResend_Impl(game::LocalClientNum_t localClientNum) {
   case connstate_t::CONNECTING: {
     constexpr int32_t infoStrLen = 1024;
     char s[infoStrLen];
-    std::memset(s, 0, infoStrLen);
+    memset(s, 0, infoStrLen);
 
     /*
        TODO: why does this case cause the function to hang indefinitely?
@@ -228,9 +227,12 @@ void CL_CheckForResend_Impl(game::LocalClientNum_t localClientNum) {
             : "1");
 
     // BEGIN boiii-specific fields
-    if (auth::password && *auth::password->current.value.string) {
-      info::Info_SetValueForKey(s, "password",
-                                auth::password->current.value.string);
+    if (auth::password) {
+      std::optional<std::string_view> password_val =
+          auth::password.get_string();
+      if (password_val.has_value()) {
+        info::Info_SetValueForKey(s, "password", password_val.value().data());
+      }
     }
 
     const char *clan_abbrev = game::live::LiveStats_GetClanTagText(0);
@@ -241,21 +243,21 @@ void CL_CheckForResend_Impl(game::LocalClientNum_t localClientNum) {
 
     constexpr int32_t connectPrefixLen = 8; // "connect "
     constexpr int32_t infoStrQuotesLen = 2;
-    constexpr int32_t destLen =
+    constexpr int32_t connectPacketLen =
         infoStrLen + connectPrefixLen + infoStrQuotesLen;
-    char dest[destLen];
+    char connectPacket[connectPacketLen];
 
     const int32_t writtenLength =
-        std::snprintf(dest, destLen, "connect \"%s\"", s);
+        snprintf(connectPacket, connectPacketLen, "connect \"%s\"", s);
 
     // ORIGINAL:
     // if (!net::NET_OutOfBandData(networkId, &clc->serverAddress,
     //                             reinterpret_cast<const uint8_t *>(dest),
     //                             writtenLength)) {
     // PATCHED:
-    if (!auth::send_fragmented_connect_packet(
-            controllerIndex, networkId, &clc->serverAddress,
-            reinterpret_cast<const char *>(dest), writtenLength)) {
+    if (!auth::send_fragmented_connect_packet(controllerIndex, networkId,
+                                              &clc->serverAddress,
+                                              connectPacket, writtenLength)) {
       if (!*com::com_errorEntered) {
         com::Com_Error_("q:\\t7\\pc\\code\\src\\client\\cl_main.cpp", 2391,
                         errorParm::SERVERDISCONNECT, "EXE_DISCONNECTED");
@@ -267,9 +269,9 @@ void CL_CheckForResend_Impl(game::LocalClientNum_t localClientNum) {
   case connstate_t::CHALLENGING: {
     if (dw::dwGetConnectionTaskStatus(&clc->serverAddress) !=
         dw::taskCompleteResults::TASK_NOTCOMPLETE) {
-      net::netadr_t adr = clc->serverAddress;
       // ORIGINAL:
-      // net::NET_OutOfBandPrint(networkId, &adr, "getchallenge");
+      // net::NET_OutOfBandPrint(networkId, &clc->serverAddress,
+      // "getchallenge");
       /*
           # PATCH
 
@@ -293,7 +295,7 @@ void CL_CheckForResend_Impl(game::LocalClientNum_t localClientNum) {
       */
 
       if (localClientNum == game::LOCAL_CLIENT_0) {
-        net::NET_OutOfBandPrint(networkId, &adr, "getchallenge");
+        net::NET_OutOfBandPrint(networkId, &clc->serverAddress, "getchallenge");
       }
     }
     return;

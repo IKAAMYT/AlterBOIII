@@ -162,10 +162,10 @@ struct centity_t;
 struct cg_t;
 struct ZBarrierDef;
 struct LerpEntityStateZBarrierPiece;
-typedef fastcall_t<void(LocalClientNum_t localClientNum, cg_t *cGameGlob,
-                        centity_t *cent, ZBarrierDef *def,
-                        cgZBarrierPiece *piece,
-                        LerpEntityStateZBarrierPiece *lerp, uint32_t)>
+typedef fastcallPtr_t<void(LocalClientNum_t localClientNum, cg_t *cGameGlob,
+                           centity_t *cent, ZBarrierDef *def,
+                           cgZBarrierPiece *piece,
+                           LerpEntityStateZBarrierPiece *lerp, uint32_t)>
     zbarrierPieceLogicPtr_t;
 
 #pragma pack(push, 1)
@@ -673,6 +673,7 @@ ASSERT_OFFSET(centity_t, tmodeFlags, 0x822);
 ASSERT_OFFSET(centity_t, miscTime, 0x5F0);
 ASSERT_OFFSET(centity_t, loopSounds, 0x8BC);
 ASSERT_OFFSET(centity_t, lastAimTargetVisCheckTime, 0x8EC);
+ASSERT_OFFSET(centity_t, nextState, 0x400);
 #pragma pack(pop)
 
 struct ExtentBounds {
@@ -1363,6 +1364,7 @@ partial_def(CG_T_SIZE, struct __attribute__((aligned(16))), cg_t, {
   snapshot_t *snap;
   snapshot_t *nextSnap;
   snapshot_t activeSnapshots[2];
+  uint8_t _unknown[32];
   bool slowMotionModified;
   float frameInterpolation;
   int32_t frametime;
@@ -1929,6 +1931,7 @@ partial_def(CG_T_SIZE, struct __attribute__((aligned(16))), cg_t, {
 });
 // TODO: Correct size is 0x342720. This struct needs corrected.
 ASSERT_SIZE(cg_t, CG_T_SIZE);
+ASSERT_OFFSET(cg_t, time, 0x11A88C);
 
 struct cgPool {
   LocalClientPool<cg_t> pool;
@@ -1968,9 +1971,15 @@ struct __attribute__((aligned(8))) cgs_t {
   float compassHeight;
   float compassY;
   sv::clientInfo_t corpseinfo[6];
-  user::actorInfo_t actorCorpseInfo[32];
-  bool entUpdateToggleContextKey;
+  // Commented out to quickly fix struct size overflow. TODO: fix this struct.
+  // user::actorInfo_t actorCorpseInfo[32];
+  // bool entUpdateToggleContextKey;
+
+  uint8_t _unknown[0x162a0];
 };
+// TODO: fix struct. 0x1E940 is correct size - current definition exceeds this.
+ASSERT_SIZE(cgs_t, 0x1E940);
+
 struct cgsPool {
   LocalClientPool<cgs_t> pool;
 };

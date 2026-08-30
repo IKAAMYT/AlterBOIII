@@ -1,18 +1,27 @@
 #pragma once
-#ifdef GAME_HPP
 
-#include "macros.hpp"
+#include <game/symbols/sym_include.hpp>
+#include <windows.h>
 
 namespace game {
 namespace sys {
 WEAK symbol<int()> Sys_Milliseconds{0x142332870, 0x1405972F0};
+WEAK symbol<void(HINSTANCE h_instance)> Sys_CreateConsole{0x142332E00,
+                                                          0x140597880};
 WEAK symbol<void()> Sys_ShowConsole{0x1423333C0, 0x140597E40};
+
 WEAK symbol<TLSData *()> Sys_GetTLS{0x1421837B0, 0x140525EB0};
-WEAK symbol<TLSData *()> Sys_IsDatabaseReady{0x142183A60};
-WEAK symbol<void(CriticalSection)> Sys_EnterCriticalSection{0x140119190,
-                                                            0x140055230};
-WEAK symbol<void(CriticalSection)> Sys_LeaveCriticalSection{0x1401191E0,
-                                                            0x140055280};
+inline int32_t Cmd_Argc() {
+  TLSData *tls = Sys_GetTLS();
+  return tls->cmdArgs->argc[tls->cmdArgs->nesting];
+}
+inline CmdArgs *Cmd_Argv() { return Sys_GetTLS()->cmdArgs; }
+
+WEAK symbol<qboolean()> Sys_IsDatabaseReady{0x142183A60};
+WEAK symbol<void(CriticalSection critsect)> Sys_EnterCriticalSection{
+    0x140119190, 0x140055230};
+WEAK symbol<void(CriticalSection critsect)> Sys_LeaveCriticalSection{
+    0x1401191E0, 0x140055280};
 WEAK symbol<const char *()> Sys_Cwd{0x1422A4800, 0x140564EB0};
 WEAK symbol<void(HANDLE *event)> Sys_WaitForSingleObject{0x142C7A8E0,
                                                          0x140526DC0};
@@ -20,7 +29,10 @@ WEAK symbol<void(HANDLE *event)> Sys_WaitForSingleObject{0x142C7A8E0,
 WEAK symbol<fs::PathList(char *directory, const char *extension, char *filter,
                          int *numfiles, qboolean wantsubs)>
     Sys_ListFiles{0x1422EAA10, 0x1405827C0};
+WEAK symbol<void(const char *fmt, ...)> Sys_Error{0x1422F4A00, 0x140584F50};
+
+WEAK symbol<const char *()> Sys_GetAbsZoneDir{0x1422A4810, 0x140564EC0};
+WEAK symbol<str<272>> s_absZoneDir{0x157A6B860, 0x14A3A2BA0};
+
 } // namespace sys
 } // namespace game
-
-#endif

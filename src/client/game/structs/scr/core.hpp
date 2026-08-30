@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
+#include <vector>
 #include "../core.hpp"
 #include "../weapon.hpp"
+#include "game/structs/scr/primitives.hpp"
 
 namespace game {
 
@@ -15,88 +18,47 @@ namespace hunk {
 struct HunkUser;
 }
 namespace scr {
-typedef uint32_t ScrString_t;
-typedef uint32_t ScrVarCanonicalName_t;
-typedef ScrString_t ScriptString;
-
-enum scriptInstance_t {
-  SCRIPTINSTANCE_SERVER = 0x0,
-  SCRIPTINSTANCE_CLIENT = 0x1,
-  SCRIPTINSTANCE_MAX = 0x2,
-};
+typedef str<272> scr_path_t;
 
 template <typename T> union ScrPool {
+  array<T, SCRIPTINSTANCE_MAX> instance;
   struct {
     T server;
     T client;
   };
-  array<T, SCRIPTINSTANCE_MAX> instance;
+
+  // Minimum, optimized primitive for indexing the pool that can contain all
+  // values 0 <= index < BGCachecTypes::COUNT
+  using index_t = uint8_t;
+
+  inline constexpr void assert_range(size_t index) const {
+    assert(index < std::size(instance) &&
+           "index to ScrPool must be within range SCRIPTINSTANCE_SERVER <= "
+           "index < SCRIPTINSTANCE_MAX");
+  }
+
+  template <IntegralLike Index>
+  inline constexpr const T &get(Index index_arg) const {
+    const index_t index = static_cast<index_t>(index_arg);
+    assert_range(index);
+    return instance[index];
+  }
+  template <IntegralLike Index>
+  inline constexpr const T &operator[](Index index) const {
+    return get(index);
+  }
+
+  template <IntegralLike Index> inline constexpr T &get(Index index_arg) {
+    const index_t index = static_cast<index_t>(index_arg);
+    assert_range(index);
+    return instance[index];
+  }
+  template <IntegralLike Index> inline constexpr T &operator[](Index index) {
+    return get(index);
+  }
+
+  inline constexpr auto size() const noexcept { return std::size(instance); }
 };
-
-//
-// Reverse engineered and defined as enum further below, using the
-// var_typename table as reference.
-// typedef uint32_t ScrVarType_t;
-// Index on VM stack - normally used to access with `stack[-index]` - index from
-// top.
-typedef uint32_t ScrVarIndex_t;
-typedef uint32_t ScrVarNameType_t;
-typedef uint64_t ScrVarNameIndex_t;
-typedef intptr_t scr_funcptr_t;
-
-struct scr_func_t {
-  char funcinfo[260];
-  scr_funcptr_t func;
-};
-
-/*
-  There is no typed, defined enumeration in the engine -
-  ScrVarType_t is defined as `typedef uint32_t ScrVarType_t;`.
-
-  These type enumerations were extracted from the `var_typename` table in the
-  engine.
-
-  These can be easily verified by comparison to clear, inline type value
-  matching in the engine, e.g. in BGScr_GetArrayObject for the array type
-  value (0x19).
-*/
-enum class ScrVarType : uint32_t {
-  UNDEFINED = 0x00,
-  POINTER = 0x01,
-  STRING = 0x02,
-  LOCALIZED_STRING = 0x03,
-  VECTOR = 0x04,
-  HASH = 0x05,
-  FLOAT = 0x06,
-  INT = 0x07,
-  UINT64 = 0x08,
-  UINTPTR_T = 0x09,
-  ENTITY_OFFSET = 0x0A,
-  CODEPOS = 0x0B,
-  PRECODEPOS = 0x0C,
-  API_FUNCTION = 0x0D,
-  FUNCTION = 0x0E,
-  STACK = 0x0F,
-  ANIMATION = 0x10,
-  THREAD = 0x11,
-  NOTIFY_THREAD = 0x12,
-  TIME_THREAD = 0x13,
-  CHILD_THREAD = 0x14,
-  CLASS = 0x15,
-  STRUCT = 0x16,
-  REMOVED_ENTITY = 0x17,
-  ENTITY = 0x18,
-  ARRAY = 0x19,
-  REMOVED_THREAD = 0x1A,
-  FREE = 0x1B,
-  THREAD_LIST = 0x1C,
-  ENT_LIST = 0x1D,
-  COUNT = 0x1E
-};
-
-typedef ScrVarType ScrVarType_t;
-
-#pragma pack(push, 1)
 
 enum class scriptBundleKVPType_t : int32_t {
   KVP_STRING = 0x0,
@@ -187,7 +149,6 @@ struct ScriptBundle {
   ScriptBundleObject *bundleObjects;
 };
 ASSERT_SIZE(ScriptBundle, 0x30);
-#pragma pack(pop)
 
 struct scr_const_t {
   ScrString_t _;
@@ -1489,174 +1450,20 @@ struct scr_entref_t {
   EntRefUnion u;
   uint16_t classnum;
   LocalClientNum_t client;
+  inline constexpr bool is_hudelem() const noexcept;
+
+#ifndef NDEBUG
+  template <const size_t N>
+  inline const char *serialize(char (&buf)[N]) const noexcept {
+    snprintf(buf, N,
+             "scr_entref_t { u.val: 0x%016llX, classnum: 0x%04X, client: %s }",
+             u.val, classnum, game::serialize(client));
+    return buf;
+  }
+#endif
 };
 
 ASSERT_SIZE(scr_entref_t, 0x10);
-
-typedef uint32_t ScrVarCanonicalName_t;
-
-typedef fastcall_t<void(scriptInstance_t inst)> BuiltinFunction;
-#pragma pack(push, 1)
-union BuiltinFunctionType {
-  enum Flag : uint32_t {
-    DEFAULT = 0x0,
-    DEVBLOCK_ONLY = 0x1,
-  };
-
-  struct {
-    uint32_t devblockOnly : 1;
-
-    uint32_t _unknownB1 : 1;
-    uint32_t _unknownB2 : 1;
-    uint32_t _unknownB3 : 1;
-    uint32_t _unknownB4 : 1;
-    uint32_t _unknownB5 : 1;
-    uint32_t _unknownB6 : 1;
-    uint32_t _unknownB7 : 1;
-    uint32_t _unknownB8 : 1;
-    uint32_t _unknownB9 : 1;
-    uint32_t _unknownB10 : 1;
-    uint32_t _unknownB11 : 1;
-    uint32_t _unknownB12 : 1;
-    uint32_t _unknownB13 : 1;
-    uint32_t _unknownB14 : 1;
-    uint32_t _unknownB15 : 1;
-    uint32_t _unknownB16 : 1;
-    uint32_t _unknownB17 : 1;
-    uint32_t _unknownB18 : 1;
-    uint32_t _unknownB19 : 1;
-    uint32_t _unknownB20 : 1;
-    uint32_t _unknownB21 : 1;
-    uint32_t _unknownB22 : 1;
-    uint32_t _unknownB23 : 1;
-    uint32_t _unknownB24 : 1;
-    uint32_t _unknownB25 : 1;
-    uint32_t _unknownB26 : 1;
-    uint32_t _unknownB27 : 1;
-    uint32_t _unknownB28 : 1;
-    uint32_t _unknownB29 : 1;
-    uint32_t _unknownB30 : 1;
-    uint32_t _unknownB31 : 1;
-  };
-  Flag flag;
-  uint32_t raw;
-
-  inline constexpr BuiltinFunctionType() : raw(0) {}
-  inline constexpr BuiltinFunctionType(uint32_t value) : raw(value) {}
-  inline constexpr BuiltinFunctionType(Flag value) : flag(value) {}
-
-  inline constexpr explicit operator bool() const noexcept { return raw != 0; }
-  inline constexpr bool has(BuiltinFunctionType mask) const noexcept {
-    return (raw & mask.raw) == mask.raw;
-  }
-  inline constexpr bool has_any(BuiltinFunctionType mask) const noexcept {
-    return (raw & mask.raw) != 0;
-  }
-
-  friend inline constexpr bool operator==(BuiltinFunctionType lhs,
-                                          BuiltinFunctionType rhs) noexcept {
-    return lhs.raw == rhs.raw;
-  }
-  friend inline constexpr bool operator!=(BuiltinFunctionType lhs,
-                                          BuiltinFunctionType rhs) noexcept {
-    return lhs.raw != rhs.raw;
-  }
-
-  friend inline constexpr BuiltinFunctionType
-  operator|(BuiltinFunctionType lhs, BuiltinFunctionType rhs) noexcept {
-    return BuiltinFunctionType(lhs.raw | rhs.raw);
-  }
-  friend inline constexpr BuiltinFunctionType
-  operator&(BuiltinFunctionType lhs, BuiltinFunctionType rhs) noexcept {
-    return BuiltinFunctionType(lhs.raw & rhs.raw);
-  }
-  friend inline constexpr BuiltinFunctionType
-  operator^(BuiltinFunctionType lhs, BuiltinFunctionType rhs) noexcept {
-    return BuiltinFunctionType(lhs.raw ^ rhs.raw);
-  }
-
-  inline constexpr BuiltinFunctionType &
-  operator|=(BuiltinFunctionType rhs) noexcept {
-    raw |= rhs.raw;
-    return *this;
-  }
-  inline constexpr BuiltinFunctionType &
-  operator&=(BuiltinFunctionType rhs) noexcept {
-    raw &= rhs.raw;
-    return *this;
-  }
-  inline constexpr BuiltinFunctionType &
-  operator^=(BuiltinFunctionType rhs) noexcept {
-    raw ^= rhs.raw;
-    return *this;
-  }
-
-  friend inline constexpr BuiltinFunctionType
-  operator~(BuiltinFunctionType val) noexcept {
-    return BuiltinFunctionType(~val.raw);
-  }
-};
-ASSERT_SIZE(BuiltinFunctionType, sizeof(uint32_t));
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct BuiltinFunctionDef {
-  ScrVarCanonicalName_t canonId;
-  uint32_t min_args;
-  uint32_t max_args;
-  uint8_t _padding0C[4];
-  BuiltinFunction actionFunc;
-  BuiltinFunctionType type;
-  uint8_t _padding1C[4];
-};
-ASSERT_SIZE(BuiltinFunctionDef, 0x20);
-#pragma pack(pop)
-
-// Note: unverified as of initial addition
-// Verify before use.
-#pragma pack(push, 1)
-struct ScrVarStackBuffer_t {
-  uint8_t *pos;
-  uint8_t *creationPos;
-  int32_t waitTime;
-  uint16_t size;
-  uint16_t bufLen;
-  ScrVarIndex_t localId;
-  uint8_t buf[1];
-  uint8_t _padding[3];
-};
-ASSERT_SIZE(ScrVarStackBuffer_t, 0x20);
-#pragma pack(pop)
-
-// Note: unverified as of initial addition
-// Verify before use.
-union ScrVarValueUnion_t {
-  int32_t intValue;
-  uint32_t uintValue;
-  int64_t int64Value;
-  uint64_t uint64Value;
-  uintptr_t uintptrValue;
-  float floatValue;
-  ScrString_t stringValue;
-  const float *vectorValue;
-  uint8_t *codePosValue;
-  ScrVarIndex_t pointerValue;
-  ScrVarStackBuffer_t *stackValue;
-  struct {
-    ScrVarIndex_t firstChild;
-    ScrVarIndex_t lastChild;
-  };
-};
-ASSERT_SIZE(ScrVarValueUnion_t, 0x8);
-
-#pragma pack(push, 1)
-struct ScrVarValue_t {
-  ScrVarValueUnion_t u;
-  ScrVarType_t type;
-  uint8_t _padding[4];
-};
-ASSERT_SIZE(ScrVarValue_t, 0x10);
-#pragma pack(pop)
 
 struct scr_anim_t {
   union {
@@ -1674,13 +1481,12 @@ struct scr_animtree_t {
   XAnim *anims;
 };
 
-typedef void (*ClientFieldCodeCallbackFuncFloatVal)(LocalClientNum_t, uint32_t,
-                                                    float, float, bool, bool,
-                                                    ScrString_t, bool, bool);
-typedef void (*ClientFieldCodeCallbackFuncUintVal)(LocalClientNum_t, uint32_t,
-                                                   uint32_t, uint32_t, bool,
-                                                   bool, ScrString_t, bool,
-                                                   bool);
+typedef fastcallPtr_t<void(LocalClientNum_t, uint32_t, float, float, bool, bool,
+                           ScrString_t, bool, bool)>
+    ClientFieldCodeCallbackFuncFloatVal;
+typedef fastcallPtr_t<void(LocalClientNum_t, uint32_t, uint32_t, uint32_t, bool,
+                           bool, ScrString_t, bool, bool)>
+    ClientFieldCodeCallbackFuncUintVal;
 
 struct clientFieldCodeCallback_t {
   struct {
@@ -1705,6 +1511,12 @@ struct clientFieldUnionServer_t {
 union clientFieldUnion_t {
   clientFieldUnionClient_t client;
   clientFieldUnionServer_t server;
+};
+
+typedef intptr_t scr_funcptr_t;
+struct scr_func_t {
+  char funcinfo[260];
+  scr_funcptr_t func;
 };
 
 struct __attribute__((aligned(8))) clientField_t {
@@ -1876,132 +1688,12 @@ struct Camera {
   vec3_t lastTagCameraAngles;
 };
 
-struct ScrVarEntityInfo_t {
-  uint16_t classnum;
-  uint16_t clientNum;
-};
-
-#pragma pack(push, 1)
-struct ScrVar_t {
-  ScrVarValue_t value;
-  struct {
-    int32_t nameType : 3;
-    uint32_t flags : 5;
-    uint32_t refCount : 24;
-  };
-  uint8_t _padding14[4];
-  union {
-    uint64_t object_o;
-    uint32_t size;
-    EntRefUnion entRefUnion;
-    ScrVarIndex_t nextEntId;
-    ScrVarIndex_t self;
-    ScrVarIndex_t free;
-  } o;
-  union {
-    uint32_t object_w;
-    ScrVarEntityInfo_t varEntityInfo;
-    ScrVarCanonicalName_t notifyName;
-    uint32_t waitTime;
-  } w;
-  uint8_t _padding24[4];
-  ScrVarNameIndex_t nameIndex;
-  ScrVarIndex_t nextSibling;
-  ScrVarIndex_t prevSibling;
-  ScrVarIndex_t parentId;
-  ScrVarIndex_t nameSearchHashList;
-};
-ASSERT_SIZE(ScrVar_t, 0x40);
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct scrVarGlob_t {
-  ScrVarIndex_t *scriptNameSearchHashList;
-  uint8_t _padding08[0x78];
-  ScrVar_t *scriptVariables;
-  uint8_t _padding88[0x78];
-};
-ASSERT_SIZE(scrVarGlob_t, 0x100);
-ASSERT_OFFSET(scrVarGlob_t, scriptVariables, 0x80);
-#pragma pack(pop)
-
-typedef ScrPool<scrVarGlob_t> ScrVarGlobPool;
-
-union scrChecksum_t {
-  struct {
-    uint32_t loadedScriptsCumulativeCRC;
-    // Always zero except in gamestate packet, where it is XORed with XUID
-    uint32_t unknown1;
-    // Always zero except in gamestate packet, where it is XORed with XUID
-    uint32_t unknown2;
-  };
-  uint32_t raw[3];
-};
-
-#pragma pack(push, 1)
-struct scrVarPub_t {
-  const char *fieldBuffer;
-  bool developer;
-  bool evaluate;
-  uint8_t _padding0A[6];
-  const char *error_message;
-  uint32_t time;
-  ScrVarIndex_t timeArrayId;
-  ScrVarIndex_t pauseArrayId;
-  ScrVarIndex_t worldId;
-  ScrVarIndex_t classesId;
-  ScrVarIndex_t levelId;
-  ScrVarIndex_t gameId;
-  ScrVarIndex_t animId;
-  ScrVarIndex_t freeEntList;
-  ScrVarIndex_t tempVariable;
-  bool bInited;
-  uint8_t _padding41[3];
-  uint32_t animChecksum;
-  scrChecksum_t checksum;
-  uint32_t entId;
-  ScrVarNameIndex_t entFieldNameIndex;
-  hunk::HunkUser *programHunkUser;
-  uint8_t *programBuffer;
-  uint8_t *endScriptBuffer;
-};
-
-ASSERT_SIZE(scrVarPub_t, 0x78);
-ASSERT_OFFSET(scrVarPub_t, programHunkUser, 0x60);
-ASSERT_OFFSET(scrVarPub_t, programBuffer, 0x68);
-ASSERT_OFFSET(scrVarPub_t, endScriptBuffer, 0x70);
-ASSERT_OFFSET(scrVarPub_t, animChecksum, 0x44);
-ASSERT_OFFSET(scrVarPub_t, checksum, 0x48);
-ASSERT_OFFSET(scrVarPub_t, entId, 0x54);
-ASSERT_OFFSET(scrVarPub_t, entFieldNameIndex, 0x58);
-ASSERT_OFFSET(scrVarPub_t, bInited, 0x40);
-ASSERT_OFFSET(scrVarPub_t, error_message, 0x10);
-ASSERT_OFFSET(scrVarPub_t, timeArrayId, 0x1C);
-ASSERT_OFFSET(scrVarPub_t, pauseArrayId, 0x20);
-ASSERT_OFFSET(scrVarPub_t, worldId, 0x24);
-ASSERT_OFFSET(scrVarPub_t, classesId, 0x28);
-ASSERT_OFFSET(scrVarPub_t, levelId, 0x2C);
-ASSERT_OFFSET(scrVarPub_t, gameId, 0x30);
-ASSERT_OFFSET(scrVarPub_t, animId, 0x34);
-ASSERT_OFFSET(scrVarPub_t, freeEntList, 0x38);
-ASSERT_OFFSET(scrVarPub_t, tempVariable, 0x3C);
-ASSERT_OFFSET(scrVarPub_t, fieldBuffer, 0x00);
-ASSERT_OFFSET(scrVarPub_t, developer, 0x08);
-ASSERT_OFFSET(scrVarPub_t, evaluate, 0x09);
-ASSERT_OFFSET(scrVarPub_t, time, 0x18);
-#pragma pack(pop)
-
-typedef ScrPool<scrVarPub_t> ScrVarPubPool;
-
-constexpr ScrPool<ScrVarIndex_t> SCRIPTVARIABLE_POOL_SIZE = {.server = 130000,
-                                                             .client = 65000};
-
-#pragma pack(push, 1)
-struct GSC_OBJ {
+PACKED(struct GSC_OBJ {
   str8_t magic;
   uint32_t source_crc;
   uint32_t include_offset;
   uint32_t animtree_offset;
+  // Bytecode
   uint32_t cseg_offset;
   uint32_t stringtablefixup_offset;
   uint32_t devblock_stringtablefixup_offset;
@@ -2009,7 +1701,9 @@ struct GSC_OBJ {
   uint32_t imports_offset;
   uint32_t fixup_offset;
   uint32_t profile_offset;
+  // Bytecode
   uint32_t cseg_size;
+  // Offset
   uint32_t name;
   uint16_t stringtablefixup_count;
   uint16_t exports_count;
@@ -2021,9 +1715,66 @@ struct GSC_OBJ {
   uint8_t animtree_count;
   uint8_t flags;
   uint8_t _padding47[1];
-};
+
+  inline constexpr void setMagic(const str8_t &val) noexcept {
+    magic[0] = val[0];
+    magic[1] = val[1];
+    magic[2] = val[2];
+    magic[3] = val[3];
+    magic[4] = val[4];
+    magic[5] = val[5];
+    magic[6] = val[6];
+    magic[7] = val[7];
+  }
+
+  inline constexpr void setMagic(
+      const std::array<char, sizeof(uint64_t)> &val) noexcept {
+    magic[0] = val[0];
+    magic[1] = val[1];
+    magic[2] = val[2];
+    magic[3] = val[3];
+    magic[4] = val[4];
+    magic[5] = val[5];
+    magic[6] = val[6];
+    magic[7] = val[7];
+  }
+
+  inline const char *get_name() const noexcept {
+    return reinterpret_cast<const char *>(this) + name;
+  }
+
+  inline char *get_name() noexcept {
+    return reinterpret_cast<char *>(this) + name;
+  }
+
+  inline const uint8_t *cseg() const noexcept {
+    return reinterpret_cast<const uint8_t *>(this) + cseg_offset;
+  }
+
+  inline uint8_t *cseg() noexcept {
+    return reinterpret_cast<uint8_t *>(this) + cseg_offset;
+  }
+
+  static inline constexpr uint8_t T7_LATEST_VERSION = 0x1C;
+  static inline constexpr const std::array<char, sizeof(uint64_t)> T7_MAGIC = {
+      IW_ASSET_SHEBANG,
+      'G',
+      'S',
+      'C',
+      CR,
+      LF,
+      NULL,
+      static_cast<char>(T7_LATEST_VERSION)};
+  // static inline constexpr const uint32_t T7_SRC_CRC = 0x4C492053;
+
+  static inline constexpr GSC_OBJ t7() noexcept {
+    GSC_OBJ result = {};
+    result.setMagic(T7_MAGIC);
+    return result;
+  }
+});
+ASSERT_OFFSET(GSC_OBJ, cseg_size, 0x30);
 ASSERT_SIZE(GSC_OBJ, 0x48);
-#pragma pack(pop)
 
 struct GSC_ANIMTREE_ITEM {
   uint32_t name;
@@ -2040,6 +1791,196 @@ struct ScriptParseTree {
 };
 ASSERT_SIZE(ScriptParseTree, 0x18);
 #pragma pack(pop)
+
+union scrChecksum_t {
+  struct {
+    uint32_t loadedScriptsCumulativeCRC;
+    // Always zero except in gamestate packet, where it is XORed with XUID
+    uint32_t unknown1;
+    // Always zero except in gamestate packet, where it is XORed with XUID
+    uint32_t unknown2;
+  };
+  uint32_t raw[3];
+
+  inline constexpr const uint32_t &operator[](size_t index) const {
+    return raw[index];
+  }
+  inline constexpr uint32_t &operator[](size_t index) { return raw[index]; }
+};
+ASSERT_SIZE(scrChecksum_t, sizeof(uint32_t) * 3);
+ASSERT_CPP03_POD(scrChecksum_t);
+
+PACKED(struct GSC_GDB {
+  str8_t magic;
+  uint32_t version;
+  uint32_t source_crc;
+  uint32_t lineinfo_offset;
+  uint32_t lineinfo_count;
+  uint32_t devblock_stringtable_offset;
+  uint32_t devblock_stringtable_count;
+  uint32_t stringtable_offset;
+  uint32_t stringtable_count;
+
+  static inline constexpr uint8_t T7_LATEST_VERSION = 0x13;
+  static inline constexpr const std::array<char, sizeof(uint64_t)> T7_MAGIC = {
+      IW_ASSET_SHEBANG,
+      'G',
+      'D',
+      'B',
+      CR,
+      LF,
+      NULL,
+      static_cast<char>(T7_LATEST_VERSION)};
+  static inline constexpr const uint32_t T7_VERSION = 0;
+
+  inline constexpr void setMagic(const str8_t &val) noexcept {
+    magic[0] = val[0];
+    magic[1] = val[1];
+    magic[2] = val[2];
+    magic[3] = val[3];
+    magic[4] = val[4];
+    magic[5] = val[5];
+    magic[6] = val[6];
+    magic[7] = val[7];
+  }
+
+  inline constexpr void setMagic(
+      const std::array<char, sizeof(uint64_t)> &val) noexcept {
+    magic[0] = val[0];
+    magic[1] = val[1];
+    magic[2] = val[2];
+    magic[3] = val[3];
+    magic[4] = val[4];
+    magic[5] = val[5];
+    magic[6] = val[6];
+    magic[7] = val[7];
+  }
+
+  static inline constexpr GSC_GDB t7() noexcept {
+    GSC_GDB result = {};
+    result.setMagic(T7_MAGIC);
+    return result;
+  }
+
+  inline const uint64_t *lineinfo() const noexcept {
+    return reinterpret_cast<const uint64_t *>(
+        reinterpret_cast<const uint8_t *>(this) + lineinfo_offset);
+  }
+
+  inline uint64_t *lineinfo() noexcept {
+    return reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(this) +
+                                        lineinfo_offset);
+  }
+
+  inline const char *stringtable() const noexcept {
+    return reinterpret_cast<const char *>(
+        reinterpret_cast<const uint8_t *>(this) + stringtable_offset);
+  }
+
+  inline char *stringtable() noexcept {
+    return reinterpret_cast<char *>(reinterpret_cast<uint8_t *>(this) +
+                                    stringtable_offset);
+  }
+
+  inline std::vector<uint64_t> line_start_addresses() const noexcept {
+    std::vector<uint64_t> result;
+    result.resize(lineinfo_count);
+    const uint64_t *info = lineinfo();
+    for (uint32_t line = 0; line < lineinfo_count; ++line) {
+      result[line] = info[line];
+    }
+    return result;
+  }
+
+  inline uint32_t line(uint64_t pos) const noexcept {
+    const uint64_t *info = lineinfo();
+    uint32_t line = 0;
+    for (; line < lineinfo_count && info[line] < pos; ++line) {
+    }
+    return line;
+  }
+  // static inline constexpr const uint32_t T7_SRC_CRC = 0xCA50E0EF;
+});
+ASSERT_OFFSET(GSC_GDB, magic, 0x0);
+ASSERT_OFFSET(GSC_GDB, version, 0x8);
+ASSERT_OFFSET(GSC_GDB, source_crc, 0xC);
+ASSERT_OFFSET(GSC_GDB, lineinfo_offset, 0x10);
+ASSERT_OFFSET(GSC_GDB, lineinfo_count, 0x14);
+ASSERT_OFFSET(GSC_GDB, devblock_stringtable_offset, 0x18);
+ASSERT_OFFSET(GSC_GDB, devblock_stringtable_count, 0x1C);
+ASSERT_OFFSET(GSC_GDB, stringtable_offset, 0x20);
+ASSERT_OFFSET(GSC_GDB, stringtable_count, 0x24);
+
+ASSERT_SIZE(GSC_GDB, 0x28);
+
+PACKED(struct debugFileInfo_t {
+  const char *filename;
+  void *startAddr;
+  void *endAddr;
+  // Relative bytecode offsets or
+  // absolute memory bytecode addresses
+  uint8_t **lineStartAddr;
+  int32_t lineStartAddrCount;
+  uint8_t _padding24[4];
+  char *source;
+  int32_t sourceLen;
+  uint8_t _padding34[4];
+  GSC_GDB *gdb;
+
+  std::vector<uint64_t> get_line_start_addrs() const noexcept {
+    std::vector<uint64_t> result;
+    result.resize(lineStartAddrCount);
+
+    for (int32_t line = 0; line < lineStartAddrCount; ++line) {
+      result.push_back(reinterpret_cast<uint64_t>(lineStartAddr[line]));
+    }
+    return result;
+  }
+});
+ASSERT_SIZE(debugFileInfo_t, 0x40);
+
+struct gscProfileInfo_t;
+PACKED(struct gscProfileInfo_t {
+  gscProfileInfo_t *execNext;
+  ScrVarCanonicalName_t fileName;
+  ScrVarCanonicalName_t funcName;
+  uint64_t inclusive_time;
+  uint64_t exclusive_time;
+  uint64_t hit_count;
+});
+ASSERT_SIZE(gscProfileInfo_t, 0x28);
+
+PACKED(struct objFileInfo_t {
+  GSC_OBJ *activeVersion;
+  GSC_OBJ *baselineVersion;
+  debugFileInfo_t debugInfo;
+});
+ASSERT_SIZE(objFileInfo_t, 0x50);
+
+typedef ScrPool<array<objFileInfo_t, 500>> ObjFileInfoPool;
+ASSERT_SIZE(ObjFileInfoPool, 0x13880);
+
+struct GSC_IMPORT_ITEM {
+  ScrVarCanonicalName_t name;
+  ScrVarCanonicalName_t name_space;
+  uint16_t num_address;
+  uint8_t param_count;
+  uint8_t flags;
+
+  inline std::span<const uint32_t> addresses() const {
+    return std::span(
+        reinterpret_cast<const uint32_t *>(reinterpret_cast<uintptr_t>(this) +
+                                           sizeof(GSC_IMPORT_ITEM)),
+        num_address);
+  }
+
+  inline std::span<uint32_t> addresses() {
+    return std::span(
+        reinterpret_cast<uint32_t *>(reinterpret_cast<uintptr_t>(this) +
+                                     sizeof(GSC_IMPORT_ITEM)),
+        num_address);
+  }
+};
 
 } // namespace scr
 } // namespace game

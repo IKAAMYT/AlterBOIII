@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to build from (default: beta)'
+        description: "Branch to build from (default: beta)"
         required: false
-        default: 'beta'
+        default: "beta"
 
 concurrency:
   group: beta-build
@@ -36,8 +36,13 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.3.1
 
+      - name: Install premake5
+        uses: Jarod42/install-premake5@v7
+        with:
+          msdev: vs2022
+
       - name: Generate project files
-        run: tools/premake5 vs2022
+        run: premake5 vs2022
 
       - name: Set up problem matching
         uses: ammaraskar/msvc-problem-matcher@master
@@ -88,11 +93,6 @@ jobs:
           hash=$(sha1sum "boiii.exe" | awk '{print toupper($1)}')
           echo "  [\"boiii.exe\", $size, \"$hash\"]" >> ../../${{ env.MANIFEST_FILE }}
 
-          # Add ext.dll entry if available
-          if [ -n "${{ secrets.EXT_DLL_SIZE }}" ] && [ -n "${{ secrets.EXT_DLL_HASH }}" ]; then
-            echo "  ,[\"ext.dll\", ${{ secrets.EXT_DLL_SIZE }}, \"${{ secrets.EXT_DLL_HASH }}\"]" >> ../../${{ env.MANIFEST_FILE }}
-          fi
-
           # Process all files in data directory
           find data -type f | sort | while read file; do
             size=$(stat -c%s "$file")
@@ -130,7 +130,7 @@ jobs:
           rclone copy upload/${{ env.R2_FOLDER }}/ r2:${{ env.R2_BUCKET }}/${{ env.R2_FOLDER }}/ --progress --header-upload "Content-Type: application/octet-stream"
 
           # Upload beta manifest
-          rclone copy upload/${{ env.MANIFEST_FILE }} r2:${{ env.R2_BUCKET }}/ --progress --header-upload "Content-Type: application/octet-stream"  
+          rclone copy upload/${{ env.MANIFEST_FILE }} r2:${{ env.R2_BUCKET }}/ --progress --header-upload "Content-Type: application/octet-stream"
 
       - name: Verify upload
         run: |

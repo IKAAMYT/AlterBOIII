@@ -6,14 +6,14 @@ can mix styles when it helps.
 
 ## Quick links
 
-- [Where scripts can live](#where-scripts-can-live)
-- [Compiler and loader notes](#compiler-and-loader-notes)
+- [Where Scripts Can Live](#where-scripts-can-live)
+- [Compiler and Loader Notes](#compiler-and-loader-notes)
 - [Hooks](#hooks)
-- [Commands and output](#commands-and-output)
+- [Commands and Output](#commands-and-output)
 - [File and data helpers](#file-and-data-helpers)
-- [Player helpers](#player-helpers)
-- [HUD text](#hud-text)
-- [Small helpers](#small-helpers)
+- [Player Helpers](#player-helpers)
+- [HUD Text](#hud-text)
+- [Misc Utilities](#misc-utilities)
 
 ## Where scripts can live
 
@@ -22,7 +22,15 @@ The loader checks a few places, depending on what kind of script you are adding.
 ```text
 %LOCALAPPDATA%/boiii/data/
 ├── scripts/
-│   └── ... stock script overrides such as scripts/zm/... or scripts/mp/...
+│   ├── shared/
+│   ├── core/
+│   ├── codescripts/
+│   ├── <mode-specific folder>
+│   └── <mapname>/
+│       ├── shared/
+│       ├── core/
+│       ├── codescripts/
+│       └── <mode-specific folder>
 ├── custom_scripts/
 │   ├── shared/
 │   ├── core/
@@ -41,7 +49,16 @@ The loader checks a few places, depending on what kind of script you are adding.
 
 Small notes:
 
-- `scripts/` is for overriding stock scripts the game already uses.
+- `scripts/shared`, `scripts/core`, `scripts/codescripts`, and the mode-specific
+  script trees - `scripts/cp`, `scripts/mp`, and `scripts/zm` - are for
+  overriding stock scripts the game already uses.
+- `scripts/<mapname>` is for scripts which should override a script in a
+  specific map only - they are not loaded when any other map is loaded.
+
+  For example, to replace the script `zm/zm_example.gsc` in the map
+  `zm_example`, its replacement script must be stored in
+  `scripts/zm_example/zm/zm_example.gsc`.
+
 - `custom_scripts/` is for your own extra scripts that BOIII compiles and loads
   for you.
 - `custom_scripts/shared`, `custom_scripts/core`, `custom_scripts/codescripts`,
@@ -404,7 +421,7 @@ function hud_text_demo()
 }
 ```
 
-# Small helpers
+# Misc Utilities
 
 ## getfunction
 
@@ -421,12 +438,173 @@ This is handy when you want to guard optional hooks.
 
 ## conststring
 
-`conststring(hash)` pushes a const string from a scr string hash.
+`conststring(hash)` returns a const string from a scr string hash.
 
 ```gsc
 hash = 0x12345678;
 value = conststring(hash);
 ```
+
+## isstruct
+
+`isstruct(val)` returns a boolean value representing whether the given `val` is
+a `struct`.
+
+```gsc
+ex_struct = spawnstruct();
+/#
+  assert(isstruct(ex_struct));
+#/
+
+not_struct = "Hi, I am not a struct."
+/#
+  assert(!isstruct(not_struct));
+#/
+
+// Differentiates structs from entities and other object-like values
+/#
+  assert(level.players.size > 0);
+  assert(!isstruct(level.players[0]));
+#/
+```
+
+### ismenucached
+
+`ismenucached("MenuName")` returns a boolean value representing whether a menu
+with the given name has been pre-cached.
+
+This can be used to check if an `openmenu("MenuName")` or
+`closemenu("MenuName")` method call can be executed without error prior to the
+call.
+
+```gsc
+/#
+assert(!ismenucached("asdfgasdfgsdfhgsdfhsdfh"));
+// Initial black screen - always exists and is cached, regardless of map or gamemode.
+assert(ismenucached("InitialBlack"));
+#/
+
+/*
+ Check for existence of common end-game and pre-game menu names, and
+ close each that exists and is cached.
+
+ Useful in dedicated server where a menu requires the host to configure
+ its options in order to continue the game, which is not possible,
+ because there is no host client.
+*/
+menu_names = array( "PreGameMenu", "Intermission_Main", "Endgame_menu",
+                    "CreateCustomQMenuPlayer", "CreateCustomQMenu",
+                    "ModeSelect" );
+if (isdedicated()) {
+  foreach (menu in menu_names) {
+    if (ismenucached(menu)) {
+      foreach(player in level.players) {
+        player closemenu(menu);
+      }
+    }
+  }
+}
+```
+
+### vector
+
+`vector(x, y, z)` returns a vector constructed from the best-effort float-casted
+values passed as arguments.
+
+This can be used to cast values of other types to a vector.
+
+```gsc
+basic_vec = vector(1.0, 2.0, 3.0);
+/#
+assert(isvec(basic_vec) && basic_vec[0] == 1.0);
+#/
+
+vec_from_array = vector(array(1.0, 2.0, 3.0));
+/#
+assert(isvec(vec_from_array) &&
+       vec_from_array[0] == 1.0 &&
+       vec_from_array[1] == 2.0 &&
+       vec_from_array[2] == 3.0);
+#/
+
+vec_from_strings = vector("1.0", "2.0", "3.0");
+/#
+assert(isvec(vec_from_strings) &&
+       vec_from_strings[0] == 1.0 &&
+       vec_from_strings[1] == 2.0 &&
+       vec_from_strings[2] == 3.0);
+#/
+
+// Useful for:
+// - Casting a function's argument to a vector where the argument could either be a vector or
+//   has a type otherwise convertible to one.
+// - Copying the given vector.
+vec_from_vec = ( 1.0, 2.0, 3.0 );
+/#
+assert(isvec(vec_from_vec) &&
+       vec_from_vec[0] == 1.0 &&
+       vec_from_vec[1] == 2.0 &&
+       vec_from_vec[2] == 3.0);
+#/
+
+vec_from_assorted = vector("1.0", 2, 3.0);
+/#
+assert(isvec(vec_from_assorted) &&
+       vec_from_assorted[0] == 1.0 &&
+       vec_from_assorted[1] == 2.0 &&
+       vec_from_assorted[2] == 3.0);
+#/
+```
+
+### typename
+
+`typename(var)` returns the type of the given argument represented as a string.
+
+```
+/#
+assert(typename("I am a string") == "string");
+assert(typename(1.0) == "float");
+assert(typename((1.0, 1.0, 1.0)) == "vector");
+#/
+test_struct = spawnstruct();
+/#
+assert(typename(test_struct) == "struct");
+#/
+```
+
+For the sake of completeness, the following is the full list of `ScrVarType`s
+and the corresponding string representation of each.
+
+- `UNDEFINED`: `"undefined"`
+- `POINTER`: `"pointer"`
+- `STRING` : `"string"`
+- `LOCALIZED_STRING`: `"localized string"`
+- `VECTOR`: `"vector"`
+- `HASH`: `"hash"`
+- `FLOAT`: `"float"`
+- `INT`: `"int"`
+- `UINT64`: `"uint64"`
+- `UINTPTR_T`: `"uintptr_t"`
+- `ENTITY_OFFSET`: `"entity offset"`
+- `CODEPOS`: `"codepos"`
+- `PRECODEPOS`: `"precodepos"`
+- `API_FUNCTION`: `"api_function"`
+- `FUNCTION`: `"function"`
+- `STACK`: `"stack"`
+- `ANIMATION`: `"animation"`
+- `THREAD`: `"thread"`
+- `NOTIFY_THREAD`: `"notify thread"`
+- `TIME_THREAD`: `"time thread"`
+- `CHILD_THREAD`: `"child thread"`
+- `CLASS`: `"class"`
+- `STRUCT`: `"struct"`
+- `REMOVED_ENTITY`: `"removed entity"`
+- `ENTITY`: `"entity"`
+- `ARRAY`: `"array"`
+- `REMOVED_THREAD`: `"removed thread"`
+- `FREE`: `"<free>"`
+- `THREAD_LIST`: `"thread list"`
+- `ENT_LIST`: `"ent list"`
 
 ## Method-style custom calls
 
