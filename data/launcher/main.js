@@ -4362,7 +4362,7 @@ function saveLangPref(lang) {
 // SYSTEME D'AMIS : mode "En cours de creation"
 // Pour REACTIVER le systeme complet : passe WIP_FRIENDS a false.
 // ─────────────────────────────────────────────────────────────
-var WIP_FRIENDS = true;
+var WIP_FRIENDS = false;
 
 if (WIP_FRIENDS) {
   var _wip = document.getElementById('friendsWip');
