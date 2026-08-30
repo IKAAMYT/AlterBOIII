@@ -541,7 +541,7 @@ function loadWorkshopCache() {
 var _altercodBridge = null;
 function getExternal() {
   if (_altercodBridge) return _altercodBridge;
-  // WebView2 (Ezz): window.chrome.webview.hostObjects.sync.external exposes
+  // WebView2 (AlterBOIII): window.chrome.webview.hostObjects.sync.external exposes
   // the C++ bridge via __request/__response. Proxy maps method calls onto it.
   try {
     if (window.chrome && window.chrome.webview &&
@@ -4716,12 +4716,8 @@ function fetchReleases() {
 
 fetchReleases();
 
-// Beta build
-_versionsData['beta'] = {
-  url : 'https://r2.ezz.lol/boiii/beta/boiii.exe',
-  name : 'boiii-beta.exe'
-};
-addVersionOption('beta', 'Beta (Experimental)');
+// Version de développement désactivée — utilisation de la release stable
+addVersionOption('stable', 'Stable');
 
 // Crédits : désormais affichés directement dans la sidebar (plus de popup).
 
