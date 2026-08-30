@@ -97,12 +97,17 @@ jobs:
           rm -rf package/data/launcher
           cd package
           7z a -tzip ../AlterBO3.zip ./*
+          cd ..
+          # Also ship the standalone exe (update.json -> exe_url).
+          cp build/bin/x64/Release/boiii.exe AlterBOIII.exe
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: AlterBO3
-          path: AlterBO3.zip
+          path: |
+            AlterBO3.zip
+            AlterBOIII.exe
 
   # ---------------------------------------------------------------
   # 2. Release GitHub
@@ -124,7 +129,9 @@ jobs:
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           name: AlterBO3 ${{ needs.validate.outputs.tag }}
-          files: dist/AlterBO3.zip
+          files: |
+            dist/AlterBO3.zip
+            dist/AlterBOIII.exe
           generate_release_notes: true
           body: |
             **AlterBO3** — reskin IKAAM du client BOIII (Black Ops III).
