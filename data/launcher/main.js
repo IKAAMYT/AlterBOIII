@@ -4097,7 +4097,7 @@ function syncFriendsToLocal(friends) {
     if (!ex || !ex.addFriend) return;
     for (var i = 0; i < friends.length; i++) {
       var f = friends[i];
-      try { ex.addFriend(pseudoToLocalId(f.pseudo), f.pseudo); } catch (e) {}
+      try { ex.addFriend(0, f.pseudo); } catch (e) {}
     }
   } catch (e) {}
 }
