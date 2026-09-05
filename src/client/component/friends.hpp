@@ -55,6 +55,10 @@ void forget_browser_routes(uint64_t steam_id);
 void remember_browser_route(uint64_t steam_id, const std::string &address);
 uint64_t find_browser_route(const std::string &address);
 
+// Address other players can use to reach the match we are currently in.
+// Reads live client memory: MAIN GAME THREAD ONLY.
+std::string get_connect_address();
+
 std::string get_presence_server(uint64_t steam_id);
 std::vector<friend_server_info> get_friend_server_addresses();
 std::string get_friend_game_info_by_address(const std::string &address);
