@@ -4094,10 +4094,19 @@ function loadFriendsData() {
 function syncFriendsToLocal(friends) {
   try {
     var ex = getExternal();
-    if (!ex || !ex.addFriend) return;
+    // NE PAS tester `ex.addFriend` : sous MSHTML, evaluer la propriete APPELLE
+    // le callback (cf. friendsApiGet). On appelle directement dans le try.
+    if (!ex) return;
     for (var i = 0; i < friends.length; i++) {
       var f = friends[i];
-      try { ex.addFriend(0, f.pseudo); } catch (e) {}
+      if (!f || !f.pseudo) continue;
+      // addFriend cote C++ exige une CHAINE numerique non nulle :
+      // `strtoull(...) == 0` -> "error", et l'ami n'est jamais ecrit dans
+      // friends.json. Les comptes AlterCOD n'ont pas de steam_id, on garde
+      // donc l'id stable derive du pseudo.
+      try {
+        ex.addFriend(String(pseudoToLocalId(f.pseudo)), String(f.pseudo));
+      } catch (e) {}
     }
   } catch (e) {}
 }
@@ -4696,13 +4705,17 @@ function fetchReleases() {
             }
           }
         }
-        // After loading all versions, ensure UI reflects saved selection
+        // After loading all versions, ensure UI reflects saved selection.
+        // Une selection enregistree qui n'existe plus ('beta', 'stable'...)
+        // doit RETOMBER sur 'latest', sinon l'UI affiche un libelle bidon
+        // pendant que le launcher lance en fait la derniere version.
+        if (_selectedVersion !== 'latest' && !_versionsData[_selectedVersion]) {
+          _selectedVersion = 'latest';
+        }
         var label = 'Latest (Auto-update)';
-        if (_selectedVersion === 'beta')
-          label = 'Beta (Experimental)';
-        else if (_selectedVersion !== 'latest' &&
-                 _versionsData[_selectedVersion])
+        if (_selectedVersion !== 'latest') {
           label = _selectedVersion;
+        }
         selectVersion(_selectedVersion, label);
       } catch (e) {
         console.error('Error parsing releases:', e);
@@ -4716,8 +4729,10 @@ function fetchReleases() {
 
 fetchReleases();
 
-// Version de développement désactivée — utilisation de la release stable
-addVersionOption('stable', 'Stable');
+// Version de développement désactivée. On n'ajoute PAS d'option "stable" :
+// elle n'avait aucune entrée dans _versionsData, donc la sélectionner
+// retombait silencieusement sur "latest" (sans -noupdate) tout en affichant
+// "Stable". Les vraies versions sont ajoutées par fetchReleases().
 
 // Crédits : désormais affichés directement dans la sidebar (plus de popup).
 
