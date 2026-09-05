@@ -3212,39 +3212,80 @@ void ensure_launcher_ui() {
 
   const bool needs_refresh = (!remote_rev.empty() && remote_rev != local_rev);
 
+  utils::io::create_directory(ui_dir);
+
+  // Download EVERYTHING into memory first, then swap. Never delete a working
+  // UI before the replacement is in hand: a single failed download used to
+  // leave the user with no main.html at all, which throws "needs an internet
+  // connection" at startup and bricks the launcher.
   if (needs_refresh) {
+    std::vector<std::pair<std::filesystem::path, std::string>> fetched;
+
+    bool all_ok = true;
     for (const auto *name : files) {
-      const auto target = ui_dir / name;
-      if (utils::io::file_exists(target.string())) {
-        std::error_code ec;
-        std::filesystem::remove(target, ec);
+      std::optional<std::string> data;
+      try {
+        data = utils::http::get_data(std::string(base) + name);
+      } catch (...) {
+        data = std::nullopt;
+      }
+      if (!data || data->empty()) {
+        all_ok = false;
+        break; // one miss aborts the refresh — the current UI stays intact
+      }
+      fetched.emplace_back(ui_dir / name, std::move(*data));
+    }
+
+    if (all_ok) {
+      bool written_ok = true;
+      for (const auto &entry : fetched) {
+        if (!utils::io::write_file(entry.first.string() + ".new",
+                                   entry.second)) {
+          written_ok = false;
+          break;
+        }
+      }
+
+      if (written_ok) {
+        for (const auto &entry : fetched) {
+          std::error_code ec;
+          std::filesystem::rename(entry.first.string() + ".new", entry.first,
+                                  ec);
+          if (ec) {
+            // Locked or cross-device: fall back to a direct rewrite.
+            utils::io::write_file(entry.first.string(), entry.second);
+            std::filesystem::remove(entry.first.string() + ".new", ec);
+          }
+        }
+
+        // The marker is written ONLY after a fully successful swap, so a
+        // partial refresh is retried next launch instead of being marked done.
+        utils::io::write_file(marker.string(), remote_rev);
+      } else {
+        for (const auto &entry : fetched) {
+          std::error_code ec;
+          std::filesystem::remove(entry.first.string() + ".new", ec);
+        }
       }
     }
   }
 
+  // First install / self-heal: fetch anything genuinely missing.
   for (const auto *name : files) {
     const auto target = ui_dir / name;
     if (utils::io::file_exists(target.string())) {
-      continue; // already present and up to date — leave it
+      continue;
     }
 
-    const auto url = std::string(base) + name;
     std::optional<std::string> data;
     try {
-      data = utils::http::get_data(url);
+      data = utils::http::get_data(std::string(base) + name);
     } catch (...) {
       data = std::nullopt;
     }
     if (data && !data->empty()) {
-      utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
     }
-  }
-
-  // Remember the revision we just installed so the wipe only happens once.
-  if (needs_refresh) {
-    utils::io::create_directory(ui_dir);
-    utils::io::write_file(marker.string(), remote_rev);
   }
 }
 
