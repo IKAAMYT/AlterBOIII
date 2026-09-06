@@ -1389,7 +1389,58 @@ bool run() {
   auto pending_exe_url = std::make_shared<std::string>();
 
   {
-    html_window window("AlterBO3", 1260, 680);
+    html_window window("AlterBOIII", 1260, 680);
+
+    // AlterBOIII : la fenetre n'a plus de barre de titre native (voir
+    // html_window::processor). C'est la page qui fournit les boutons, via ces
+    // quatre callbacks. Le HWND est capture une fois : la fenetre vit aussi
+    // longtemps que ces lambdas.
+    const HWND fenetre = *window.get_window();
+
+    window.get_html_frame()->register_callback(
+        "winMinimize",
+        [fenetre](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          ShowWindow(fenetre, SW_MINIMIZE);
+          return CComVariant("ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "winMaximize",
+        [fenetre](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const bool etait_maximisee = IsZoomed(fenetre) != FALSE;
+          ShowWindow(fenetre, etait_maximisee ? SW_RESTORE : SW_MAXIMIZE);
+          // On renvoie le NOUVEL etat pour que le bouton change d'icone.
+          return CComVariant(etait_maximisee ? "normal" : "max");
+        });
+
+    window.get_html_frame()->register_callback(
+        "winIsMaximized",
+        [fenetre](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          return CComVariant(IsZoomed(fenetre) ? "max" : "normal");
+        });
+
+    window.get_html_frame()->register_callback(
+        "winClose",
+        [fenetre](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          PostMessageW(fenetre, WM_CLOSE, 0, 0);
+          return CComVariant("ok");
+        });
+
+    // Deplacement : on rend la capture souris au systeme puis on lui fait
+    // croire que le clic a eu lieu sur une barre de titre. Windows prend
+    // alors la main sur la boucle de glisser, avec l'ancrage aux bords.
+    window.get_html_frame()->register_callback(
+        "winDrag",
+        [fenetre](
+            const std::vector<html_argument> & /*params*/) -> CComVariant {
+          ReleaseCapture();
+          SendMessageW(fenetre, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+          return CComVariant("ok");
+        });
 
     window.get_html_frame()->register_callback(
         "getVersion",

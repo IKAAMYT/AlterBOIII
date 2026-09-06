@@ -4877,4 +4877,89 @@ fetchReleases();
 
   setTimeout(function() { chargerIdentite(); chargerAmis(); }, 1200);
 })();
+
+/* ─────────────────────────────────────────────────────────────
+   FENÊTRE SANS CADRE (V3)
+   La barre de titre native a ete supprimee cote C++
+   (html_window::processor, WM_NCCALCSIZE). Ces boutons la
+   remplacent, et la barre du haut sert de zone de deplacement.
+   ───────────────────────────────────────────────────────────── */
+(function initFenetre() {
+  var topbar = document.querySelector('.topbar');
+  if (!topbar) return;
+
+  /* Appelle un callback C++ sans jamais TESTER sa propriete :
+     sous MSHTML, evaluer `ex.winClose` declenche l'appel a vide. */
+  function pont(nom) {
+    try {
+      var ex = getExternal();
+      if (!ex) return '';
+      return ex[nom]();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  var btnMin   = document.getElementById('winMin');
+  var btnMax   = document.getElementById('winMax');
+  var btnClose = document.getElementById('winClose');
+
+  /* Icone "restaurer" : deux carres decales, comme Windows. */
+  var ICONE_MAX = '<svg width="11" height="11" viewBox="0 0 11 11" fill="none">' +
+    '<rect x="1.6" y="1.6" width="7.8" height="7.8" rx="1.4" stroke="currentColor" stroke-width="1.2"/></svg>';
+  var ICONE_RESTAURER = '<svg width="11" height="11" viewBox="0 0 11 11" fill="none">' +
+    '<rect x="1.4" y="3.2" width="6.4" height="6.4" rx="1.2" stroke="currentColor" stroke-width="1.2"/>' +
+    '<path d="M3.6 3.1V2.6a1.2 1.2 0 0 1 1.2-1.2h3.9a1.2 1.2 0 0 1 1.2 1.2v3.9a1.2 1.2 0 0 1-1.2 1.2h-.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+
+  function refletEtat(etat) {
+    if (!btnMax) return;
+    var maximisee = (etat === 'max');
+    btnMax.innerHTML = maximisee ? ICONE_RESTAURER : ICONE_MAX;
+    btnMax.title = maximisee ? 'Restaurer' : 'Agrandir';
+  }
+
+  if (btnMin) btnMin.onclick = function() { pont('winMinimize'); };
+  if (btnMax) btnMax.onclick = function() { refletEtat(pont('winMaximize')); };
+  if (btnClose) btnClose.onclick = function() { pont('winClose'); };
+
+  /* L'utilisateur peut aussi maximiser par l'ancrage Windows ou un
+     double-clic : on resynchronise l'icone regulierement. */
+  setInterval(function() { refletEtat(pont('winIsMaximized')); }, 900);
+  setTimeout(function() { refletEtat(pont('winIsMaximized')); }, 600);
+
+  /* ── Deplacement de la fenetre ──
+     Un clic sur la barre traine la fenetre, sauf si on a clique sur
+     quelque chose d'interactif. On remonte la chaine des parents :
+     un clic sur le <svg> d'un bouton doit compter comme un clic sur
+     le bouton, pas sur la barre. */
+  function estInteractif(cible) {
+    var n = cible;
+    while (n && n !== topbar) {
+      var t = (n.tagName || '').toLowerCase();
+      if (t === 'button' || t === 'input' || t === 'select' ||
+          t === 'a' || t === 'textarea') {
+        return true;
+      }
+      if (n.className && String(n.className).indexOf('topbar-logo') !== -1) {
+        return true;
+      }
+      n = n.parentNode;
+    }
+    return false;
+  }
+
+  topbar.onmousedown = function(e) {
+    e = e || window.event;
+    // Bouton gauche uniquement : un clic droit ne doit pas trainer.
+    if (e.button !== 0) return;
+    if (estInteractif(e.target || e.srcElement)) return;
+    pont('winDrag');
+  };
+
+  topbar.ondblclick = function(e) {
+    e = e || window.event;
+    if (estInteractif(e.target || e.srcElement)) return;
+    refletEtat(pont('winMaximize'));
+  };
+})();
 })();
