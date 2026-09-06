@@ -5,3 +5,6 @@ node_modules/
 usergenerate.bat
 nul
 .clangd
+
+2-envoyer.bat
+1-installer-git.bat
