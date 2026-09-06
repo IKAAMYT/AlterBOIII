@@ -308,7 +308,8 @@ void reset_state() {
         0, game::consoleLabel_e::DEFAULT,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre instable.\n\n"
+        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre "
+        "instable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"
@@ -321,7 +322,8 @@ void reset_state() {
         game::errorParm::DROP,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre instable.\n\n"
+        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre "
+        "instable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"

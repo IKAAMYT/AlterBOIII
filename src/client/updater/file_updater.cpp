@@ -244,10 +244,9 @@ void file_updater::update_file(const file_info &file) const {
   // AlterBO3 (IKAAM): protect our custom exe and launcher UI from being
   // overwritten by the upstream (Ezz) updater. Game data files (fastfiles,
   // zones, configs) are still downloaded — those are required.
-  const bool is_our_exe = file.name.ends_with(".exe") ||
-                          file.name == UPDATE_HOST_BINARY ||
-                          file.name == "alterbo3.exe" ||
-                          file.name == "AlterBOIII.exe";
+  const bool is_our_exe =
+      file.name.ends_with(".exe") || file.name == UPDATE_HOST_BINARY ||
+      file.name == "alterbo3.exe" || file.name == "AlterBOIII.exe";
   const bool is_our_ui =
       file.name.find("data/launcher/") != std::string::npos ||
       file.name.find("data\\launcher\\") != std::string::npos ||
@@ -355,10 +354,9 @@ file_updater::get_outdated_files(const std::vector<file_info> &files) const {
     // AlterBO3 (IKAAM): never treat our own exe or our custom launcher UI as
     // outdated. Their hash will always differ from the upstream (Ezz) server,
     // so without this they would re-appear in the updater on every launch.
-    const bool is_our_exe = info.name.ends_with(".exe") ||
-                            info.name == UPDATE_HOST_BINARY ||
-                            info.name == "alterbo3.exe" ||
-                            info.name == "AlterBOIII.exe";
+    const bool is_our_exe =
+        info.name.ends_with(".exe") || info.name == UPDATE_HOST_BINARY ||
+        info.name == "alterbo3.exe" || info.name == "AlterBOIII.exe";
     const bool is_our_ui =
         info.name.find("data/launcher/") != std::string::npos ||
         info.name.find("data\\launcher\\") != std::string::npos ||
