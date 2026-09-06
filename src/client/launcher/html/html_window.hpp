@@ -15,6 +15,9 @@ public:
 private:
   html_frame frame_{};
   window window_;
+  int sync_ticks_ = 0;
+
+  void sync_frame_size();
 
   std::optional<LRESULT> processor(UINT message, WPARAM w_param,
                                    LPARAM l_param);

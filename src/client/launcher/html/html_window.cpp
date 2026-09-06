@@ -5,6 +5,9 @@ namespace {
 // Largeur de la zone sensible au redimensionnement, en pixels.
 constexpr int RESIZE_BORDER = 8;
 
+// Identifiant du timer de rattrapage de taille.
+constexpr UINT_PTR SYNC_TIMER_ID = 1;
+
 // Presentes depuis le SDK Windows 11 ; redefinies ici pour compiler avec un
 // SDK plus ancien.
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
@@ -35,6 +38,19 @@ html_window::html_window(const std::string &title, int width, int height,
 window *html_window::get_window() { return &this->window_; }
 
 html_frame *html_window::get_html_frame() { return &this->frame_; }
+
+void html_window::sync_frame_size() {
+  const HWND handle = this->window_;
+  if (!handle) {
+    return;
+  }
+
+  RECT client{};
+  if (GetClientRect(handle, &client)) {
+    this->frame_.resize(static_cast<DWORD>(client.right - client.left),
+                        static_cast<DWORD>(client.bottom - client.top));
+  }
+}
 
 std::optional<LRESULT> html_window::processor(const UINT message,
                                               const WPARAM w_param,
@@ -109,8 +125,26 @@ std::optional<LRESULT> html_window::processor(const UINT message,
     return HTCLIENT;
   }
 
-  if (message == WM_SIZE) {
-    this->frame_.resize(LOWORD(l_param), HIWORD(l_param));
+  // La taille vient du rect client reel, pas du l_param : apres
+  // WM_NCCALCSIZE la zone client couvre toute la fenetre, et c'est la
+  // seule source fiable.
+  if ((message == WM_SIZE || message == WM_WINDOWPOSCHANGED) && handle) {
+    this->sync_frame_size();
+    if (message == WM_SIZE) {
+      return 0;
+    }
+    return {};
+  }
+
+  // html_frame::resize() ne fait rien tant que le controleur WebView2
+  // n'existe pas, et sa creation est ASYNCHRONE : les WM_SIZE du demarrage
+  // arrivent trop tot. Sans ce rattrapage, la WebView garde ses bornes
+  // initiales et le pinceau de fond de la fenetre apparait sur les bords.
+  if (message == WM_TIMER && w_param == SYNC_TIMER_ID) {
+    this->sync_frame_size();
+    if (++this->sync_ticks_ >= 12) {
+      KillTimer(handle, SYNC_TIMER_ID);
+    }
     return 0;
   }
 
@@ -134,6 +168,9 @@ std::optional<LRESULT> html_window::processor(const UINT message,
     SetWindowPos(this->window_, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                      SWP_NOACTIVATE);
+
+    // Re-synchronise pendant ~3 s, le temps que WebView2 se cree.
+    SetTimer(this->window_, SYNC_TIMER_ID, 250, nullptr);
     return 0;
   }
 

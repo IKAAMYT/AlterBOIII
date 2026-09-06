@@ -2705,3 +2705,12 @@ cards
   .home-play::after { display: none; }
   .carte-stat:hover, .ami-ligne:hover { transform: none; }
 }
+
+/* ---- V3.1 : boutons de fenetre sur toute la hauteur ----
+   .topbar-droite est un element flex de .topbar, qui centre ses
+   enfants : sa hauteur valait donc celle de son contenu (28px), et
+   le `align-self: stretch` des boutons s'etirait sur 28px, pas 64.
+   On etire d'abord le conteneur, puis on recentre son contenu. */
+.topbar-droite { align-self: stretch; align-items: center; }
+.win-btns { align-self: stretch; }
+.win-btn { min-height: 100%; }

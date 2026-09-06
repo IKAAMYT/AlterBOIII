@@ -1437,8 +1437,21 @@ bool run() {
         "winDrag",
         [fenetre](
             const std::vector<html_argument> & /*params*/) -> CComVariant {
+          // Maximisee, on restaure d'abord : sinon Windows refuse de
+          // deplacer et le clic ne fait rien du tout.
+          if (IsZoomed(fenetre)) {
+            ShowWindow(fenetre, SW_RESTORE);
+          }
+
+          // Le l_param DOIT contenir la position du curseur en coordonnees
+          // ecran. Avec 0, la boucle de deplacement s'ancre sur (0,0) et
+          // Windows l'abandonne aussitot : la fenetre reste collee.
+          POINT curseur{};
+          GetCursorPos(&curseur);
+
           ReleaseCapture();
-          SendMessageW(fenetre, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+          SendMessageW(fenetre, WM_NCLBUTTONDOWN, HTCAPTION,
+                       MAKELPARAM(curseur.x, curseur.y));
           return CComVariant("ok");
         });
 
