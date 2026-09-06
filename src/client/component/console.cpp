@@ -1304,10 +1304,10 @@ void sys_create_console_stub(const HINSTANCE h_instance) {
 
   char text[CONSOLE_BUFFER_SIZE]{0};
 
-  const char *class_name = "BOIII WinConsole";
+  const char *class_name = "AlterBOIII WinConsole";
   const char *window_name = game::is_server()
-                                ? "BOIII V" SHORTVERSION " - Server"
-                                : "BOIII V" SHORTVERSION " - Console";
+                                ? "AlterBOIII V" SHORTVERSION " - Server"
+                                : "AlterBOIII V" SHORTVERSION " - Console";
 
   WNDCLASSA wnd_class{};
   wnd_class.style = 0;
@@ -1461,7 +1461,7 @@ void set_title(const std::string &title) {
 
 struct component final : generic_component {
   component() {
-    SetConsoleTitleA("EZZ BOIII V" SHORTVERSION);
+    SetConsoleTitleA("ALTERBOIII V" SHORTVERSION);
 
     if (game::is_headless()) {
       if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
@@ -1469,7 +1469,7 @@ struct component final : generic_component {
         AttachConsole(GetCurrentProcessId());
       }
 
-      SetConsoleTitleA("EZZ BOIII V" SHORTVERSION);
+      SetConsoleTitleA("ALTERBOIII V" SHORTVERSION);
       ShowWindow(GetConsoleWindow(),
                  hide_external_console() ? SW_HIDE : SW_SHOW);
 

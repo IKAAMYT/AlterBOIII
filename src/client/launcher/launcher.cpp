@@ -59,161 +59,6 @@ std::string sanitize_player_name(const std::string &name) {
   return result;
 }
 
-// AlterCOD OAuth (IKAAM): "Se connecter avec le forum". Opens a tiny local HTTP
-// server on a free loopback port, opens the forum authorization page in the
-// browser, waits for the browser to redirect to localhost/callback?code=XXX,
-// then exchanges the code for the account token via the forum. Returns
-// "token|pseudo" on success, "" on failure/timeout. This whole function only
-// runs when the user clicks the login button; nothing here executes at startup.
-std::string run_oauth_login() {
-  WSADATA wsa;
-  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-    return "";
-  }
-
-  // Everything wrapped so a socket failure can never escape this function.
-  std::string result;
-  SOCKET server = INVALID_SOCKET;
-  try {
-    server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (server == INVALID_SOCKET) {
-      WSACleanup();
-      return "";
-    }
-
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // 127.0.0.1 only
-    addr.sin_port = 0;                             // OS picks a free port
-
-    if (bind(server, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) ==
-        SOCKET_ERROR) {
-      closesocket(server);
-      WSACleanup();
-      return "";
-    }
-
-    int addrlen = sizeof(addr);
-    if (getsockname(server, reinterpret_cast<sockaddr *>(&addr), &addrlen) ==
-        SOCKET_ERROR) {
-      closesocket(server);
-      WSACleanup();
-      return "";
-    }
-    const int port = ntohs(addr.sin_port);
-
-    if (listen(server, 1) == SOCKET_ERROR) {
-      closesocket(server);
-      WSACleanup();
-      return "";
-    }
-
-    // Open the authorization page in the default browser.
-    const std::string auth_url =
-        "https://ikaam.fr/forum/oauth.php?port=" + std::to_string(port);
-    ShellExecuteA(nullptr, "open", auth_url.c_str(), nullptr, nullptr,
-                  SW_SHOWNORMAL);
-
-    // Accept with a receive timeout so we never hang forever.
-    DWORD timeout_ms = 120000; // 2 minutes total budget
-    setsockopt(server, SOL_SOCKET, SO_RCVTIMEO,
-               reinterpret_cast<const char *>(&timeout_ms), sizeof(timeout_ms));
-
-    std::string code;
-    const auto start = std::chrono::steady_clock::now();
-    while (std::chrono::steady_clock::now() - start <
-           std::chrono::seconds(120)) {
-      SOCKET client = accept(server, nullptr, nullptr);
-      if (client == INVALID_SOCKET) {
-        break; // timeout or error
-      }
-
-      char buffer[4096]{};
-      const int received = recv(client, buffer, sizeof(buffer) - 1, 0);
-      if (received > 0) {
-        const std::string request(buffer, received);
-        const auto code_pos = request.find("code=");
-        if (request.find("/callback") != std::string::npos &&
-            code_pos != std::string::npos) {
-          auto sc = code_pos + 5;
-          auto ec = request.find_first_of(" &\r\n", sc);
-          if (ec == std::string::npos) {
-            ec = request.size();
-          }
-          code = request.substr(sc, ec - sc);
-        }
-      }
-
-      const std::string body =
-          "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-          "<title>AlterBO3</title><style>body{background:#0b0a08;"
-          "color:#f5f3ee;font-family:sans-serif;display:flex;"
-          "align-items:center;justify-content:center;height:100vh;margin:0}"
-          ".c{text-align:center}.m{width:64px;height:64px;border-radius:16px;"
-          "background:linear-gradient(135deg,#f2c411,#9a7c00);"
-          "margin:0 auto 16px;display:flex;align-items:center;"
-          "justify-content:center;color:#0b0a08;font-weight:700;font-size:34px}"
-          "h1{color:#f2c411}</style></head><body><div class='c'>"
-          "<div class='m'>A</div><h1>Connecte !</h1>"
-          "<p>Tu peux retourner sur le launcher AlterBO3.</p>"
-          "</div></body></html>";
-      const std::string response =
-          "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
-          "Content-Length: " +
-          std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
-      send(client, response.c_str(), static_cast<int>(response.size()), 0);
-      closesocket(client);
-
-      if (!code.empty()) {
-        break;
-      }
-    }
-
-    closesocket(server);
-    server = INVALID_SOCKET;
-    WSACleanup();
-
-    if (code.empty()) {
-      return "";
-    }
-
-    // Exchange the code for the account token (throw-safe: post_data).
-    const std::string exchange_url = "https://ikaam.fr/forum/oauth.php";
-    const std::string exchange_body = "action=exchange&code=" + code;
-    const auto resp = utils::http::post_data(exchange_url, exchange_body, 10);
-    if (!resp.has_value()) {
-      return "";
-    }
-    rapidjson::Document doc;
-    doc.Parse(resp.value().c_str());
-    if (doc.HasParseError() || !doc.IsObject()) {
-      return "";
-    }
-    auto ok_it = doc.FindMember("ok");
-    if (ok_it == doc.MemberEnd() || !ok_it->value.IsBool() ||
-        !ok_it->value.GetBool()) {
-      return "";
-    }
-    auto tok_it = doc.FindMember("token");
-    auto pse_it = doc.FindMember("pseudo");
-    if (tok_it == doc.MemberEnd() || !tok_it->value.IsString()) {
-      return "";
-    }
-    std::string token = tok_it->value.GetString();
-    std::string pseudo = (pse_it != doc.MemberEnd() && pse_it->value.IsString())
-                             ? pse_it->value.GetString()
-                             : "";
-    result = token + "|" + pseudo;
-  } catch (...) {
-    if (server != INVALID_SOCKET) {
-      closesocket(server);
-    }
-    WSACleanup();
-    return "";
-  }
-  return result;
-}
-
 std::filesystem::path get_binds_file() {
   return game::get_game_path() / "boiii_players" / "user" / "binds.cfg";
 }
@@ -2107,7 +1952,7 @@ bool run() {
                         rapidjson::Value(friend_code_string.c_str(), allocator),
                         allocator);
           doc.AddMember("name",
-                        rapidjson::Value("Your BOIII identity", allocator),
+                        rapidjson::Value("Ton identite AlterBOIII", allocator),
                         allocator);
 
           rapidjson::StringBuffer buffer;
@@ -2294,142 +2139,6 @@ bool run() {
                                 std::string(buf.GetString(), buf.GetSize()));
 
           return CComVariant("ok");
-        });
-
-    // AlterCOD session bridge (IKAAM): the launcher stores the friends account
-    // token in localStorage, which the game cannot read. This callback writes it
-    // to boiii_players/user/altercod_session.json so the in-game heartbeat can
-    // pick it up. Called on login (with token) and logout (empty clears it).
-    const auto altercod_session_file =
-        std::filesystem::path("boiii_players") / "user" / "altercod_session.json";
-
-    window.get_html_frame()->register_callback(
-        "saveFriendsSession",
-        [altercod_session_file](
-            const std::vector<html_argument> &params) -> CComVariant {
-          std::string token = params.size() > 0 && params[0].is_string()
-                                  ? params[0].get_string()
-                                  : "";
-          std::string pseudo = params.size() > 1 && params[1].is_string()
-                                   ? params[1].get_string()
-                                   : "";
-
-          std::error_code ec;
-          std::filesystem::create_directories(
-              altercod_session_file.parent_path(), ec);
-
-          if (token.empty()) {
-            // Logout: remove the session file.
-            std::filesystem::remove(altercod_session_file, ec);
-            return CComVariant("ok");
-          }
-
-          rapidjson::Document doc;
-          doc.SetObject();
-          auto &al = doc.GetAllocator();
-          doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(),
-                        al);
-          doc.AddMember("pseudo", rapidjson::Value(pseudo.c_str(), al).Move(),
-                        al);
-          rapidjson::StringBuffer buf;
-          rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
-          doc.Accept(writer);
-
-          utils::io::write_file(altercod_session_file.string(),
-                                buf.GetString());
-          return CComVariant("ok");
-        });
-
-    // AlterCOD friends API bridge (IKAAM): the browser XHR can block
-    // cross-zone requests to the friends API (returns status 0). We route them
-    // through native curl instead. JS passes the full URL and gets the raw
-    // response body back (or "" on error).
-    window.get_html_frame()->register_callback(
-        "friendsApiGet",
-        [](const std::vector<html_argument> &params) -> CComVariant {
-          if (params.empty() || !params[0].is_string())
-            return CComVariant("");
-          const auto url = params[0].get_string();
-          // Basic safety: only allow our own API host.
-          if (url.find("https://ikaam.fr/amis/") != 0)
-            return CComVariant("");
-
-          // Split "endpoint?query" so we can POST the query as the body. We use
-          // post_data (not get_data) because get_data sets CURLOPT_FAILONERROR
-          // and throws on non-2xx; post_data is throw-free and our PHP API
-          // accepts params via GET or POST identically.
-          std::string endpoint = url;
-          std::string body;
-          const auto qpos = url.find('?');
-          if (qpos != std::string::npos) {
-            endpoint = url.substr(0, qpos);
-            body = url.substr(qpos + 1);
-          }
-
-          try {
-            const auto response = utils::http::post_data(endpoint, body, 10);
-            if (!response.has_value())
-              return CComVariant("");
-            return CComVariant(response.value().c_str());
-          } catch (...) {
-            return CComVariant("");
-          }
-        });
-
-    // AlterCOD OAuth login (IKAAM): the JS calls startOAuthLogin() when the
-    // user clicks "Se connecter avec le forum". To avoid freezing the UI thread
-    // (a blocking call makes the window unresponsive and the launcher can end
-    // up launching the game), we run the flow on a DETACHED background thread
-    // and let the JS poll checkOAuthResult() for the outcome.
-    //   startOAuthLogin()   -> "started" | "busy"
-    //   checkOAuthResult()  -> "pending" | "" (failed) | "token|pseudo" (success)
-    auto oauth_state =
-        std::make_shared<std::atomic<int>>(0); // 0 idle,1 running,2 done
-    auto oauth_result = std::make_shared<std::string>();
-    auto oauth_mutex = std::make_shared<std::mutex>();
-
-    window.get_html_frame()->register_callback(
-        "startOAuthLogin",
-        [oauth_state, oauth_result, oauth_mutex](
-            const std::vector<html_argument> & /*params*/) -> CComVariant {
-          int expected = 0;
-          if (!oauth_state->compare_exchange_strong(expected, 1)) {
-            return CComVariant("busy"); // already running
-          }
-          std::thread([oauth_state, oauth_result, oauth_mutex]() {
-            std::string r;
-            try {
-              r = run_oauth_login();
-            } catch (...) {
-              r = "";
-            }
-            {
-              std::lock_guard<std::mutex> lock(*oauth_mutex);
-              *oauth_result = r;
-            }
-            oauth_state->store(2); // done
-          }).detach();
-          return CComVariant("started");
-        });
-
-    window.get_html_frame()->register_callback(
-        "checkOAuthResult",
-        [oauth_state, oauth_result, oauth_mutex](
-            const std::vector<html_argument> & /*params*/) -> CComVariant {
-          const int st = oauth_state->load();
-          if (st == 1) {
-            return CComVariant("pending");
-          }
-          if (st == 2) {
-            std::string r;
-            {
-              std::lock_guard<std::mutex> lock(*oauth_mutex);
-              r = *oauth_result;
-            }
-            oauth_state->store(0); // reset for next time
-            return CComVariant(r.c_str());
-          }
-          return CComVariant(""); // idle / nothing running
         });
 
     window.get_html_frame()->register_callback(
@@ -3212,39 +2921,80 @@ void ensure_launcher_ui() {
 
   const bool needs_refresh = (!remote_rev.empty() && remote_rev != local_rev);
 
+  utils::io::create_directory(ui_dir);
+
+  // Download EVERYTHING into memory first, then swap. Never delete a working
+  // UI before the replacement is in hand: a single failed download used to
+  // leave the user with no main.html at all, which throws "needs an internet
+  // connection" at startup and bricks the launcher.
   if (needs_refresh) {
+    std::vector<std::pair<std::filesystem::path, std::string>> fetched;
+
+    bool all_ok = true;
     for (const auto *name : files) {
-      const auto target = ui_dir / name;
-      if (utils::io::file_exists(target.string())) {
-        std::error_code ec;
-        std::filesystem::remove(target, ec);
+      std::optional<std::string> data;
+      try {
+        data = utils::http::get_data(std::string(base) + name);
+      } catch (...) {
+        data = std::nullopt;
+      }
+      if (!data || data->empty()) {
+        all_ok = false;
+        break; // one miss aborts the refresh — the current UI stays intact
+      }
+      fetched.emplace_back(ui_dir / name, std::move(*data));
+    }
+
+    if (all_ok) {
+      bool written_ok = true;
+      for (const auto &entry : fetched) {
+        if (!utils::io::write_file(entry.first.string() + ".new",
+                                   entry.second)) {
+          written_ok = false;
+          break;
+        }
+      }
+
+      if (written_ok) {
+        for (const auto &entry : fetched) {
+          std::error_code ec;
+          std::filesystem::rename(entry.first.string() + ".new", entry.first,
+                                  ec);
+          if (ec) {
+            // Locked or cross-device: fall back to a direct rewrite.
+            utils::io::write_file(entry.first.string(), entry.second);
+            std::filesystem::remove(entry.first.string() + ".new", ec);
+          }
+        }
+
+        // The marker is written ONLY after a fully successful swap, so a
+        // partial refresh is retried next launch instead of being marked done.
+        utils::io::write_file(marker.string(), remote_rev);
+      } else {
+        for (const auto &entry : fetched) {
+          std::error_code ec;
+          std::filesystem::remove(entry.first.string() + ".new", ec);
+        }
       }
     }
   }
 
+  // First install / self-heal: fetch anything genuinely missing.
   for (const auto *name : files) {
     const auto target = ui_dir / name;
     if (utils::io::file_exists(target.string())) {
-      continue; // already present and up to date — leave it
+      continue;
     }
 
-    const auto url = std::string(base) + name;
     std::optional<std::string> data;
     try {
-      data = utils::http::get_data(url);
+      data = utils::http::get_data(std::string(base) + name);
     } catch (...) {
       data = std::nullopt;
     }
     if (data && !data->empty()) {
-      utils::io::create_directory(ui_dir);
       utils::io::write_file(target.string(), *data);
     }
-  }
-
-  // Remember the revision we just installed so the wipe only happens once.
-  if (needs_refresh) {
-    utils::io::create_directory(ui_dir);
-    utils::io::write_file(marker.string(), remote_rev);
   }
 }
 

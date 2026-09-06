@@ -336,7 +336,7 @@ struct component final : client_component {
 
   void post_unpack() override {
     const auto res = start_mod("\xE2\x98\x84\xEF\xB8\x8F"
-                               " BOIII"s,
+                               " AlterBOIII"s,
                                steam::SteamUtils()->GetAppID());
     evaluate_ownership_state(res);
     clean_up_on_error();

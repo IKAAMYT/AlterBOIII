@@ -167,8 +167,8 @@ void send_friend_publish() {
   if (!friend_code) {
     if (!identity_warning_shown) {
       identity_warning_shown = true;
-      toast::error("Friends unavailable",
-                   "BOIII Friend Code could not be generated.");
+      toast::error("Amis indisponibles",
+                   "Le code ami AlterBOIII n'a pas pu etre genere.");
     }
     return;
   }

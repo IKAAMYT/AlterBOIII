@@ -264,7 +264,7 @@ void display_error_dialog() {
   utils::thread::suspend_other_threads();
   show_mouse_cursor();
 
-  game::show_error(error_str, "Ezz ERROR");
+  game::show_error(error_str, "ERREUR AlterBOIII");
 
   if (game::quiet_crash()) {
     utils::thread::terminate_other_threads(exception_data.code);
@@ -308,7 +308,7 @@ void reset_state() {
         0, game::consoleLabel_e::DEFAULT,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "Ezz has tried to recover your game, but it may be unstable.\n\n"
+        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre instable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"
@@ -321,7 +321,7 @@ void reset_state() {
         game::errorParm::DROP,
         "%s (0x%08X) at %s\n\n"
         "A crash dump has been saved to:\n%s\n\n"
-        "Ezz has tried to recover your game, but it may be unstable.\n\n"
+        "AlterBOIII a tente de recuperer ta partie, mais le jeu peut etre instable.\n\n"
         "Make sure to update your graphics card drivers and "
         "install operating system updates!\n"
         "Closing or restarting Steam might also help.\n\n"
@@ -462,7 +462,7 @@ std::string generate_crash_info(const LPEXCEPTION_POINTERS exceptioninfo) {
   const resolved_frame crash_frame =
       resolve_address(exceptioninfo->ExceptionRecord->ExceptionAddress);
 
-  line("Ezz Crash Dump");
+  line("AlterBOIII Crash Dump");
   line(std::string{});
   line("Version: "s + VERSION);
   line("Timestamp: "s + get_timestamp());
@@ -548,7 +548,7 @@ void write_minidump(const LPEXCEPTION_POINTERS exceptioninfo) {
   utils::compression::zip::archive zip_file{};
   zip_file.add("crash.dmp", create_minidump(exceptioninfo));
   zip_file.add("info.txt", generate_crash_info(exceptioninfo));
-  if (!zip_file.write(crash_name, "Ezz Crash Dump")) {
+  if (!zip_file.write(crash_name, "AlterBOIII Crash Dump")) {
     utils::io::remove_file(crash_name);
   }
 }

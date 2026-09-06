@@ -721,55 +721,6 @@ game::XUID find_browser_route(const std::string &address) {
   return 0;
 }
 
-// AlterCOD heartbeat (IKAAM): reads the session written by the launcher
-// (token + pseudo) from boiii_players/user/altercod_session.json, and
-// periodically POSTs our presence (token + current server address) to the
-// friends API so friends see us as "in game". Fails silently when offline.
-constexpr const char *ALTERCOD_SESSION_FILE =
-    "boiii_players/user/altercod_session.json";
-constexpr const char *ALTERCOD_API = "https://ikaam.fr/amis/api.php?action=heartbeat";
-
-std::string altercod_read_token() {
-  std::string data;
-  if (!utils::io::read_file(ALTERCOD_SESSION_FILE, &data)) {
-    return {};
-  }
-  rapidjson::Document doc;
-  doc.Parse(data.c_str());
-  if (doc.HasParseError() || !doc.IsObject()) {
-    return {};
-  }
-  auto it = doc.FindMember("token");
-  if (it != doc.MemberEnd() && it->value.IsString()) {
-    return it->value.GetString();
-  }
-  return {};
-}
-
-void altercod_send_heartbeat() {
-  const std::string token = altercod_read_token();
-  if (token.empty()) {
-    return; // not logged in via the launcher: nothing to do
-  }
-
-  // Current server address only when actually in a game.
-  std::string server;
-  if (game::com::Com_IsInGame()) {
-    server = get_own_connect_address();
-  }
-
-  rapidjson::Document doc;
-  doc.SetObject();
-  auto &al = doc.GetAllocator();
-  doc.AddMember("token", rapidjson::Value(token.c_str(), al).Move(), al);
-  doc.AddMember("server", rapidjson::Value(server.c_str(), al).Move(), al);
-  rapidjson::StringBuffer buffer;
-  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-  doc.Accept(writer);
-
-  utils::http::post_data(ALTERCOD_API, buffer.GetString(), 5);
-}
-
 struct component final : client_component {
   void post_unpack() override {
     reload_from_disk();
@@ -799,10 +750,6 @@ struct component final : client_component {
       }
     });
     scheduler::once([] { fetch_public_ip(); }, scheduler::async, 2000ms);
-
-    // AlterCOD heartbeat (IKAAM)
-    scheduler::once([] { altercod_send_heartbeat(); }, scheduler::async, 5000ms);
-    scheduler::loop([] { altercod_send_heartbeat(); }, scheduler::async, 60s);
   }
 };
 } // namespace friends

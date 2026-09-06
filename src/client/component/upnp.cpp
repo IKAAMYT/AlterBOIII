@@ -65,7 +65,7 @@ void map_port(const uint16_t port) {
 
   const CComBSTR protocol(L"UDP");
   const CComBSTR client(widen(local).c_str());
-  const CComBSTR description(L"BOIII friend match");
+  const CComBSTR description(L"AlterBOIII friend match");
   CComPtr<IStaticPortMapping> mapping;
   const auto result = mappings->Add(port, protocol, port, client, VARIANT_TRUE,
                                     description, &mapping);
