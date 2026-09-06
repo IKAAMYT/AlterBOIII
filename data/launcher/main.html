@@ -10,11 +10,13 @@
 
 <body>
   <div class="main-container">
-    <nav class="nav-sidebar">
-      <div class="nav-logo">
-        <span class="nav-logo-text">Alter<em>BO3</em></span>
+    <header class="topbar">
+      <div class="topbar-logo" onclick="getExternal().openUrl('https://ikaam.fr/AlterCOD')" title="Site AlterBOIII">
+        <span class="topbar-logo-text">ALTER<em>BOIII</em></span>
+        <span class="topbar-hangul">알터코드</span>
       </div>
-      <div class="nav-items">
+
+      <nav class="topbar-nav">
         <button type="button" class="nav-btn active" data-page="main" title="Accueil">
           <span class="nav-icon">&#127968;</span>
           <span class="nav-label">Accueil</span>
@@ -31,90 +33,76 @@
           <span class="nav-icon">&#128225;</span>
           <span class="nav-label">Serveurs</span>
         </button>
+        <button type="button" class="nav-btn" data-page="friends" title="Amis">
+          <span class="nav-icon">&#128101;</span>
+          <span class="nav-label">Amis</span>
+        </button>
         <button type="button" class="nav-btn" data-page="settings" title="Réglages">
           <span class="nav-icon">&#9881;</span>
           <span class="nav-label">Réglages</span>
         </button>
-      </div>
-      <div class="nav-footer">
-        <div class="lang-block">
-          <div class="lang-label">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            <span>Langue</span>
-          </div>
-          <div class="lang-switch">
-            <button type="button" class="lang-btn active" data-lang-btn="fr" onclick="I18N.set('fr')" title="Français">FR</button><button type="button" class="lang-btn" data-lang-btn="en" onclick="I18N.set('en')" title="English">EN</button>
-          </div>
+      </nav>
+
+      <div class="topbar-droite">
+        <span class="topbar-version" id="versionDisplay">v1.0.0</span>
+        <div class="topbar-lang">
+          <button type="button" class="lang-btn active" data-lang-btn="fr" onclick="I18N.set('fr')" title="Français">FR</button>
+          <button type="button" class="lang-btn" data-lang-btn="en" onclick="I18N.set('en')" title="English">EN</button>
         </div>
-        <div class="credits-mini">
-          <div class="credits-mini-label">AlterCOD Team</div>
-          <div class="credits-mini-list">
-            <div class="credits-mini-item" onclick="getExternal().openUrl('https://ikaam.fr')" title="IKAAM">
-              <img src="https://i.ibb.co/bjbJFZ4G/logo3d.png" alt="IKAAM" class="credits-mini-avatar">
-              <span class="credits-mini-name">IKAAM</span>
-            </div>
-            <div class="credits-mini-item" title="As She Wants">
-              <img src="https://i.ibb.co/d0x4GGt7/ff70c8590019626465d448c38f863d08-1.png" alt="As She Wants" class="credits-mini-avatar">
-              <span class="credits-mini-name">As She Wants</span>
-            </div>
-            <div class="credits-mini-item" title="Greylock">
-              <img src="https://i.ibb.co/GQsm30SG/a76a8ad4b3c67efad17d1504cce6c6e7-2.png" alt="Greylock" class="credits-mini-avatar">
-              <span class="credits-mini-name">Greylock&#9773;</span>
-            </div>
-          </div>
-        </div>
-        <span class="nav-version" id="versionDisplay">v1.0.0</span>
       </div>
-    </nav>
+    </header>
 
     <div class="content-area">
 
       <div id="mainPage" class="page active">
         <div class="home-stage">
 
-          <!-- Background image -->
-          <div class="home-bg"></div>
-          <canvas id="homeParticles" class="home-particles"></canvas>
-          <div class="home-bg-fade"></div>
+          <!-- Pastilles flottantes : notifications, reglages, compteurs live -->
+          <div class="home-topright">
+            <div class="home-icones">
+              <button type="button" class="icone-btn" title="Notifications">&#128276;</button>
+              <button type="button" class="icone-btn" data-goto="settings" title="Réglages">&#9881;</button>
+            </div>
+          </div>
 
-          <!-- Background ambient audio -->
+          <!-- Hero -->
+          <div class="home-hero">
+            <div class="home-bg"></div>
+            <canvas id="homeParticles" class="home-particles"></canvas>
+            <div class="home-bg-fade"></div>
+
+            <div class="home-hero-inner">
+              <div class="home-kicker">Multijoueur</div>
+              <div class="home-brand">
+                <span class="title-white">Alter</span><span class="title-orange">BOIII</span>
+                <span class="home-hangul">알터</span>
+              </div>
+              <p class="description">
+                Rejoins la communauté AlterBOIII et vis l'expérience
+                Black Ops III comme jamais auparavant.
+              </p>
+              <div class="home-actions">
+                <button type="button" class="home-play" id="playBtn">&#9654;&nbsp; Jouer</button>
+                <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
+                  <span class="gear-btn-icon">&#9881;</span>
+                  <span class="gear-btn-label">Options</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="home-audio-ctrl">
+              <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
+                <span id="homeAudioIcon">&#128266;</span>
+              </button>
+              <input type="range" class="home-volume-slider" id="homeVolumeSlider" min="0" max="100" value="10" title="Volume">
+            </div>
+          </div>
+
           <audio id="homeAudio" loop preload="auto">
             <source src="https://ikaam.fr/assets/audio/MW4.mp3" type="audio/mpeg">
           </audio>
-          <div class="home-audio-ctrl">
-            <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
-              <span id="homeAudioIcon">&#128266;</span>
-            </button>
-            <input type="range" class="home-volume-slider" id="homeVolumeSlider" min="0" max="100" value="10" title="Volume">
-          </div>
 
-          <!-- Top bar: title + launch options -->
-          <div class="home-topbar">
-            <div class="home-brand">
-              <span class="title-white">Alter</span><span class="title-orange">BO3</span>
-              <span class="home-hangul">알터</span>
-            </div>
-
-            <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
-              <span class="gear-btn-icon">&#9881;</span>
-              <span class="gear-btn-label">Options</span>
-            </button>
-          </div>
-
-          <!-- Stats communauté (joueurs + serveurs) — sous Options -->
-          <div class="home-stats" id="homeStats">
-            <div class="home-stat">
-              <span class="home-stat-dot" id="statDot"></span>
-              <span class="home-stat-num" id="statPlayers" data-target="0" data-current="0">0</span><span class="stat-trend" id="statPlayersTrend"></span>
-              <span class="home-stat-label">Joueurs en ligne</span>
-            </div>
-            <div class="home-stat">
-              <span class="home-stat-num" id="statServers" data-target="0" data-current="0">0</span>
-              <span class="home-stat-label">Serveurs actifs</span>
-            </div>
-          </div>
-
-          <!-- Launch options modal (hidden until .open) -->
+          <!-- Fenetre des options de lancement -->
           <div class="launch-dropdown" id="launchDropdown">
             <div class="launch-dropdown-header">Options de lancement<button type="button" class="launch-dropdown-close" id="launchCloseBtn" title="Fermer">&times;</button></div>
             <div class="launch-dropdown-list">
@@ -133,16 +121,17 @@
             </div>
           </div>
 
-          <!-- Bottom panel: pseudo + play + links -->
+          <!-- Bandeau bas : profil + raccourcis -->
           <div class="home-bottom">
             <div class="home-bottom-inner">
 
-              <div class="home-row">
-                <div class="home-pseudo">
+              <div class="carte carte-profil">
+                <div class="profil-avatar" id="profilAvatar">A</div>
+                <div class="profil-infos">
                   <label class="home-pseudo-label" for="playerName">Nom de joueur</label>
                   <input type="text" class="home-pseudo-input" id="playerName" placeholder="Ton pseudo..." maxlength="16" autocomplete="off" spellcheck="false">
+                  <div class="profil-statut"><span class="home-stat-dot"></span> En ligne</div>
                 </div>
-
                 <div class="home-links">
                   <button type="button" class="home-link home-link-discord" id="discordBtn" onclick="getExternal().openUrl('https://discord.gg/BdkJ5DukUm')" title="Rejoindre le Discord IKAAM">
                     <span class="home-link-ic discord-glyph">&#128172;</span>
@@ -151,17 +140,51 @@
                       <span class="discord-online-dot"></span><span id="discordOnlineCount">0</span>
                     </span>
                   </button>
-                  <button type="button" class="home-link" onclick="getExternal().openUrl('https://ikaam.fr/AlterCOD')" title="Site IKAAM">
-                    <span class="home-link-ic">&#127760;</span><span>Site IKAAM</span>
+                  <button type="button" class="home-link" onclick="getExternal().openUrl('https://ikaam.fr/AlterCOD')" title="Site AlterBOIII">
+                    <span class="home-link-ic">&#127760;</span><span>Site AlterBOIII</span>
                   </button>
                 </div>
               </div>
 
-              <button type="button" class="home-play" id="playBtn">&#9654;&nbsp; JOUER</button>
+              <div class="carte carte-equipe">
+                <div class="carte-equipe-titre">AlterBOIII Team</div>
+                <div class="equipe-rangee">
+                  <span class="equipe-membre" title="IKAAM" onclick="getExternal().openUrl('https://ikaam.fr')" style="cursor:pointer;">
+                    <img src="https://i.ibb.co/bjbJFZ4G/logo3d.png" alt="IKAAM">
+                  </span>
+                  <span class="equipe-membre" title="As She Wants">
+                    <img src="https://i.ibb.co/d0x4GGt7/ff70c8590019626465d448c38f863d08-1.png" alt="As She Wants">
+                  </span>
+                  <span class="equipe-membre" title="Greylock">
+                    <img src="https://i.ibb.co/GQsm30SG/a76a8ad4b3c67efad17d1504cce6c6e7-2.png" alt="Greylock">
+                  </span>
+                  <span class="equipe-noms">IKAAM &#128081;<br>As She Wants &middot; Greylock</span>
+                </div>
+              </div>
+
+              <button type="button" class="carte carte-stat" data-goto="servers" title="Voir les serveurs">
+                <span class="home-stat-ic">&#127918;</span>
+                <span class="home-stat-txt">
+                  <span class="carte-stat-num" id="statPlayers" data-target="0" data-current="0">0</span><span class="stat-trend" id="statPlayersTrend"></span>
+                  <span class="carte-stat-label">Joueurs en ligne</span>
+                </span>
+                <span class="home-stat-dot" id="statDot"></span>
+                <span class="carte-stat-fleche">&#8250;</span>
+              </button>
+
+              <button type="button" class="carte carte-stat" data-goto="servers" title="Voir les serveurs">
+                <span class="home-stat-ic">&#128421;</span>
+                <span class="home-stat-txt">
+                  <span class="carte-stat-num" id="statServers" data-target="0" data-current="0">0</span>
+                  <span class="carte-stat-label">Serveurs actifs</span>
+                </span>
+                <span class="carte-stat-fleche">&#8250;</span>
+              </button>
+
             </div>
           </div>
 
-          <!-- Hidden elements kept for JS compatibility -->
+          <!-- Elements conserves pour la compatibilite de main.js -->
           <div style="display:none;">
             <div class="version-selector-container" id="versionDropdown">
               <button type="button" id="verDropDisplay"><span id="verDropText">Latest (Auto-update)</span></button>
@@ -359,6 +382,53 @@
           </div>
         </div>
       </div><!-- end page-scroll-inner -->
+    </div>
+
+    <div id="friendsPage" class="page">
+      <div class="page-scroll-inner">
+        <div class="page-header">
+          <h2 class="page-title">Amis</h2>
+          <div class="page-sub">Ta liste locale, celle que le jeu utilise pour le menu social.</div>
+        </div>
+
+        <div class="amis-identite">
+          <div class="amis-identite-ic">&#127918;</div>
+          <div class="amis-identite-txt">
+            <div class="amis-identite-label">Ton code ami AlterBOIII</div>
+            <div class="amis-code" id="amisCode">—</div>
+            <div class="amis-identite-aide">Donne-le à tes potes : c'est ce code qu'ils collent ci-dessous pour t'ajouter.</div>
+          </div>
+          <button type="button" class="amis-copier" id="amisCopierBtn">Copier</button>
+        </div>
+
+        <div class="amis-ajout">
+          <div class="amis-ajout-titre">Ajouter un ami</div>
+          <div class="amis-ajout-aide">Entre un pseudo et le code ami de ton pote.</div>
+          <div class="amis-ajout-champs">
+            <input type="text" class="amis-input" id="amisAddNom" placeholder="Pseudo" maxlength="24" autocomplete="off" spellcheck="false">
+            <input type="text" class="amis-input" id="amisAddCode" placeholder="Code ami AlterBOIII" maxlength="20" autocomplete="off" spellcheck="false" inputmode="numeric">
+            <button type="button" class="amis-ajout-btn" id="amisAddBtn">Ajouter</button>
+          </div>
+          <div class="amis-ajout-msg" id="amisAddMsg"></div>
+        </div>
+
+        <div class="amis-barre">
+          <span class="amis-compte" id="amisCompte">Aucun ami enregistré</span>
+          <button type="button" class="amis-refresh" id="amisRefreshBtn">Actualiser</button>
+        </div>
+
+        <div class="amis-liste" id="amisListe"></div>
+
+        <div class="amis-vide" id="amisVide">
+          <div class="amis-vide-ic">&#128101;</div>
+          <div class="amis-vide-titre">Aucun ami pour le moment</div>
+          <div class="amis-vide-txt">
+            Demande son code ami à ton pote et ajoute-le avec le formulaire ci-dessus.
+            Il apparaîtra aussitôt dans le menu social en jeu, où tu pourras le rejoindre
+            d'un clic quand il sera en partie.
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="settingsPage" class="page">

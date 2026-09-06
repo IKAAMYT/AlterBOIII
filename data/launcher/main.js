@@ -4611,4 +4611,270 @@ fetchReleases();
   }
 })();
 
+
+/* ─────────────────────────────────────────────────────────────
+   ALTERBOIII V2 — additions de l'interface
+   Page Amis (lecture de friends.json via le C++), cartes stats
+   cliquables, avatar du profil. ES5 uniquement.
+   ───────────────────────────────────────────────────────────── */
+
+/* ── Raccourcis data-goto : cartes et icones qui changent de page ── */
+(function initGoto() {
+  var cibles = document.querySelectorAll('[data-goto]');
+  for (var i = 0; i < cibles.length; i++) {
+    (function(el) {
+      el.onclick = function() {
+        var page = el.getAttribute('data-goto');
+        // setPage vit dans l'IIFE de main.js : il n'est PAS sur window.
+        if (page && typeof setPage === 'function') setPage(page);
+      };
+    })(cibles[i]);
+  }
+})();
+
+/* ── Avatar du profil : initiale du pseudo ── */
+(function initAvatarProfil() {
+  var input = document.getElementById('playerName');
+  var av = document.getElementById('profilAvatar');
+  if (!input || !av) return;
+
+  function maj() {
+    var v = (input.value || '').replace(/^\s+/, '');
+    av.textContent = v ? v.charAt(0).toUpperCase() : 'A';
+  }
+  input.onkeyup = (function(precedent) {
+    return function(e) {
+      if (precedent) { try { precedent.call(this, e); } catch (err) {} }
+      maj();
+    };
+  })(input.onkeyup);
+  setTimeout(maj, 400);
+  setTimeout(maj, 1500);
+})();
+
+/* ─────────────────────────────────────────────────────────────
+   PAGE AMIS
+   Aucun serveur, aucun compte : on lit le friends.json que le jeu
+   ecrit lui-meme, via les callbacks C++ readFriends /
+   readFriendIdentity qui existent deja.
+   ───────────────────────────────────────────────────────────── */
+(function initAmis() {
+  var codeEl    = document.getElementById('amisCode');
+  var copierBtn = document.getElementById('amisCopierBtn');
+  var compteEl  = document.getElementById('amisCompte');
+  var listeEl   = document.getElementById('amisListe');
+  var videEl    = document.getElementById('amisVide');
+  var refreshBtn = document.getElementById('amisRefreshBtn');
+  if (!listeEl) return;
+
+  var monCode = '';
+
+  function initiale(nom) {
+    nom = (nom || '').replace(/^\s+/, '');
+    return nom ? nom.charAt(0).toUpperCase() : '?';
+  }
+
+  function parseJson(brut) {
+    if (!brut || typeof brut !== 'string') return null;
+    try { return JSON.parse(brut); } catch (e) { return null; }
+  }
+
+  /* readFriendIdentity renvoie {friend_code, name}. On l'appelle
+     directement dans un try : sous MSHTML, tester la propriete
+     declencherait le callback a vide. */
+  function chargerIdentite() {
+    var brut = '';
+    try {
+      var ex = getExternal();
+      if (!ex) return;
+      brut = ex.readFriendIdentity();
+    } catch (e) { return; }
+
+    var d = parseJson(brut);
+    if (!d) return;
+    monCode = d.friend_code || '';
+    if (codeEl) codeEl.textContent = monCode || 'indisponible';
+  }
+
+  function chargerAmis() {
+    var brut = '';
+    try {
+      var ex = getExternal();
+      if (!ex) return;
+      brut = ex.readFriends();
+    } catch (e) { brut = ''; }
+
+    var liste = parseJson(brut);
+    if (!liste || typeof liste.length !== 'number') liste = [];
+
+    listeEl.innerHTML = '';
+
+    if (!liste.length) {
+      if (videEl) videEl.style.display = '';
+      if (compteEl) compteEl.textContent = 'Aucun ami enregistré';
+      return;
+    }
+    if (videEl) videEl.style.display = 'none';
+    if (compteEl) {
+      compteEl.textContent = liste.length +
+        (liste.length > 1 ? ' amis enregistrés' : ' ami enregistré');
+    }
+
+    for (var i = 0; i < liste.length; i++) {
+      var f = liste[i] || {};
+      var nom = f.name || 'Inconnu';
+      var sid = f.steam_id || f.xuid || '';
+      var enJeu = !!(f.server_address || f.state === 2);
+
+      var ligne = document.createElement('div');
+      ligne.className = 'ami-ligne';
+
+      var av = document.createElement('div');
+      av.className = 'ami-avatar';
+      av.textContent = initiale(nom);
+
+      var infos = document.createElement('div');
+      infos.className = 'ami-infos';
+
+      var nomEl = document.createElement('div');
+      nomEl.className = 'ami-nom';
+      nomEl.textContent = nom;
+
+      var etat = document.createElement('div');
+      etat.className = 'ami-etat' + (enJeu ? ' en-jeu' : '');
+      var pt = document.createElement('span');
+      pt.className = 'ami-point';
+      etat.appendChild(pt);
+      etat.appendChild(document.createTextNode(enJeu ? 'En partie' : 'Hors ligne'));
+
+      infos.appendChild(nomEl);
+      infos.appendChild(etat);
+
+      var codeAmi = document.createElement('div');
+      codeAmi.className = 'ami-code';
+      codeAmi.textContent = sid ? String(sid) : '';
+
+      var retirer = document.createElement('button');
+      retirer.type = 'button';
+      retirer.className = 'ami-retirer';
+      retirer.textContent = 'Retirer';
+      (function(id, pseudo) {
+        retirer.onclick = function() {
+          if (!id) return;
+          try { getExternal().removeFriend(String(id)); } catch (e) {}
+          chargerAmis();
+        };
+      })(sid, nom);
+
+      ligne.appendChild(av);
+      ligne.appendChild(infos);
+      ligne.appendChild(codeAmi);
+      ligne.appendChild(retirer);
+      listeEl.appendChild(ligne);
+    }
+  }
+
+  /* Copie du code ami. execCommand plutot que navigator.clipboard :
+     le presse-papier moderne exige un contexte securise, or la page
+     est chargee en file://. */
+  if (copierBtn) {
+    copierBtn.onclick = function() {
+      if (!monCode) return;
+      var zone = document.createElement('textarea');
+      zone.value = monCode;
+      zone.style.position = 'fixed';
+      zone.style.opacity = '0';
+      document.body.appendChild(zone);
+      zone.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(zone);
+
+      if (ok) {
+        copierBtn.textContent = 'Copié !';
+        copierBtn.className = 'amis-copier ok';
+        setTimeout(function() {
+          copierBtn.textContent = 'Copier';
+          copierBtn.className = 'amis-copier';
+        }, 1600);
+      }
+    };
+  }
+
+  if (refreshBtn) {
+    refreshBtn.onclick = function() { chargerIdentite(); chargerAmis(); };
+  }
+
+  /* ── Ajout par code ami ──
+     addFriend cote C++ exige DEUX CHAINES et un id numerique non nul :
+     `strtoull(...) == 0` renvoie "error". Il repond "ok", "duplicate"
+     ou "error". Le jeu relit friends.json a l'ouverture du menu social. */
+  var addCode = document.getElementById('amisAddCode');
+  var addNom  = document.getElementById('amisAddNom');
+  var addBtn  = document.getElementById('amisAddBtn');
+  var addMsg  = document.getElementById('amisAddMsg');
+
+  function message(texte, type) {
+    if (!addMsg) return;
+    addMsg.textContent = texte || '';
+    addMsg.className = 'amis-ajout-msg' + (texte ? ' actif ' + (type || '') : '');
+  }
+
+  function ajouter() {
+    if (!addCode || !addNom) return;
+    // On ne retire QUE les espaces (les codes se collent souvent avec).
+    // Filtrer les lettres ici masquerait la vraie erreur : une saisie
+    // non numerique deviendrait une saisie vide, avec le mauvais message.
+    var code = (addCode.value || '').replace(/\s+/g, '');
+    var nom  = (addNom.value || '').replace(/^\s+|\s+$/g, '');
+
+    if (!nom) { message('Donne-lui un pseudo pour le reconnaitre.', 'no'); addNom.focus(); return; }
+    if (!code) { message('Entre le code ami de ton pote.', 'no'); addCode.focus(); return; }
+    // Meme regle que le launcher d'Ezz : 5 a 20 chiffres. Un code trop
+    // court est rejete ici plutot que de partir en erreur cote C++.
+    if (!/^[0-9]{5,20}$/.test(code)) {
+      message('Un code ami est une suite de 5 a 20 chiffres.', 'no');
+      addCode.focus();
+      return;
+    }
+    if (/^0+$/.test(code)) { message('Ce code est invalide.', 'no'); return; }
+    if (monCode && code === monCode) { message('C\'est ton propre code ami.', 'no'); return; }
+
+    var res = '';
+    try { res = getExternal().addFriend(code, nom); } catch (e) { res = ''; }
+
+    if (res === 'ok') {
+      message(nom + ' ajoute. Il apparaitra dans le menu social en jeu.', 'ok');
+      addCode.value = ''; addNom.value = '';
+      chargerAmis();
+    } else if (res === 'duplicate') {
+      message('Ce code est deja dans ta liste.', 'no');
+    } else {
+      message('Ajout impossible : verifie que le code ne contient que des chiffres.', 'no');
+    }
+  }
+
+  if (addBtn) addBtn.onclick = ajouter;
+  // Entree valide le formulaire depuis l'un ou l'autre champ.
+  function surEntree(e) {
+    e = e || window.event;
+    if (e && (e.keyCode === 13 || e.which === 13)) ajouter();
+  }
+  if (addCode) addCode.onkeydown = surEntree;
+  if (addNom)  addNom.onkeydown  = surEntree;
+
+  /* Recharge en entrant sur la page, et toutes les 20 s si elle est ouverte :
+     le jeu reecrit friends.json quand la presence change. */
+  var setPageOrig = setPage;
+  setPage = function(cible) {
+    setPageOrig(cible);
+    if (cible === 'friends') { chargerIdentite(); chargerAmis(); }
+  };
+  setInterval(function() {
+    var page = document.getElementById('friendsPage');
+    if (page && page.className.indexOf('active') !== -1) chargerAmis();
+  }, 20000);
+
+  setTimeout(function() { chargerIdentite(); chargerAmis(); }, 1200);
+})();
 })();
