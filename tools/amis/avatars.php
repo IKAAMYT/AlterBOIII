@@ -68,11 +68,18 @@ function preparer_dossier(): void
     if (!is_dir(DOSSIER) && !mkdir(DOSSIER, 0755, true) && !is_dir(DOSSIER)) {
         erreur('storage_unavailable', 500);
     }
-    // Ceinture et bretelles : rien ne doit s'exécuter dans ce dossier.
-    $ht = DOSSIER . '/.htaccess';
-    if (!file_exists($ht)) {
-        @file_put_contents($ht, "php_flag engine off\nOptions -ExecCGI\n");
-    }
+    // PAS de .htaccess ici.
+    //
+    // La version precedente y ecrivait "php_flag engine off". Chez IONOS,
+    // PHP tourne en FastCGI : php_flag est une directive inconnue d'Apache,
+    // qui repond alors 500 sur TOUT le dossier — les images devenaient
+    // illisibles.
+    //
+    // La protection ne repose de toute facon pas sur Apache : le nom de
+    // fichier est construit a partir d'un code valide contre /^[0-9]{5,20}$/
+    // et suffixe .jpg en dur, donc rien d'executable ne peut y atterrir ; et
+    // le contenu est integralement re-encode par GD, ce qui detruit toute
+    // charge utile cachee dans l'image d'origine.
 }
 
 /**
@@ -172,17 +179,22 @@ if ($action === 'set') {
     $fichier_jeton = chemin_jeton($code);
     $jeton_fourni = (string) ($_REQUEST['token'] ?? '');
 
+    // Le dossier de stockage est SERVI PAR LE WEB : n'importe qui peut
+    // ouvrir <code>.token dans un navigateur. On n'y ecrit donc jamais le
+    // jeton lui-meme, seulement son empreinte — inutilisable pour
+    // s'authentifier, exactement comme un mot de passe hache.
     if (is_file($fichier_jeton)) {
-        // Code déjà revendiqué : le jeton devient obligatoire.
-        $attendu = trim((string) @file_get_contents($fichier_jeton));
-        if ($attendu === '' || !hash_equals($attendu, $jeton_fourni)) {
+        $empreinte = trim((string) @file_get_contents($fichier_jeton));
+        if ($empreinte === '' ||
+            !hash_equals($empreinte, hash('sha256', $jeton_fourni))) {
             erreur('forbidden', 403);
         }
-        $jeton = $attendu;
+        $jeton = $jeton_fourni;
     } else {
-        // Première fois : on revendique le code et on délivre le jeton.
+        // Première fois : on revendique le code. Le jeton en clair n'est
+        // renvoye qu'ici, une seule fois ; le serveur n'en garde que le hash.
         $jeton = bin2hex(random_bytes(20));
-        if (@file_put_contents($fichier_jeton, $jeton) === false) {
+        if (@file_put_contents($fichier_jeton, hash('sha256', $jeton)) === false) {
             erreur('storage_unavailable', 500);
         }
     }
@@ -228,8 +240,10 @@ if ($action === 'delete') {
         erreur('bad_code');
     }
     $fichier_jeton = chemin_jeton($code);
-    $attendu = is_file($fichier_jeton) ? trim((string) @file_get_contents($fichier_jeton)) : '';
-    if ($attendu === '' || !hash_equals($attendu, (string) ($_REQUEST['token'] ?? ''))) {
+    $empreinte = is_file($fichier_jeton)
+        ? trim((string) @file_get_contents($fichier_jeton)) : '';
+    if ($empreinte === '' ||
+        !hash_equals($empreinte, hash('sha256', (string) ($_REQUEST['token'] ?? '')))) {
         erreur('forbidden', 403);
     }
     @unlink(chemin_image($code));

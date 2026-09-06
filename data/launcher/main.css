@@ -730,88 +730,6 @@ a { color: #f2c411; text-decoration: none; }
 .home-volume-slider { width: 74px; accent-color: var(--or); cursor: pointer; }
 
 /* ---- Fenêtre des options de lancement ---- */
-.launch-dropdown {
-  position: absolute;
-  z-index: 40;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -46%) scale(.97);
-  width: min(640px, calc(100% - 80px));
-  max-height: 74%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--bord);
-  border-radius: var(--r-l);
-  background: rgba(16, 14, 12, 0.97);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--transition), transform var(--transition), visibility var(--transition);
-}
-.launch-dropdown.open {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, -50%) scale(1);
-}
-.launch-dropdown-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 22px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--texte);
-}
-.launch-dropdown-close {
-  border: 0;
-  background: transparent;
-  color: var(--texte-3);
-  font-size: 21px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--transition);
-}
-.launch-dropdown-close:hover { color: var(--texte); }
-.launch-dropdown-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px;
-  padding: 18px 22px 22px;
-  overflow-y: auto;
-}
-.launch-option-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--r-s);
-  background: rgba(255, 255, 255, 0.02);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-.launch-option-card:hover { border-color: rgba(255, 255, 255, 0.14); }
-.launch-option-card.selected {
-  border-color: var(--bord-fort);
-  background: rgba(242, 196, 17, 0.08);
-}
-.launch-option-dot {
-  width: 9px; height: 9px;
-  flex: 0 0 9px;
-  border-radius: 50%;
-  border: 1.5px solid var(--texte-3);
-  transition: all var(--transition);
-}
-.launch-option-card.selected .launch-option-dot {
-  border-color: var(--or);
-  background: var(--or);
-  box-shadow: 0 0 9px var(--or-lueur);
-}
-.launch-option-name { font-size: 13px; color: var(--texte-2); }
-.launch-option-card.selected .launch-option-name { color: var(--texte); }
 
 
 
@@ -2986,3 +2904,78 @@ cards
   background-position: center;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
 }
+
+/* ============================================================
+   V5 — CORRECTIFS
+   ============================================================ */
+
+/* -- Fenetre des options de lancement --
+   J'avais redefini .launch-dropdown en carte centree, alors que la
+   version d'origine (plus bas dans le fichier, donc gagnante) est un
+   voile plein ecran avec en-tete et liste en deux blocs distincts.
+   Les deux se marchaient dessus : le panneau atterrissait en haut a
+   gauche. On garde la structure d'origine, on la reskinne en V2. */
+.launch-dropdown {
+  background: rgba(6, 5, 4, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.launch-dropdown.open > .launch-dropdown-header,
+.launch-dropdown.open > .launch-dropdown-list {
+  background: rgba(18, 16, 13, 0.96);
+}
+.launch-dropdown > .launch-dropdown-header,
+.launch-dropdown > .launch-dropdown-list {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.launch-dropdown > .launch-dropdown-header { border-radius: var(--r-l) var(--r-l) 0 0; }
+.launch-dropdown > .launch-dropdown-list   { border-radius: 0 0 var(--r-l) var(--r-l); }
+.launch-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--texte);
+}
+.launch-dropdown-close {
+  border: 0;
+  background: transparent;
+  color: var(--texte-3);
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.launch-dropdown-close:hover { color: var(--texte); }
+.launch-option-card {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--r-s);
+}
+.launch-option-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+.launch-option-card.active,
+.launch-option-card.selected {
+  border-color: var(--bord-fort);
+  background: rgba(242, 196, 17, 0.08);
+}
+.launch-option-card.active .launch-option-dot,
+.launch-option-card.selected .launch-option-dot {
+  border-color: var(--or);
+  background: var(--or);
+  box-shadow: 0 0 9px var(--or-lueur);
+}
+.launch-option-name { font-size: 13.5px; color: var(--texte-2); }
+.launch-option-card.active .launch-option-name,
+.launch-option-card.selected .launch-option-name { color: var(--texte); }
+
+/* -- Alignement des deux cartes de stats --
+   .carte-stat-num est en display:block ; la fleche de tendance qui le
+   suit passait donc a la ligne, ajoutant une hauteur a la carte des
+   joueurs et decalant son chiffre vers le haut. */
+.carte-stat-num { display: inline-block; vertical-align: baseline; }
+.stat-trend:empty { display: none; }
