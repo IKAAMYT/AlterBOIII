@@ -2979,3 +2979,41 @@ cards
    joueurs et decalant son chiffre vers le haut. */
 .carte-stat-num { display: inline-block; vertical-align: baseline; }
 .stat-trend:empty { display: none; }
+
+/* ---- V5.1 : menu Options compact ----
+   Une seule colonne de grosses lignes obligeait a defiler pour voir les
+   12 options. On passe en grille : moitie moins haut, tout visible. */
+.launch-dropdown > .launch-dropdown-header,
+.launch-dropdown > .launch-dropdown-list { max-width: 640px; }
+
+.launch-dropdown-header { padding: 16px 20px 12px; font-size: 15px; }
+
+.launch-dropdown-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  padding: 4px 20px 20px;
+  max-height: 62vh;
+}
+.launch-option-card {
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-s);
+}
+.launch-option-card:hover { transform: none; }
+.launch-option-dot {
+  width: 11px; height: 11px;
+  min-width: 11px; max-width: 11px; min-height: 11px;
+  flex: 0 0 11px;
+  border-width: 1.5px;
+}
+.launch-option-name {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .launch-dropdown-list { grid-template-columns: minmax(0, 1fr); }
+}

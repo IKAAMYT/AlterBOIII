@@ -24,7 +24,6 @@ declare(strict_types=1);
 // Le launcher est charge en file:// : son origine vaut "null", donc
 // il faut autoriser explicitement, sinon le navigateur bloque la reponse.
 header('Access-Control-Allow-Origin: *');
-header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -36,7 +35,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
 
 // ── Réglages ────────────────────────────────────────────────────────
 const DOSSIER       = __DIR__ . '/avatars';   // stockage des images
-const URL_PUBLIQUE  = 'https://ikaam.fr/amis/avatars';
+// Les images ne sont PLUS servies en statique depuis le dossier : chez
+// IONOS, ce dossier renvoyait 500 quelle que soit la configuration. On les
+// sert via le script lui-meme (action=img), ce qui rend le stockage
+// totalement independant de la configuration Apache.
+const URL_PUBLIQUE  = 'https://ikaam.fr/amis/avatars.php?action=img&code=';
 const TAILLE_PX     = 128;                    // côté de l'image finale
 const MAX_ENVOI     = 400 * 1024;             // 400 Ko de charge utile max
 const MAX_CODES     = 200;                    // codes demandés par appel
@@ -44,6 +47,7 @@ const DELAI_ENVOI   = 20;                     // secondes entre deux envois
 
 function repondre(array $data, int $code = 200): void
 {
+    header('Content-Type: application/json; charset=utf-8');
     http_response_code($code);
     echo json_encode($data, JSON_UNESCAPED_SLASHES);
     exit;
@@ -208,7 +212,7 @@ if ($action === 'set') {
         'ok'    => true,
         'token' => $jeton,
         // Le paramètre v force le contournement du cache navigateur.
-        'url'   => URL_PUBLIQUE . '/' . $code . '.jpg?v=' . time(),
+        'url'   => URL_PUBLIQUE . $code . '&v=' . time(),
     ]);
 }
 
@@ -227,11 +231,38 @@ if ($action === 'get') {
     foreach ($codes as $code) {
         $fichier = chemin_image($code);
         if (is_file($fichier)) {
-            $avatars[$code] = URL_PUBLIQUE . '/' . $code . '.jpg?v=' . filemtime($fichier);
+            $avatars[$code] = URL_PUBLIQUE . $code . '&v=' . filemtime($fichier);
         }
     }
 
     repondre(['ok' => true, 'avatars' => $avatars ?: (object) []]);
+}
+
+if ($action === 'img') {
+    $code = trim((string) ($_REQUEST['code'] ?? ''));
+    if (!code_valide($code)) {
+        erreur('bad_code');
+    }
+    $fichier = chemin_image($code);
+    if (!is_file($fichier)) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(404);
+        echo '{"ok":false,"error":"not_found"}';
+        exit;
+    }
+
+    $empreinte = '"' . md5($code . '-' . filemtime($fichier)) . '"';
+    if (trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $empreinte) {
+        http_response_code(304);
+        exit;
+    }
+
+    header('Content-Type: image/jpeg');
+    header('Content-Length: ' . filesize($fichier));
+    header('Cache-Control: public, max-age=300');
+    header('ETag: ' . $empreinte);
+    readfile($fichier);
+    exit;
 }
 
 if ($action === 'delete') {
