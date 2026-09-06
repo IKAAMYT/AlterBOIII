@@ -4728,6 +4728,7 @@ fetchReleases();
 
       var ligne = document.createElement('div');
       ligne.className = 'ami-ligne';
+      if (sid) ligne.setAttribute('data-code', String(sid));
 
       var av = document.createElement('div');
       av.className = 'ami-avatar';
@@ -4771,6 +4772,17 @@ fetchReleases();
       ligne.appendChild(codeAmi);
       ligne.appendChild(retirer);
       listeEl.appendChild(ligne);
+    }
+
+    // Les photos arrivent apres coup : un seul appel groupe pour toute
+    // la liste, avec un cache pour ne pas re-demander a chaque refresh.
+    if (window.chargerPhotosAmis) {
+      var codes = [];
+      for (var c = 0; c < liste.length; c++) {
+        var id = liste[c] && (liste[c].steam_id || liste[c].xuid);
+        if (id) codes.push(String(id));
+      }
+      window.chargerPhotosAmis(codes);
     }
   }
 
@@ -4961,5 +4973,201 @@ fetchReleases();
     if (estInteractif(e.target || e.srcElement)) return;
     refletEtat(pont('winMaximize'));
   };
+})();
+
+/* ─────────────────────────────────────────────────────────────
+   PHOTOS DE PROFIL (IKAAM)
+   La tienne part sur ikaam.fr/amis/avatars.php, celles de tes amis
+   sont recuperees par code. Le premier envoi revendique ton code et
+   renvoie un jeton, conserve en local : sans lui, personne ne peut
+   remplacer ta photo. ES5 uniquement.
+   ───────────────────────────────────────────────────────────── */
+(function initPhotos() {
+  var API = 'https://ikaam.fr/amis/avatars.php';
+  var CLE_JETON = 'alterboiii_avatar_token';
+  var CLE_URL = 'alterboiii_avatar_url';
+  var TAILLE = 128;
+
+  var avatarProfil = document.getElementById('profilAvatar');
+  var champFichier = document.getElementById('avatarFile');
+  if (!avatarProfil || !champFichier) return;
+
+  var monCodeAmi = '';
+  var cacheAmis = {};   // code -> url
+
+  function lire(cle) {
+    try { return localStorage.getItem(cle) || ''; } catch (e) { return ''; }
+  }
+  function ecrire(cle, valeur) {
+    try { localStorage.setItem(cle, valeur); } catch (e) {}
+  }
+
+  /* Requete vers l'API. Le launcher est charge en file://, donc son
+     origine vaut "null" : c'est le Access-Control-Allow-Origin: * du
+     PHP qui rend la reponse lisible. */
+  function api(corps, ok) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', API, true);
+    xhr.timeout = 15000;
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      var d = null;
+      if (xhr.status === 200) {
+        try { d = JSON.parse(xhr.responseText); } catch (e) { d = null; }
+      }
+      ok(d);
+    };
+    xhr.ontimeout = function() { ok(null); };
+    try { xhr.send(corps); } catch (e) { ok(null); }
+  }
+
+  function encoder(obj) {
+    var out = [];
+    for (var k in obj) {
+      if (obj.hasOwnProperty(k)) {
+        out.push(encodeURIComponent(k) + '=' + encodeURIComponent(obj[k]));
+      }
+    }
+    return out.join('&');
+  }
+
+  /* Affiche une image dans un cercle d'avatar, en remplacant l'initiale. */
+  function peindre(element, url, initiale) {
+    if (!element) return;
+    if (url) {
+      element.style.backgroundImage = 'url("' + url + '")';
+      element.style.backgroundSize = 'cover';
+      element.style.backgroundPosition = 'center';
+      element.textContent = '';
+      element.className += (element.className.indexOf('a-photo') === -1) ? ' a-photo' : '';
+    } else {
+      element.style.backgroundImage = '';
+      element.textContent = initiale || '?';
+      element.className = element.className.replace(/\s*a-photo/g, '');
+    }
+  }
+
+  /* ── Ma photo ── */
+  function appliquerMaPhoto() {
+    var url = lire(CLE_URL);
+    if (url) peindre(avatarProfil, url, null);
+  }
+
+  /* Redimensionne cote client : 128x128, JPEG. Une photo de 4 Mo
+     devient ~8 Ko, donc l'envoi est instantane et le serveur n'a pas
+     a encaisser des fichiers d'appareil photo. */
+  function redimensionner(fichier, ok) {
+    var lecteur = new FileReader();
+    lecteur.onload = function() {
+      var img = new Image();
+      img.onload = function() {
+        var cote = Math.min(img.width, img.height);
+        var c = document.createElement('canvas');
+        c.width = c.height = TAILLE;
+        var ctx = c.getContext('2d');
+        ctx.drawImage(img,
+          Math.floor((img.width - cote) / 2), Math.floor((img.height - cote) / 2),
+          cote, cote, 0, 0, TAILLE, TAILLE);
+        try { ok(c.toDataURL('image/jpeg', 0.82)); } catch (e) { ok(null); }
+      };
+      img.onerror = function() { ok(null); };
+      img.src = lecteur.result;
+    };
+    lecteur.onerror = function() { ok(null); };
+    lecteur.readAsDataURL(fichier);
+  }
+
+  avatarProfil.onclick = function() {
+    if (!monCodeAmi) {
+      if (window.showToast) showToast('Code ami indisponible pour le moment.', 'error');
+      return;
+    }
+    champFichier.click();
+  };
+
+  champFichier.onchange = function() {
+    var f = champFichier.files && champFichier.files[0];
+    champFichier.value = '';
+    if (!f) return;
+
+    if (f.size > 8 * 1024 * 1024) {
+      if (window.showToast) showToast('Image trop lourde (8 Mo maximum).', 'error');
+      return;
+    }
+
+    redimensionner(f, function(dataUri) {
+      if (!dataUri) {
+        if (window.showToast) showToast("Ce fichier n'est pas une image valide.", 'error');
+        return;
+      }
+      if (window.showToast) showToast('Envoi de la photo...', 'info', 2000);
+
+      api(encoder({
+        action: 'set',
+        code: monCodeAmi,
+        image: dataUri,
+        token: lire(CLE_JETON)
+      }), function(d) {
+        if (!d || !d.ok) {
+          var motif = d && d.error === 'forbidden'
+            ? 'Ce code ami est deja utilise par une autre installation.'
+            : 'Envoi impossible. Verifie ta connexion.';
+          if (window.showToast) showToast(motif, 'error');
+          return;
+        }
+        if (d.token) ecrire(CLE_JETON, d.token);
+        if (d.url) { ecrire(CLE_URL, d.url); peindre(avatarProfil, d.url, null); }
+        if (window.showToast) showToast('Photo de profil mise a jour !', 'success');
+      });
+    });
+  };
+
+  /* ── Photos des amis ──
+     Exposee globalement : la page Amis la rappelle apres chaque
+     reconstruction de la liste. */
+  window.chargerPhotosAmis = function(codes) {
+    if (!codes || !codes.length) return;
+
+    var aDemander = [];
+    for (var i = 0; i < codes.length; i++) {
+      if (!cacheAmis.hasOwnProperty(codes[i])) aDemander.push(codes[i]);
+    }
+
+    function appliquer() {
+      var lignes = document.querySelectorAll('.ami-ligne');
+      for (var j = 0; j < lignes.length; j++) {
+        var code = lignes[j].getAttribute('data-code');
+        var av = lignes[j].querySelector('.ami-avatar');
+        if (code && av && cacheAmis[code]) {
+          peindre(av, cacheAmis[code], null);
+        }
+      }
+    }
+
+    if (!aDemander.length) { appliquer(); return; }
+
+    api(encoder({ action: 'get', codes: aDemander.join(',') }), function(d) {
+      for (var k = 0; k < aDemander.length; k++) {
+        cacheAmis[aDemander[k]] = (d && d.ok && d.avatars && d.avatars[aDemander[k]]) || '';
+      }
+      appliquer();
+    });
+  };
+
+  /* Le code ami arrive de readFriendIdentity, cote C++. */
+  function recupererCode() {
+    try {
+      var ex = getExternal();
+      if (!ex) return;
+      var brut = ex.readFriendIdentity();
+      if (!brut) return;
+      var d = JSON.parse(brut);
+      monCodeAmi = (d && d.friend_code) ? String(d.friend_code) : '';
+    } catch (e) {}
+  }
+
+  setTimeout(function() { recupererCode(); appliquerMaPhoto(); }, 900);
+  appliquerMaPhoto();
 })();
 })();

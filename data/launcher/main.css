@@ -2714,3 +2714,275 @@ cards
 .topbar-droite { align-self: stretch; align-items: center; }
 .win-btns { align-self: stretch; }
 .win-btn { min-height: 100%; }
+
+/* ============================================================
+   V4 — SYSTÈME DE BOUTONS
+   Regression de la V2 : en reecrivant le bloc accueil j'ai emporte
+   toute la famille .btn, qui vivait dans la meme plage. Les 28
+   boutons du Workshop, de la Bibliotheque, des Serveurs et des
+   Reglages retombaient donc sur le rendu natif du navigateur.
+   Reecrit ici dans le langage visuel de la V2.
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--r-s);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 62%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--texte-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color var(--transition), border-color var(--transition),
+              background var(--transition), transform var(--transition);
+}
+.btn:hover {
+  color: var(--texte);
+  border-color: var(--bord-fort);
+  background-color: rgba(242, 196, 17, 0.07);
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled,
+.btn[disabled] {
+  opacity: .45;
+  cursor: default;
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--verre);
+  color: var(--texte-3);
+}
+
+/* -- Action principale : or plein -- */
+.btn-primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--or-clair), var(--or) 55%, var(--or-sombre));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4),
+              0 5px 16px rgba(242, 196, 17, 0.20);
+  color: #0a0908;
+  font-weight: 800;
+}
+.btn-primary:hover {
+  border-color: transparent;
+  background: linear-gradient(135deg, #ffe170, var(--or-clair) 55%, var(--or));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5),
+              0 8px 22px rgba(242, 196, 17, 0.30);
+  color: #0a0908;
+}
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  background: linear-gradient(135deg, #6b5a1e, #4a3f16);
+  box-shadow: none;
+  color: rgba(10, 9, 8, 0.55);
+}
+
+/* -- Destructif -- */
+.btn-danger,
+.btn-remove {
+  border-color: rgba(224, 101, 95, 0.28);
+  color: var(--rouge);
+}
+.btn-danger:hover,
+.btn-remove:hover {
+  border-color: rgba(224, 101, 95, 0.55);
+  background-color: rgba(224, 101, 95, 0.12);
+  color: #ff8a83;
+}
+
+/* -- Teintes par service : la couleur n'arrive qu'au survol,
+      pour ne pas transformer la page en arc-en-ciel. -- */
+.btn-discord:hover {
+  border-color: rgba(88, 101, 242, 0.55);
+  background-color: rgba(88, 101, 242, 0.13);
+  color: #aab4ff;
+}
+.btn-steam:hover {
+  border-color: rgba(102, 192, 244, 0.55);
+  background-color: rgba(102, 192, 244, 0.12);
+  color: #a5dcff;
+}
+.btn-forum:hover {
+  border-color: var(--bord-fort);
+  background-color: rgba(242, 196, 17, 0.10);
+  color: var(--or);
+}
+
+/* -- Variantes de gabarit -- */
+.btn-full { width: 100%; }
+.btn-icon-sm { padding: 8px 10px; font-size: 13px; gap: 0; }
+.btn-sm { padding: 7px 12px; font-size: 12px; }
+
+/* Le gros bouton Jouer historique reprend le style du bouton d'accueil. */
+.btn-play-large {
+  padding: 15px 30px;
+  border: 0;
+  border-radius: var(--r-m);
+  background: linear-gradient(135deg, var(--or-clair), var(--or) 55%, var(--or-sombre));
+  color: #0a0908;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45),
+              0 8px 26px rgba(242, 196, 17, 0.26);
+}
+.btn-play-large:disabled { filter: grayscale(.6) brightness(.65); cursor: not-allowed; }
+
+/* ============================================================
+   TOASTS
+   Disparus avec la meme plage de CSS.
+   ============================================================ */
+.toast-stack {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 235px;
+  max-width: 370px;
+  margin-top: 10px;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--or);
+  border-radius: var(--r-m);
+  background: rgba(18, 16, 13, 0.92);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+              0 12px 34px rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  color: var(--texte);
+  font-size: 13.5px;
+  animation: toastIn 280ms cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(24px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+.toast.leaving {
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.toast.success { border-left-color: var(--vert); }
+.toast.error   { border-left-color: var(--rouge); }
+.toast.info    { border-left-color: var(--or); }
+.toast-ico { flex: 0 0 auto; font-size: 15px; }
+.toast.success .toast-ico { color: var(--vert); }
+.toast.error   .toast-ico { color: var(--rouge); }
+.toast.info    .toast-ico { color: var(--or); }
+.toast-msg { flex: 1 1 auto; line-height: 1.35; }
+.toast-close {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--texte-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.toast-close:hover { color: var(--texte); }
+
+/* -- Reliquats de la meme plage supprimee -- */
+.discord-glyph { font-size: 14px; }
+.discord-label { font-weight: 600; }
+.conn-banner-text { flex: 1 1 auto; }
+.version-selector-container { position: relative; }
+.version-selector-option {
+  padding: 9px 13px;
+  border-radius: var(--r-s);
+  color: var(--texte-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.version-selector-option:hover { background: rgba(255, 255, 255, 0.05); color: var(--texte); }
+.version-selector-option.selected { color: var(--or); }
+
+/* ---- V4 : etat de chargement ----
+   `.workshop-loading, .loading-spinner { ... }` appliquait la MEME regle
+   aux deux, et `::before` sur les deux : le conteneur et son enfant
+   dessinaient chacun un disque, d'ou la mise en page cassee.
+   On separe les roles : conteneur d'un cote, disque de l'autre. */
+.workshop-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 20px;
+  color: var(--texte-3);
+  font-size: 13.5px;
+}
+.workshop-loading::before { content: none; }
+.workshop-loading > * + * { margin-left: 0; }
+
+.loading-spinner {
+  display: block;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid rgba(242, 196, 17, 0.18);
+  border-top-color: var(--or);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.loading-spinner::before { content: none; }
+.loading-spinner > * + * { margin-left: 0; }
+/* Le bloc de chargement est un enfant de la grille : sans cela il
+   n'occupe qu'une seule cellule et se retrouve tasse a gauche. */
+.workshop-loading { grid-column: 1 / -1; width: 100%; box-sizing: border-box; }
+.loading-spinner { box-sizing: border-box; }
+
+/* ============================================================
+   PHOTOS DE PROFIL
+   ============================================================ */
+.profil-avatar { position: relative; overflow: hidden; cursor: pointer; }
+.profil-avatar-edit {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 40%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.profil-avatar:hover .profil-avatar-edit { opacity: 1; }
+
+/* Une fois la photo posee, le cercle ne doit plus porter le degrade
+   dore ni l'initiale : c'est l'image qui occupe toute la surface. */
+.a-photo {
+  background-color: var(--fond-2) !important;
+  background-image: none;
+  color: transparent;
+}
+.profil-avatar.a-photo { background: var(--fond-2); }
+.ami-avatar.a-photo,
+.profil-avatar.a-photo {
+  background-size: cover;
+  background-position: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}
