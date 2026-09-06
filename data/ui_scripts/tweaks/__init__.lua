@@ -90,15 +90,15 @@ if isPrivateGame then
     )
 
     local gravityOptions = {}
-    local currentGravité = 800
+    local currentGravity = 800
     pcall(function()
-      currentGravité = Engine.DvarInt(nil, "bg_gravity")
+      currentGravity = Engine.DvarInt(nil, "bg_gravity")
     end)
     for _, val in ipairs({ 50, 100, 200, 400, 800, 1200, 1600, 2000 }) do
       table.insert(gravityOptions, {
         option = val == 800 and "800 (défaut)" or val <= 100 and val .. " (Moon)" or tostring(val),
         value = val,
-        default = val == currentGravité,
+        default = val == currentGravity,
       })
     end
     table.insert(

@@ -229,22 +229,22 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
   local currentPrestige = CoD.PrestigeUtility.GetCurrentPLevel(controller, Engine.CurrentSessionMode())
   local currentRank = CoD.BlackMarketUtility.GetCurrentRank(controller) + 1
 
-  local isMaîtrePrestige = currentPrestige == 11
+  local isMasterPrestige = currentPrestige == 11
 
   if Engine.CurrentSessionMode() == Enum.eModes.MODE_MULTIPLAYER then
-    if not isMaîtrePrestige then
+    if not isMasterPrestige then
       rankLevels = { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55 }
     else
       rankLevels = { 56, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
     end
   elseif Engine.CurrentSessionMode() == Enum.eModes.MODE_ZOMBIES then
-    if not isMaîtrePrestige then
+    if not isMasterPrestige then
       rankLevels = { 1, 5, 10, 15, 20, 25, 30, 35 }
     else
       rankLevels = { 36, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
     end
   elseif Engine.CurrentSessionMode() == Enum.eModes.MODE_CAMPAIGN then
-    if not isMaîtrePrestige then
+    if not isMasterPrestige then
       rankLevels = { 1, 5, 10, 15, 20 }
     else
       rankLevels = { 21, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 }
@@ -265,7 +265,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       })
     end
 
-    if hasDefault and currentRank ~= minlevel and currentRank < maxlevel and not isMaîtrePrestige then
+    if hasDefault and currentRank ~= minlevel and currentRank < maxlevel and not isMasterPrestige then
       table.insert(rankObjs, {
         name = "Actuel : "
           .. tostring(currentRank <= minlevel and "Min" or currentRank >= maxlevel and "Max" or currentRank),
