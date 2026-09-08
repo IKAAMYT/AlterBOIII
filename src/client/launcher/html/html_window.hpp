@@ -16,6 +16,7 @@ private:
   html_frame frame_{};
   window window_;
   int sync_ticks_ = 0;
+  int sync_ready_ticks_ = 0;
 
   void sync_frame_size();
 

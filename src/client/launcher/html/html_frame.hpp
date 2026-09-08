@@ -27,6 +27,10 @@ public:
 
   void initialize(HWND window);
   void resize(DWORD width, DWORD height) const;
+
+  // Vrai quand le moteur de rendu existe reellement. resize() est sans effet
+  // avant : la creation de WebView2 est asynchrone.
+  bool is_ready() const;
   bool load_url(const std::string &url);
   bool load_html(const std::string &html);
 

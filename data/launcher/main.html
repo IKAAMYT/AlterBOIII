@@ -72,8 +72,8 @@
           <!-- Pastilles flottantes : notifications, reglages, compteurs live -->
           <div class="home-topright">
             <div class="home-icones">
-              <button type="button" class="icone-btn" title="Notifications">&#128276;</button>
-              <button type="button" class="icone-btn" data-goto="settings" title="Réglages">&#9881;</button>
+              <button type="button" class="icone-btn" title="Notifications"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.6a3.9 3.9 0 0 0-3.9 3.9v2.2L3 10.1h10l-1.1-2.4V5.5A3.9 3.9 0 0 0 8 1.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 12.1a1.6 1.6 0 0 0 3 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+              <button type="button" class="icone-btn" data-goto="settings" title="Réglages"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.7v1.6M8 12.7v1.6M14.3 8h-1.6M3.3 8H1.7M12.45 3.55l-1.13 1.13M4.68 11.32l-1.13 1.13M12.45 12.45l-1.13-1.13M4.68 4.68 3.55 3.55" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
             </div>
           </div>
 
@@ -96,7 +96,7 @@
               <div class="home-actions">
                 <button type="button" class="home-play" id="playBtn">&#9654;&nbsp; Jouer</button>
                 <button type="button" class="gear-btn" id="gearBtn" title="Options de lancement">
-                  <span class="gear-btn-icon">&#9881;</span>
+                  <span class="gear-btn-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.3" stroke="currentColor" stroke-width="1.35"/><path d="M8 1.7v1.6M8 12.7v1.6M14.3 8h-1.6M3.3 8H1.7M12.45 3.55l-1.13 1.13M4.68 11.32l-1.13 1.13M12.45 12.45l-1.13-1.13M4.68 4.68 3.55 3.55" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg></span>
                   <span class="gear-btn-label">Options</span>
                 </button>
               </div>
@@ -104,7 +104,7 @@
 
             <div class="home-audio-ctrl">
               <button type="button" class="home-audio-btn" id="homeAudioBtn" title="Son">
-                <span id="homeAudioIcon">&#128266;</span>
+                <span id="homeAudioIcon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.2 6.1H2.4v3.8h1.8L7.4 12.6V3.4L4.2 6.1Z" fill="currentColor"/><path d="M9.7 6a2.6 2.6 0 0 1 0 4M11.6 4.1a5.2 5.2 0 0 1 0 7.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
               </button>
               <input type="range" class="home-volume-slider" id="homeVolumeSlider" min="0" max="100" value="10" title="Volume">
             </div>
@@ -147,14 +147,14 @@
                 </div>
                 <div class="home-links">
                   <button type="button" class="home-link home-link-discord" id="discordBtn" onclick="getExternal().openUrl('https://discord.gg/BdkJ5DukUm')" title="Rejoindre le Discord IKAAM">
-                    <span class="home-link-ic discord-glyph">&#128172;</span>
+                    <span class="home-link-ic discord-glyph"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.1 3.5A11 11 0 0 0 10.4 2.7l-.2.4a10 10 0 0 1 2.4.8c-2-1-4.4-1-6.4 0a10 10 0 0 1 2.4-.8l-.2-.4c-1 .1-1.9.4-2.7.8C3.4 6 3 8.4 3.2 10.8a11 11 0 0 0 3.3 1.7l.7-1.1c-.4-.1-.8-.3-1.1-.5l.3-.2a7.7 7.7 0 0 0 6.6 0l.3.2c-.4.2-.7.4-1.1.5l.7 1.1a11 11 0 0 0 3.3-1.7c.2-2.8-.4-5.2-1.9-7.3ZM6.5 9.4c-.6 0-1.2-.6-1.2-1.3s.5-1.3 1.2-1.3 1.2.6 1.2 1.3-.5 1.3-1.2 1.3Zm3.3 0c-.6 0-1.2-.6-1.2-1.3s.5-1.3 1.2-1.3S11 7.4 11 8.1s-.5 1.3-1.2 1.3Z"/></svg></span>
                     <span class="discord-label">Discord</span>
                     <span class="discord-online" id="discordOnline" style="display:none;">
                       <span class="discord-online-dot"></span><span id="discordOnlineCount">0</span>
                     </span>
                   </button>
                   <button type="button" class="home-link" onclick="getExternal().openUrl('https://ikaam.fr/AlterCOD')" title="Site AlterBOIII">
-                    <span class="home-link-ic">&#127760;</span><span>Site AlterBOIII</span>
+                    <span class="home-link-ic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M2.3 8h11.4M8 2.1c1.6 1.7 2.4 3.8 2.4 5.9S9.6 12.2 8 13.9C6.4 12.2 5.6 10.1 5.6 8S6.4 3.8 8 2.1Z" stroke="currentColor" stroke-width="1.3"/></svg></span><span>Site AlterBOIII</span>
                   </button>
                 </div>
               </div>

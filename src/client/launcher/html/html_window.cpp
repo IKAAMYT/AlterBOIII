@@ -18,6 +18,13 @@ constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE_COMPAT =
 #endif
 constexpr DWORD DWMWCP_ROUND_COMPAT = 2;
 
+// Windows 11 dessine lui-meme la bordure de la fenetre, et sa couleur par
+// defaut est NOIRE sur une fenetre sans cadre : c'est le liseré noir visible
+// tout autour du launcher. Attribut 34 = DWMWA_BORDER_COLOR.
+constexpr DWORD DWMWA_BORDER_COLOR_COMPAT = 34;
+// COLORREF en 0x00BBGGRR — surtout pas en RGB.
+constexpr COLORREF BORDURE = RGB(0x2A, 0x24, 0x18);
+
 int frame_border(const HWND handle) {
   const UINT dpi = GetDpiForWindow(handle);
   return GetSystemMetricsForDpi(SM_CXFRAME, dpi) +
@@ -57,7 +64,20 @@ std::optional<LRESULT> html_window::processor(const UINT message,
                                               const LPARAM l_param) {
   const HWND handle = this->window_;
 
-  if (message == WM_ERASEBKGND) {
+  // La WebView2 est creee de facon ASYNCHRONE et se redimensionne avec un
+  // temps de retard sur la fenetre. Tant qu'elle ne couvre pas toute la zone
+  // client, ce qui depasse etait peint en NOIR pur — la fameuse bande noire,
+  // tres visible au demarrage et pendant un redimensionnement.
+  //
+  // On peint donc le fond dans la couleur de fond du launcher (--fond-0,
+  // #0a0908) : l'ecart existe toujours quelques images, mais il se confond
+  // avec l'interface au lieu de trancher dessus.
+  if (message == WM_ERASEBKGND && handle) {
+    static HBRUSH fond = CreateSolidBrush(RGB(0x0A, 0x09, 0x08));
+    RECT client{};
+    if (fond && GetClientRect(handle, &client)) {
+      FillRect(reinterpret_cast<HDC>(w_param), &client, fond);
+    }
     return 1;
   }
 
@@ -142,7 +162,24 @@ std::optional<LRESULT> html_window::processor(const UINT message,
   // initiales et le pinceau de fond de la fenetre apparait sur les bords.
   if (message == WM_TIMER && w_param == SYNC_TIMER_ID) {
     this->sync_frame_size();
-    if (++this->sync_ticks_ >= 12) {
+    ++this->sync_ticks_;
+
+    // On s'arrete quand la WebView EXISTE et a recu quelques
+    // synchronisations, plus apres un nombre fixe de battements.
+    //
+    // Avant : 12 battements de 250 ms, soit 3 secondes. Sur un demarrage a
+    // froid, un disque lent ou un antivirus qui scanne, WebView2 mettait
+    // plus longtemps a se creer. Le minuteur mourait avant, resize()
+    // n'avait jamais rien fait (il sort sans effet tant que le controleur
+    // est nul), et la WebView gardait ses bornes initiales DEFINITIVEMENT :
+    // le fond de la fenetre restait visible en bas et a droite jusqu'a ce
+    // que l'utilisateur redimensionne a la main.
+    if (this->frame_.is_ready()) {
+      ++this->sync_ready_ticks_;
+    }
+    const bool termine = this->sync_ready_ticks_ >= 3;
+    const bool abandon = this->sync_ticks_ >= 240; // filet : 60 s maximum
+    if (termine || abandon) {
       KillTimer(handle, SYNC_TIMER_ID);
     }
     return 0;
@@ -163,13 +200,20 @@ std::optional<LRESULT> html_window::processor(const UINT message,
     DwmSetWindowAttribute(this->window_, DWMWA_WINDOW_CORNER_PREFERENCE_COMPAT,
                           &arrondi, sizeof(arrondi));
 
+    // Bordure assortie a l'interface plutot que le noir par defaut. Sur un
+    // SDK ou un Windows qui ne connait pas l'attribut, l'appel echoue sans
+    // effet de bord : on ignore volontairement le resultat.
+    COLORREF bordure = BORDURE;
+    DwmSetWindowAttribute(this->window_, DWMWA_BORDER_COLOR_COMPAT, &bordure,
+                          sizeof(bordure));
+
     // Force un recalcul de la zone non-cliente pour que WM_NCCALCSIZE
     // s'applique des l'affichage, sans clignotement de barre de titre.
     SetWindowPos(this->window_, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                      SWP_NOACTIVATE);
 
-    // Re-synchronise pendant ~3 s, le temps que WebView2 se cree.
+    // Re-synchronise jusqu'a ce que WebView2 existe (60 s au maximum).
     SetTimer(this->window_, SYNC_TIMER_ID, 250, nullptr);
     return 0;
   }

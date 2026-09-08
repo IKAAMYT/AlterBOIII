@@ -2959,7 +2959,32 @@ void ensure_launcher_ui() {
                                 "main.js",      "home_splash.jpg",
                                 "bigboiii.jpg", "verification.json"};
 
+  // AlterBO3 (IKAAM): cette fonction est appelee depuis main.cpp ET depuis
+  // run_launcher() juste avant load_url. Sans garde, chaque demarrage payait
+  // DEUX requetes HTTP synchrones sur le thread principal.
+  //
+  // Mais on ne pose le garde QUE si l'UI est reellement utilisable a la fin.
+  // Le deuxieme appel est le filet de securite juste avant load_url : si le
+  // premier echoue (reseau coupe au demarrage de Windows, ce qui est
+  // frequent), le sauter laisserait le joueur devant un launcher vide.
   const auto ui_dir = game::get_appdata_path() / "data/launcher";
+
+  static bool ui_prete = false;
+  if (ui_prete) {
+    return;
+  }
+
+  // Filet : quoi qu'il arrive plus bas, on retient le succes seulement si
+  // main.html est la en sortie.
+  struct marquer_si_ok {
+    const std::filesystem::path page;
+    bool *drapeau;
+    ~marquer_si_ok() {
+      if (utils::io::file_exists(page.string())) {
+        *drapeau = true;
+      }
+    }
+  } _marqueur{ui_dir / "main.html", &ui_prete};
   const auto marker = ui_dir / ".ui_rev";
 
   // Read the remote revision (trimmed). If the network fails we just skip the
@@ -2973,12 +2998,63 @@ void ensure_launcher_ui() {
   }
   if (rev_data && !rev_data->empty()) {
     remote_rev = *rev_data;
-    while (!remote_rev.empty() &&
-           (remote_rev.back() == '\n' || remote_rev.back() == '\r' ||
-            remote_rev.back() == ' ' || remote_rev.back() == '\t')) {
+    // BOM UTF-8 : un ui_rev.txt enregistre depuis le Bloc-notes en porte un.
+    // Sans ce retrait, remote_rev ne serait JAMAIS egal a local_rev et les
+    // six fichiers (dont deux JPEG) se retelechargeaient a chaque lancement.
+    if (remote_rev.size() >= 3 &&
+        static_cast<unsigned char>(remote_rev[0]) == 0xEF &&
+        static_cast<unsigned char>(remote_rev[1]) == 0xBB &&
+        static_cast<unsigned char>(remote_rev[2]) == 0xBF) {
+      remote_rev.erase(0, 3);
+    }
+    const auto est_blanc = [](char c) {
+      return c == '\n' || c == '\r' || c == ' ' || c == '\t';
+    };
+    while (!remote_rev.empty() && est_blanc(remote_rev.back())) {
       remote_rev.pop_back();
     }
+    // ... et en tete aussi : le trim n'etait fait que par la fin.
+    std::size_t debut = 0;
+    while (debut < remote_rev.size() && est_blanc(remote_rev[debut])) {
+      ++debut;
+    }
+    remote_rev.erase(0, debut);
   }
+
+  // AlterBO3 (IKAAM): un portail captif (wifi d'hotel, d'ecole, de gare)
+  // repond 200 OK avec sa page de connexion a N'IMPORTE quelle URL. Sans ce
+  // controle, cette page HTML etait ecrite par-dessus main.js, main.css et
+  // les JPEG : le launcher se retrouvait durablement casse, bien apres le
+  // retour d'une connexion normale. On verifie donc que chaque fichier
+  // ressemble a ce qu'il pretend etre avant de l'accepter.
+  const auto contenu_plausible = [](const std::string &nom,
+                                    const std::string &data) {
+    if (data.size() < 16) {
+      return false;
+    }
+    if (nom.ends_with(".jpg")) {
+      return static_cast<unsigned char>(data[0]) == 0xFF &&
+             static_cast<unsigned char>(data[1]) == 0xD8 &&
+             static_cast<unsigned char>(data[2]) == 0xFF;
+    }
+    if (nom.ends_with(".json")) {
+      const auto p = data.find_first_not_of(" \t\r\n");
+      return p != std::string::npos && (data[p] == '{' || data[p] == '[');
+    }
+    if (nom.ends_with(".css")) {
+      return data.find('{') != std::string::npos &&
+             data.find("<html") == std::string::npos;
+    }
+    if (nom.ends_with(".js")) {
+      return data.find("function") != std::string::npos &&
+             data.find("<html") == std::string::npos;
+    }
+    if (nom.ends_with(".html")) {
+      // Notre page porte le nom du projet ; la page d'un portail captif non.
+      return data.find("AlterBO") != std::string::npos;
+    }
+    return true;
+  };
 
   std::string local_rev;
   utils::io::read_file(marker.string(), &local_rev);
@@ -3002,7 +3078,7 @@ void ensure_launcher_ui() {
       } catch (...) {
         data = std::nullopt;
       }
-      if (!data || data->empty()) {
+      if (!data || data->empty() || !contenu_plausible(name, *data)) {
         all_ok = false;
         break; // one miss aborts the refresh — the current UI stays intact
       }
@@ -3056,7 +3132,7 @@ void ensure_launcher_ui() {
     } catch (...) {
       data = std::nullopt;
     }
-    if (data && !data->empty()) {
+    if (data && !data->empty() && contenu_plausible(name, *data)) {
       utils::io::write_file(target.string(), *data);
     }
   }

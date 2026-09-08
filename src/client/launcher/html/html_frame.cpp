@@ -336,6 +336,13 @@ void html_frame::handle_webview_error(const HRESULT result) {
   this->show_webview_error(result);
 }
 
+bool html_frame::is_ready() const {
+  if (this->use_legacy_browser_) {
+    return this->get_legacy_browser() != nullptr;
+  }
+  return this->webview_controller_ != nullptr;
+}
+
 void html_frame::resize(const DWORD width, const DWORD height) const {
   if (this->use_legacy_browser_) {
     const auto browser = this->get_legacy_browser();

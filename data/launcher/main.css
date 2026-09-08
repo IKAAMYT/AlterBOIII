@@ -3017,3 +3017,94 @@ cards
 @media (max-width: 1000px) {
   .launch-dropdown-list { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================================
+   V6 — FINITION
+   Trois defauts constates au rendu, plus le passage des icones
+   emoji a des SVG (voir main.html).
+   ============================================================ */
+
+/* -- 1. Le bandeau d'erreur recouvrait la navigation --
+   .conn-banner est en position fixed a top:0, or la barre du haut
+   fait exactement 64px : le bandeau se posait DESSUS et rendait
+   "Bibliotheque / Serveurs / Amis / Reglages" illisibles. Il glisse
+   maintenant sous la barre. */
+.conn-banner {
+  top: -70px;
+  border-radius: 12px;
+  border-top-color: rgba(224, 83, 61, 0.5);
+}
+.conn-banner.visible { top: 74px; }
+
+/* -- 2. L'encadre noir autour du pseudo --
+   Le champ est volontairement sans bordure (souligne au survol).
+   C'est ma couche "verre" qui lui ajoutait une ombre interne, d'ou
+   le rectangle noir. On la retire ICI seulement : .amis-input est
+   un vrai champ de saisie et garde son creux. */
+.home-pseudo-input {
+  box-shadow: none;
+}
+.home-pseudo-input:focus {
+  box-shadow: none;
+  border-bottom-color: var(--or);
+}
+
+/* -- 3. Le bouton Discord --
+   Le bleu plein #5865F2 etait la seule tache de couleur saturee de
+   toute l'interface : c'est ce qui cassait le plus l'impression de
+   serieux. Meme traitement verre que les autres boutons, la couleur
+   de la marque n'apparait qu'au survol. */
+.home-link-discord {
+  border-color: rgba(255, 255, 255, 0.09);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 62%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--texte-2);
+  font-weight: 600;
+}
+.home-link-discord:hover {
+  border-color: rgba(88, 101, 242, 0.55);
+  background-color: rgba(88, 101, 242, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #b9c1ff;
+  transform: translateY(-1px);
+}
+.home-link-discord .discord-online {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* -- 4. Icones SVG : alignement optique --
+   Un emoji porte sa propre metrique, un SVG non : sans ca les
+   glyphes se calaient sur la ligne de base et paraissaient hauts. */
+.icone-btn svg,
+.gear-btn-icon svg,
+#homeAudioIcon svg,
+.home-link-ic svg {
+  display: block;
+}
+.icone-btn,
+.gear-btn-icon,
+#homeAudioIcon,
+.home-link-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icone-btn {
+  color: var(--texte-3);
+  transition: color var(--transition), background var(--transition);
+}
+.icone-btn:hover { color: var(--or); }
+
+/* -- 5. Chiffres des cartes statistiques --
+   17px gras au-dessus d'un libelle de 10px : l'ecart etait trop fort, les
+   nombres ecrasaient le bandeau du bas. On calme sans perdre la hierarchie. */
+.carte-stat-num {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+.carte-stat .home-stat-label,
+.carte-stat-label {
+  font-size: 10.5px;
+}

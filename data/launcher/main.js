@@ -4107,7 +4107,33 @@ function fetchReleases() {
 
   var url = 'https://api.github.com/repos/IKAAMYT/AlterBOIII/releases';
   var xhr = new XMLHttpRequest();
+  var reconcilie = false;
+
+  /* Remet le libelle du selecteur en accord avec la selection reelle.
+     DOIT etre appelee sur TOUS les chemins : succes, JSON casse, erreur
+     HTTP, delai depasse. Avant, seul le chemin heureux l'appelait — quand
+     l'API GitHub etait injoignable ou plafonnee (60 requetes/heure et par
+     IP, or beaucoup de joueurs partagent une IP), le launcher continuait
+     d'afficher une version enregistree qui n'existe plus tout en lancant
+     "latest" pour de vrai. */
+  function finaliser() {
+    if (reconcilie)
+      return;
+    reconcilie = true;
+    if (_selectedVersion !== 'latest' && !_versionsData[_selectedVersion]) {
+      _selectedVersion = 'latest';
+    }
+    selectVersion(_selectedVersion,
+                  _selectedVersion === 'latest' ? 'Latest (Auto-update)'
+                                                : _selectedVersion);
+  }
+
   xhr.open('GET', url, true);
+  // Sans delai maximal, une connexion qui pend laisse le selecteur muet
+  // pour toute la session.
+  xhr.timeout = 12000;
+  xhr.ontimeout = finaliser;
+  xhr.onerror = finaliser;
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== 4)
       return;
@@ -4136,26 +4162,24 @@ function fetchReleases() {
             }
           }
         }
-        // After loading all versions, ensure UI reflects saved selection.
         // Une selection enregistree qui n'existe plus ('beta', 'stable'...)
         // doit RETOMBER sur 'latest', sinon l'UI affiche un libelle bidon
         // pendant que le launcher lance en fait la derniere version.
-        if (_selectedVersion !== 'latest' && !_versionsData[_selectedVersion]) {
-          _selectedVersion = 'latest';
-        }
-        var label = 'Latest (Auto-update)';
-        if (_selectedVersion !== 'latest') {
-          label = _selectedVersion;
-        }
-        selectVersion(_selectedVersion, label);
+        finaliser();
       } catch (e) {
         console.error('Error parsing releases:', e);
+        finaliser();
       }
     } else {
       console.error('Error fetching releases:', xhr.status, xhr.statusText);
+      finaliser();
     }
   };
-  xhr.send();
+  try {
+    xhr.send();
+  } catch (e) {
+    finaliser();
+  }
 }
 
 fetchReleases();
@@ -4385,6 +4409,20 @@ fetchReleases();
     var icon = document.getElementById('homeAudioIcon');
     if (!audio || !btn) return;
 
+    /* Les icones du son sont des SVG, plus des emoji : un emoji change de
+       dessin selon la machine et se cale mal sur la ligne de base. Elles
+       sont definies ICI parce que ce bloc reecrit innerHTML a chaque
+       changement de volume — sans ca il remettait un emoji par-dessus le
+       SVG du HTML, et l'icone semblait disparaitre. */
+    var ICO_SON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
+      '<path d="M4.2 6.1H2.4v3.8h1.8L7.4 12.6V3.4L4.2 6.1Z" fill="currentColor"/>' +
+      '<path d="M9.7 6a2.6 2.6 0 0 1 0 4M11.6 4.1a5.2 5.2 0 0 1 0 7.8" ' +
+      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+    var ICO_MUET = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
+      '<path d="M4.2 6.1H2.4v3.8h1.8L7.4 12.6V3.4L4.2 6.1Z" fill="currentColor"/>' +
+      '<path d="M10.1 6.4l3.4 3.4M13.5 6.4l-3.4 3.4" ' +
+      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
     audio.volume = 0.10;
     var muted = false;
 
@@ -4396,17 +4434,23 @@ fetchReleases();
         if (v === 0) {
           muted = true; audio.muted = true;
           btn.className = 'home-audio-btn muted';
-          if (icon) icon.innerHTML = '&#128263;';
+          if (icon) icon.innerHTML = ICO_MUET;
         } else {
           muted = false; audio.muted = false;
           btn.className = 'home-audio-btn';
-          if (icon) icon.innerHTML = '&#128266;';
+          if (icon) icon.innerHTML = ICO_SON;
         }
       };
     }
 
     function tryPlay() {
-      try { audio.play(); } catch (e) {}
+      // play() rend une promesse sous WebView2 : sans .catch, un refus de
+      // lecture automatique remonte en rejet non gere. Le try/catch seul ne
+      // suffit pas, il n'attrape que le lancement synchrone (MSHTML).
+      try {
+        var p = audio.play();
+        if (p && typeof p.catch === 'function') { p.catch(function() {}); }
+      } catch (e) {}
     }
     tryPlay();
     if (document.addEventListener) {
@@ -4423,10 +4467,10 @@ fetchReleases();
       audio.muted = muted;
       if (muted) {
         btn.className = 'home-audio-btn muted';
-        if (icon) icon.innerHTML = '&#128263;';
+        if (icon) icon.innerHTML = ICO_MUET;
       } else {
         btn.className = 'home-audio-btn';
-        if (icon) icon.innerHTML = '&#128266;';
+        if (icon) icon.innerHTML = ICO_SON;
         tryPlay();
       }
     };
@@ -4639,8 +4683,18 @@ fetchReleases();
   if (!input || !av) return;
 
   function maj() {
+    // Ne pas ecraser une photo de profil deja affichee.
+    if (av.className.indexOf('a-photo') !== -1) {
+      return;
+    }
     var v = (input.value || '').replace(/^\s+/, '');
+    // Le crayon d'edition est un enfant du cercle : textContent le
+    // detruisait des le premier appel, et l'icone ne revenait jamais.
+    var crayon = av.querySelector ? av.querySelector('.profil-avatar-edit') : null;
     av.textContent = v ? v.charAt(0).toUpperCase() : 'A';
+    if (crayon) {
+      av.appendChild(crayon);
+    }
   }
   input.onkeyup = (function(precedent) {
     return function(e) {
@@ -5015,11 +5069,18 @@ fetchReleases();
       var d = null;
       if (xhr.status === 200) {
         try { d = JSON.parse(xhr.responseText); } catch (e) { d = null; }
+        if (d) { ok(d); return; }
+        ok(null, 'reponse illisible du serveur');
+        return;
       }
-      ok(d);
+      // status 0 = requete bloquee ou serveur injoignable : le navigateur
+      // ne distingue pas les deux, mais ce n'est PAS un code HTTP.
+      if (xhr.status === 0) { ok(null, 'serveur injoignable'); return; }
+      if (xhr.status === 404) { ok(null, 'avatars.php introuvable (404)'); return; }
+      ok(null, 'erreur serveur ' + xhr.status);
     };
-    xhr.ontimeout = function() { ok(null); };
-    try { xhr.send(corps); } catch (e) { ok(null); }
+    xhr.ontimeout = function() { ok(null, 'delai depasse'); };
+    try { xhr.send(corps); } catch (e) { ok(null, 'requete refusee'); }
   }
 
   function encoder(obj) {
@@ -5035,23 +5096,68 @@ fetchReleases();
   /* Affiche une image dans un cercle d'avatar, en remplacant l'initiale. */
   function peindre(element, url, initiale) {
     if (!element) return;
-    if (url) {
+    /* Le crayon d'edition est un ENFANT du cercle : ecrire textContent le
+       detruisait au premier affichage. On le met de cote et on le remet. */
+    function poserTexte(txt) {
+      var crayon = element.querySelector
+        ? element.querySelector('.profil-avatar-edit') : null;
+      element.textContent = txt || '';
+      if (crayon) {
+        element.appendChild(crayon);
+      }
+    }
+
+    function sansPhoto() {
+      element.style.backgroundImage = '';
+      element.className = element.className.replace(/\s*a-photo/g, '');
+      // initiale null veut dire "ne touche pas au texte deja en place".
+      if (initiale !== null && initiale !== undefined) {
+        poserTexte(initiale || '?');
+      }
+    }
+
+    if (!url) {
+      sansPhoto();
+      return;
+    }
+
+    /* On ne vide PAS la lettre avant d'etre sur que l'image se charge.
+       Sinon une URL qui repond 404 — avatar supprime cote serveur, ou
+       avatars.php pas encore en ligne — laissait un rond parfaitement
+       vide, sans photo NI initiale. */
+    var test = new Image();
+    test.onload = function() {
       element.style.backgroundImage = 'url("' + url + '")';
       element.style.backgroundSize = 'cover';
       element.style.backgroundPosition = 'center';
-      element.textContent = '';
-      element.className += (element.className.indexOf('a-photo') === -1) ? ' a-photo' : '';
-    } else {
-      element.style.backgroundImage = '';
-      element.textContent = initiale || '?';
-      element.className = element.className.replace(/\s*a-photo/g, '');
-    }
+      poserTexte('');
+      if (element.className.indexOf('a-photo') === -1) {
+        element.className += ' a-photo';
+      }
+    };
+    test.onerror = sansPhoto;
+    test.src = url;
   }
 
-  /* ── Ma photo ── */
+  /* ── Ma photo ──
+     localStorage ne sert que de cache d'affichage immediat. La SOURCE de
+     verite est le serveur : sinon ma propre photo disparaissait des que le
+     stockage local etait vide (nouvelle installation, cache efface, ou
+     rafraichissement des fichiers du launcher par ui_rev) alors que
+     l'image etait toujours en ligne — et mes amis, eux, la voyaient. */
   function appliquerMaPhoto() {
     var url = lire(CLE_URL);
     if (url) peindre(avatarProfil, url, null);
+  }
+
+  function recupererMaPhotoServeur() {
+    if (!monCodeAmi) return;
+    api(encoder({ action: 'get', codes: monCodeAmi }), function(d) {
+      var url = d && d.ok && d.avatars && d.avatars[monCodeAmi];
+      if (!url) return;
+      ecrire(CLE_URL, url);
+      peindre(avatarProfil, url, null);
+    });
   }
 
   /* Redimensionne cote client : 128x128, JPEG. Une photo de 4 Mo
@@ -5108,12 +5214,17 @@ fetchReleases();
         code: monCodeAmi,
         image: dataUri,
         token: lire(CLE_JETON)
-      }), function(d) {
+      }), function(d, panne) {
         if (!d || !d.ok) {
-          var motif = d && d.error === 'forbidden'
-            ? 'Ce code ami est deja utilise par une autre installation.'
-            : 'Envoi impossible. Verifie ta connexion.';
-          if (window.showToast) showToast(motif, 'error');
+          var motif;
+          if (d && d.error === 'forbidden') {
+            motif = 'Ce code ami est deja utilise par une autre installation.';
+          } else if (d && d.error) {
+            motif = 'Refuse par le serveur : ' + d.error;
+          } else {
+            motif = 'Envoi impossible — ' + (panne || 'raison inconnue');
+          }
+          if (window.showToast) showToast(motif, 'error', 6000);
           return;
         }
         if (d.token) ecrire(CLE_JETON, d.token);
@@ -5167,7 +5278,22 @@ fetchReleases();
     } catch (e) {}
   }
 
-  setTimeout(function() { recupererCode(); appliquerMaPhoto(); }, 900);
-  appliquerMaPhoto();
+  /* Le code ami vient de Steam via le C++ : il n'est pas toujours pret a
+     900 ms. Un seul essai laissait monCodeAmi vide pour toute la session —
+     photo jamais rechargee, et "Code ami indisponible" au clic. On
+     reessaie donc quelques fois, puis on abandonne sans bruit. */
+  var essais = 0;
+  (function attendreCode() {
+    recupererCode();
+    if (monCodeAmi) {
+      recupererMaPhotoServeur();
+      return;
+    }
+    if (++essais < 8) {
+      setTimeout(attendreCode, 900);
+    }
+  })();
+
+  appliquerMaPhoto();   // affichage immediat depuis le cache local
 })();
 })();

@@ -43,7 +43,10 @@ const URL_PUBLIQUE  = 'https://ikaam.fr/amis/avatars.php?action=img&code=';
 const TAILLE_PX     = 128;                    // côté de l'image finale
 const MAX_ENVOI     = 400 * 1024;             // 400 Ko de charge utile max
 const MAX_CODES     = 200;                    // codes demandés par appel
-const DELAI_ENVOI   = 20;                     // secondes entre deux envois
+// Quota d'écriture par IP sur une fenêtre glissante. Assez large pour une
+// famille ou un CGNAT, assez serré pour qu'on ne remplisse pas le disque.
+const FENETRE_ENVOI      = 300;               // 5 minutes
+const MAX_ENVOIS_FENETRE = 12;                // écritures autorisées dedans
 
 function repondre(array $data, int $code = 200): void
 {
@@ -56,6 +59,21 @@ function repondre(array $data, int $code = 200): void
 function erreur(string $message, int $code = 400): void
 {
     repondre(['ok' => false, 'error' => $message], $code);
+}
+
+/** memory_limit en octets ; 0 si illimite ou illisible. */
+function memoire_limite(): int
+{
+    $brut = trim((string) ini_get('memory_limit'));
+    if ($brut === '' || $brut === '-1') {
+        return 0;
+    }
+    $unite = strtolower(substr($brut, -1));
+    $n = (int) $brut;
+    if ($unite === 'g') { return $n * 1024 * 1024 * 1024; }
+    if ($unite === 'm') { return $n * 1024 * 1024; }
+    if ($unite === 'k') { return $n * 1024; }
+    return $n;
 }
 
 /** Un code ami est une suite de 5 à 20 chiffres — même règle que le launcher. */
@@ -119,9 +137,23 @@ function normaliser_image(string $charge_utile): string
     if (!in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF, IMAGETYPE_WEBP], true)) {
         erreur('unsupported_format');
     }
-    // Garde-fou contre les images « bombe » : 4000 px de côté suffisent
-    // largement pour une photo de profil.
-    if ($info[0] > 4000 || $info[1] > 4000) {
+    // Garde-fou contre les images « bombe ».
+    //
+    // 4000 px etait BEAUCOUP trop permissif : GD decompresse en vraies
+    // couleurs, soit largeur x hauteur x 4 octets. Une image 4000x4000
+    // pesant 300 Ko compresses reclame ~64 Mo de RAM une fois decodee, et
+    // quelques envois simultanes suffisaient a epuiser le pool PHP du
+    // mutualise — donc a mettre TOUT ikaam.fr a genoux avec un fichier
+    // parfaitement valide. 1600 px reste dix fois la taille affichee.
+    if ($info[0] > 1600 || $info[1] > 1600) {
+        erreur('image_too_large', 413);
+    }
+
+    // Ceinture et bretelles : on refuse aussi ce qui ne tiendrait pas dans
+    // la memoire restante, quelles que soient les dimensions.
+    $besoin = $info[0] * $info[1] * 4 + 2 * 1024 * 1024;
+    $limite = memoire_limite();
+    if ($limite > 0 && (memory_get_usage(true) + $besoin) > $limite) {
         erreur('image_too_large', 413);
     }
 
@@ -152,59 +184,136 @@ function normaliser_image(string $charge_utile): string
     return $jpeg;
 }
 
-/** Limite le débit par IP, pour que le dossier ne serve pas de dépotoir. */
+/**
+ * Limite le débit par IP, pour que le dossier ne serve pas de dépotoir.
+ *
+ * Le marqueur vit dans NOTRE dossier, plus dans sys_get_temp_dir() : chez
+ * IONOS le temporaire est partage entre sites et purge sans preavis, ce qui
+ * revenait a desactiver la limite au hasard.
+ */
 function limiter_debit(): void
 {
+    $seau = DOSSIER . '/.debit';
+    if (!is_dir($seau)) {
+        @mkdir($seau, 0755, true);
+    }
+    // Un simple delai fixe entre deux envois punissait les innocents : deux
+    // joueurs sous la meme box, ou n'importe qui derriere un CGNAT
+    // d'operateur, partagent une IP et se bloquaient mutuellement. On
+    // compte donc les envois sur une fenetre glissante : une rafale
+    // normale passe, un flot continu non.
     $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-    $marqueur = sys_get_temp_dir() . '/alterboiii_av_' . sha1($ip);
-    if (is_file($marqueur) && (time() - (int) filemtime($marqueur)) < DELAI_ENVOI) {
+    $marqueur = $seau . '/' . sha1($ip);
+    $maintenant = time();
+
+    $horodatages = [];
+    $brut = @file_get_contents($marqueur);
+    if (is_string($brut) && $brut !== '') {
+        foreach (explode(',', $brut) as $t) {
+            $t = (int) $t;
+            if ($t > 0 && ($maintenant - $t) < FENETRE_ENVOI) {
+                $horodatages[] = $t;
+            }
+        }
+    }
+
+    if (count($horodatages) >= MAX_ENVOIS_FENETRE) {
+        header('Retry-After: ' . FENETRE_ENVOI);
         erreur('too_many_requests', 429);
     }
-    @touch($marqueur);
+
+    $horodatages[] = $maintenant;
+    @file_put_contents($marqueur, implode(',', $horodatages), LOCK_EX);
+
+    // Menage occasionnel : sans ca le dossier grossit indefiniment.
+    if (random_int(1, 50) === 1) {
+        foreach ((array) @scandir($seau) as $f) {
+            if ($f === '.' || $f === '..') { continue; }
+            $c = $seau . '/' . $f;
+            if (is_file($c) && (time() - (int) @filemtime($c)) > 3600) {
+                @unlink($c);
+            }
+        }
+    }
+}
+
+/** Écriture atomique : personne ne doit lire un fichier à moitié écrit. */
+function ecrire_atomique(string $cible, string $contenu): bool
+{
+    $tmp = $cible . '.' . bin2hex(random_bytes(6)) . '.tmp';
+    if (@file_put_contents($tmp, $contenu, LOCK_EX) === false) {
+        return false;
+    }
+    if (!@rename($tmp, $cible)) {
+        @unlink($tmp);
+        return false;
+    }
+    return true;
 }
 
 // ── Routage ─────────────────────────────────────────────────────────
 $action = (string) ($_REQUEST['action'] ?? '');
 
 if ($action === 'set') {
+    // POST obligatoire. Avec $_REQUEST, un GET etait accepte : le code ET le
+    // jeton se retrouvaient alors en clair dans la query string, donc dans
+    // les journaux d'acces IONOS, dans l'historique et dans l'en-tete
+    // Referer envoye aux sites tiers. Le jeton est l'unique preuve de
+    // propriete d'un code : il ne doit jamais transiter par une URL.
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        erreur('post_required', 405);
+    }
+
     preparer_dossier();
     limiter_debit();
 
-    $code = trim((string) ($_REQUEST['code'] ?? ''));
+    $code = trim((string) ($_POST['code'] ?? ''));
     if (!code_valide($code)) {
         erreur('bad_code');
     }
 
-    $image = (string) ($_REQUEST['image'] ?? '');
+    $image = (string) ($_POST['image'] ?? '');
     if ($image === '') {
         erreur('missing_image');
     }
 
     $fichier_jeton = chemin_jeton($code);
-    $jeton_fourni = (string) ($_REQUEST['token'] ?? '');
+    $jeton_fourni = (string) ($_POST['token'] ?? '');
+    $deja_revendique = is_file($fichier_jeton);
 
     // Le dossier de stockage est SERVI PAR LE WEB : n'importe qui peut
     // ouvrir <code>.token dans un navigateur. On n'y ecrit donc jamais le
     // jeton lui-meme, seulement son empreinte — inutilisable pour
     // s'authentifier, exactement comme un mot de passe hache.
-    if (is_file($fichier_jeton)) {
+    //
+    // On verifie le jeton AVANT de toucher a l'image : inutile de faire
+    // travailler GD pour quelqu'un qu'on va refuser.
+    if ($deja_revendique) {
         $empreinte = trim((string) @file_get_contents($fichier_jeton));
         if ($empreinte === '' ||
             !hash_equals($empreinte, hash('sha256', $jeton_fourni))) {
             erreur('forbidden', 403);
         }
         $jeton = $jeton_fourni;
-    } else {
+    }
+
+    // L'image est validee AVANT la revendication. Dans l'ordre inverse, un
+    // envoi rate (fichier corrompu, format exotique) consommait quand meme
+    // la revendication du code : le joueur se retrouvait proprietaire d'un
+    // avatar inexistant, sans jeton en poche puisque la reponse etait une
+    // erreur. Il ne pouvait alors PLUS JAMAIS mettre sa photo.
+    $jpeg = normaliser_image($image);
+
+    if (!$deja_revendique) {
         // Première fois : on revendique le code. Le jeton en clair n'est
         // renvoye qu'ici, une seule fois ; le serveur n'en garde que le hash.
         $jeton = bin2hex(random_bytes(20));
-        if (@file_put_contents($fichier_jeton, hash('sha256', $jeton)) === false) {
+        if (!ecrire_atomique($fichier_jeton, hash('sha256', $jeton))) {
             erreur('storage_unavailable', 500);
         }
     }
 
-    $jpeg = normaliser_image($image);
-    if (@file_put_contents(chemin_image($code), $jpeg) === false) {
+    if (!ecrire_atomique(chemin_image($code), $jpeg)) {
         erreur('storage_unavailable', 500);
     }
 
@@ -266,7 +375,17 @@ if ($action === 'img') {
 }
 
 if ($action === 'delete') {
-    $code = trim((string) ($_REQUEST['code'] ?? ''));
+    // Meme raison que pour 'set' : le jeton ne doit jamais passer par l'URL.
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        erreur('post_required', 405);
+    }
+    preparer_dossier();
+    // La limite de debit manquait ici : sans elle, 'delete' offrait un banc
+    // d'essai illimite pour deviner un jeton. hash_equals protege du timing,
+    // pas du nombre d'essais.
+    limiter_debit();
+
+    $code = trim((string) ($_POST['code'] ?? ''));
     if (!code_valide($code)) {
         erreur('bad_code');
     }
@@ -274,7 +393,7 @@ if ($action === 'delete') {
     $empreinte = is_file($fichier_jeton)
         ? trim((string) @file_get_contents($fichier_jeton)) : '';
     if ($empreinte === '' ||
-        !hash_equals($empreinte, hash('sha256', (string) ($_REQUEST['token'] ?? '')))) {
+        !hash_equals($empreinte, hash('sha256', (string) ($_POST['token'] ?? '')))) {
         erreur('forbidden', 403);
     }
     @unlink(chemin_image($code));

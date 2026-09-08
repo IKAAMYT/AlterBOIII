@@ -339,7 +339,11 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
             UpdateInfoModels(f1_arg1)
             local newPrestige = f1_arg1.value
             if newPrestige == 11 then
-              Engine.Exec(f1_arg2, "PrestigeStatsMaître " .. tostring(Engine.CurrentSessionMode()))
+              -- NE PAS traduire : "PrestigeStatsMaster" est une COMMANDE du
+              -- moteur, pas un texte affiche. Un remplacement global
+              -- Master -> Maitre l'avait francisee, et passer au prestige 11
+              -- n'executait donc plus rien.
+              Engine.Exec(f1_arg2, "PrestigeStatsMaster " .. tostring(Engine.CurrentSessionMode()))
             end
             Engine.ExecNow(f1_arg2, "statsetbyname plevel " .. newPrestige)
             Engine.ExecNow(f1_arg2, "statsetbyname hasprestiged " .. (newPrestige > 0 and 1 or 0))
