@@ -5077,7 +5077,28 @@ fetchReleases();
       // ne distingue pas les deux, mais ce n'est PAS un code HTTP.
       if (xhr.status === 0) { ok(null, 'serveur injoignable'); return; }
       if (xhr.status === 404) { ok(null, 'avatars.php introuvable (404)'); return; }
-      ok(null, 'erreur serveur ' + xhr.status);
+
+      /* Le serveur renvoie un JSON explicite AUSSI sur les erreurs :
+         {"ok":false,"error":"forbidden"}. On ne le lisait que sur un 200.
+         Un 403 "ce code appartient a une autre installation" s'affichait
+         donc "erreur serveur 403", impossible a distinguer d'une panne. */
+      var motifs = {
+        forbidden: 'Ce code ami est deja revendique par une autre installation.',
+        too_many_requests: 'Trop d\'envois. Reessaie dans quelques minutes.',
+        image_too_large: 'Image trop lourde ou trop grande.',
+        not_an_image: 'Ce fichier n\'est pas une image valide.',
+        unsupported_format: 'Format refuse (JPEG, PNG, GIF ou WEBP).',
+        bad_code: 'Code ami invalide.',
+        post_required: 'Requete refusee par le serveur (methode).',
+        storage_unavailable: 'Le serveur ne peut pas stocker la photo.'
+      };
+      var e = null;
+      try { e = JSON.parse(xhr.responseText); } catch (ex) { e = null; }
+      if (e && e.error && motifs[e.error]) {
+        ok(null, motifs[e.error], e.error);
+        return;
+      }
+      ok(null, 'erreur serveur ' + xhr.status, e && e.error);
     };
     xhr.ontimeout = function() { ok(null, 'delai depasse'); };
     try { xhr.send(corps); } catch (e) { ok(null, 'requete refusee'); }
@@ -5214,17 +5235,24 @@ fetchReleases();
         code: monCodeAmi,
         image: dataUri,
         token: lire(CLE_JETON)
-      }), function(d, panne) {
+      }), function(d, panne, code) {
         if (!d || !d.ok) {
           var motif;
-          if (d && d.error === 'forbidden') {
-            motif = 'Ce code ami est deja utilise par une autre installation.';
-          } else if (d && d.error) {
-            motif = 'Refuse par le serveur : ' + d.error;
+          var raison = code || (d && d.error);
+          if (raison === 'forbidden') {
+            // Cas concret : le code a ete revendique par un envoi precedent
+            // dont le jeton n'est jamais arrive jusqu'ici. Le joueur ne peut
+            // plus rien y faire seul, autant le lui dire franchement.
+            motif = 'Ce code ami est deja revendique et ton jeton local ne ' +
+                    'correspond plus. Contacte IKAAM pour le liberer.';
+          } else if (panne) {
+            motif = panne;
+          } else if (raison) {
+            motif = 'Refuse par le serveur : ' + raison;
           } else {
-            motif = 'Envoi impossible — ' + (panne || 'raison inconnue');
+            motif = 'Envoi impossible, raison inconnue.';
           }
-          if (window.showToast) showToast(motif, 'error', 6000);
+          if (window.showToast) showToast(motif, 'error', 7000);
           return;
         }
         if (d.token) ecrire(CLE_JETON, d.token);

@@ -3108,3 +3108,46 @@ cards
 .carte-stat-label {
   font-size: 10.5px;
 }
+
+/* ============================================================
+   V7 — LA BANDE NOIRE
+   Cause reelle, mesuree : .home-stage porte une gouttiere de
+   22px (padding: 20px 22px 22px). Le hero s'arretait donc 22px
+   avant les bords, et le fond de page — quasi noir — apparaissait
+   dans cette bande. Comme le hero touche DEJA le haut de la
+   fenetre (padding-top mis a 0 en V2), l'oeil ne voyait pas une
+   gouttiere symetrique mais un cadre noir en L dans les coins.
+   Ce n'etait ni la WebView, ni le DPI, ni le redimensionnement :
+   releve sur la machine, l'ecart WebView/fenetre est de 0 px.
+
+   Le hero passe donc a ras bord. Les cartes du bas gardent leur
+   gouttiere, appliquee sur elles plutot que sur le conteneur.
+   ============================================================ */
+.home-stage {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+.home-hero {
+  border-radius: 0;
+}
+.home-bottom {
+  padding: 0 22px 22px;
+}
+
+/* Le degrade de lisibilite doit suivre le hero jusqu'au bord. */
+.home-bg,
+.home-bg-fade {
+  border-radius: 0;
+}
+
+/* -- Fond d'accueil : l'image etait rognee --
+   La source faisait 1586x992 (ratio 1,6) alors que le hero, passe a ras
+   bord, est en ratio ~2,6 : "cover" devait donc amputer 38% de la hauteur,
+   et le soldat se retrouvait coupe. L'image a ete ELARGIE a 2400x1000
+   (ratio 2,4) en prolongeant le fond sur les cotes — le sujet lui-meme
+   n'a pas ete retouche. Le recadrage vertical devient negligeable, donc
+   on recentre au lieu de viser 22% de haut. */
+.home-bg {
+  background-position: center center;
+}
