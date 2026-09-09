@@ -3151,3 +3151,599 @@ cards
 .home-bg {
   background-position: center center;
 }
+
+/* ============================================================
+   V8 — WORKSHOP
+   L'onglet gardait l'habillage d'origine : cartes plates, quatre
+   boutons gris identiques sans hierarchie, un bloc "telechargement
+   rapide" qui mangeait un tiers de l'ecran, et aucune accroche
+   visuelle en haut. On le repasse dans le langage de l'accueil :
+   verre, or, coins arrondis, survol qui souleve.
+   Le DOM n'est pas touche — tout vient du JS existant.
+   ============================================================ */
+
+/* -- En-tete : une accroche, comme le hero de l'accueil -- */
+#workshopPage .page-header,
+#libraryPage .page-header {
+  position: relative;
+  margin-bottom: 20px;
+  padding: 4px 0 18px 16px;
+}
+#workshopPage .page-header::before,
+#libraryPage .page-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 22px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--or-clair), var(--or-sombre));
+}
+#workshopPage .page-title,
+#libraryPage .page-title {
+  font-size: 27px;
+  letter-spacing: -0.4px;
+}
+#workshopPage .page-sub,
+#libraryPage .page-sub {
+  margin-top: 5px;
+  max-width: 640px;
+  color: var(--texte-3);
+}
+
+/* -- Telechargement rapide : une barre, plus un pave -- */
+.quick-download-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 18px;
+  border-radius: var(--r-m);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.quick-download-card .qd-text { flex: 0 0 auto; }
+.quick-download-card .qd-label { margin-bottom: 1px; font-size: 13.5px; }
+.quick-download-card .qd-sub { margin: 0; font-size: 11.5px; color: var(--texte-3); }
+.quick-download-card .qd-action { flex: 1 1 auto; min-width: 0; }
+.quick-download-card .workshop-input-row { gap: 10px; }
+
+/* -- Barre d'outils : une seule action doree --
+   ATTENTION : ce conteneur est en flex-direction:column. "align-items"
+   y regle l'alignement HORIZONTAL : le mettre a center centrait le titre
+   et toute la barre. C'est stretch qu'il faut. */
+.workshop-browse-header {
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+.workshop-browse-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: none;
+  color: var(--texte);
+}
+.workshop-browse-controls .btn { padding: 8px 13px; font-size: 12.5px; }
+.workshop-browse-controls .workshop-search-input { min-width: 180px; }
+
+/* -- La grille : les cartes remplissent la rangee --
+   ATTENTION : ce n'est PAS une grille CSS mais un flexbox, choisi
+   volontairement parce que le MSHTML de secours ne connait pas
+   "grid" (voir le commentaire d'origine plus haut). Ma regle
+   grid-template-columns etait donc sans aucun effet : les cartes
+   restaient figees a width:204px, d'ou 59 a 167 px perdus a droite
+   selon la largeur de fenetre.
+   flex-grow:1 les fait s'etirer pour occuper toute la rangee ; le
+   max-width evite qu'une derniere rangee a une seule carte ne
+   produise une carte demesuree. */
+.workshop-browse-grid > *,
+.mods-grid > * {
+  -ms-flex: 1 1 245px;
+  flex: 1 1 245px;
+  width: auto;
+  max-width: 480px;
+}
+
+/* -- Les cartes : meme matiere que .carte sur l'accueil -- */
+.workshop-item-card,
+.mod-card {
+  border-radius: var(--r-m);
+  border: 1px solid var(--bord);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  transition: transform var(--transition), border-color var(--transition),
+              box-shadow var(--transition);
+}
+.workshop-item-card:hover,
+.mod-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(242, 196, 17, 0.30);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 16px 38px rgba(0, 0, 0, 0.42),
+    0 0 26px rgba(242, 196, 17, 0.07);
+}
+
+/* Visuel plus grand, avec un voile en bas pour asseoir le titre. */
+.workshop-item-image,
+.mod-card-image-wrap {
+  height: 132px;
+  background: linear-gradient(160deg,
+    rgba(242, 196, 17, 0.10), rgba(242, 196, 17, 0.02) 60%, rgba(0,0,0,0));
+}
+.workshop-item-image::after,
+.mod-card-image-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 46px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(10,9,8,0), rgba(10,9,8,0.72));
+}
+.workshop-item-image img,
+.mod-card-image-wrap img {
+  height: 132px;
+  transition: transform 420ms cubic-bezier(.2,.8,.3,1);
+}
+.workshop-item-card:hover .workshop-item-image img,
+.mod-card:hover .mod-card-image-wrap img { transform: translate(-50%,-50%) scale(1.05); }
+
+.no-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--texte-3);
+  font-size: 11.5px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+
+/* Titre sur deux lignes : la coupe a une seule ligne tronquait les
+   noms de mods en plein milieu d'un mot. */
+.workshop-item-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.3;
+  font-size: 14px;
+}
+.workshop-item-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--texte-3);
+}
+.workshop-item-id {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--texte-3);
+  font-size: 10.5px;
+  letter-spacing: .3px;
+}
+.workshop-item-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.workshop-item-size { font-size: 11.5px; color: var(--texte-3); }
+.workshop-item-button { padding: 7px 14px; font-size: 12px; }
+
+/* -- Pagination -- */
+.workshop-browse-pagination {
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+.workshop-browse-pagination .ws-page {
+  font-size: 12.5px;
+  color: var(--texte-3);
+  letter-spacing: .3px;
+}
+
+/* -- Pied de carte : ne pas s'etirer avec la carte --
+   Les cartes s'elargissant pour remplir la rangee, le bouton suivait
+   et devenait demesure, pendant que "120.4 MB" passait sur deux lignes. */
+.workshop-item-foot .workshop-item-button,
+.workshop-item-foot .btn {
+  -ms-flex: 0 0 auto;
+  flex: 0 0 auto;
+  /* Une regle d'origine (ligne ~867) impose width:100% au bouton.
+     flex-basis:auto reprenait donc cette largeur, et "flex:0 0 auto"
+     ne suffisait pas : il faut annuler la largeur elle-meme. */
+  width: auto;
+}
+.workshop-item-size {
+  -ms-flex: 0 0 auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   V9 — BIBLIOTHEQUE
+   Meme langage que le Workshop. Deux etats a traiter : vide, et
+   rempli. L'etat vide se resumait a un emoji marron et une ligne
+   grise ; il propose maintenant une action.
+   ============================================================ */
+
+/* -- Titre de la barre, aligne sur celui du Workshop -- */
+.library-toolbar-title {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: none;
+  color: var(--texte);
+}
+.library-toolbar-actions .btn { padding: 8px 13px; font-size: 12.5px; }
+
+/* -- Etat vide -- */
+.empty-state,
+.workshop-browse-empty,
+.friends-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 64px 24px;
+  text-align: center;
+}
+.empty-state-icon,
+.workshop-browse-empty-icon,
+.friends-empty-icon {
+  margin-bottom: 14px;
+  color: rgba(242, 196, 17, 0.45);
+  opacity: 1;
+  font-size: 0;            /* neutralise la taille prevue pour un emoji */
+  line-height: 0;
+}
+.empty-state-icon svg,
+.workshop-browse-empty-icon svg,
+.friends-empty-icon svg { display: block; }
+.empty-state.erreur .empty-state-icon { color: rgba(224, 101, 95, 0.55); }
+
+.empty-state-text,
+.workshop-browse-empty-text,
+.friends-empty-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--texte);
+}
+.empty-state-sub {
+  max-width: 340px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--texte-3);
+}
+.empty-state .btn { margin-top: 16px; }
+
+/* -- Cartes installees : actions plus legeres -- */
+.mod-card-actions {
+  gap: 6px;
+  padding-top: 2px;
+}
+.mod-card-actions > * {
+  -ms-flex: 1 1 0;
+  flex: 1 1 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* -- Ligne d'informations : les icones sont des SVG, plus des emoji -- */
+.mod-card-meta { gap: 12px; }
+.mod-card-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--texte-3);
+}
+.meta-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--texte-3);
+  opacity: .85;
+}
+.meta-icon svg { display: block; }
+
+/* -- Les blocs pleine largeur ne sont pas des cartes --
+   Ma regle "flex: 1 1 245px ; max-width: 480px" s'appliquait a TOUS les
+   enfants de la grille, y compris l'etat vide, le chargement et les
+   messages d'erreur : ils se retrouvaient larges de 480px et colles a
+   gauche au lieu d'etre centres. (Le grid-column: 1/-1 prevu ailleurs est
+   sans effet ici : la grille est un flexbox, pas une grille CSS.) */
+.mods-grid > .empty-state,
+.workshop-browse-grid > .empty-state,
+.mods-grid > .workshop-loading,
+.workshop-browse-grid > .workshop-loading,
+.mods-grid > .workshop-browse-empty,
+.workshop-browse-grid > .workshop-browse-empty {
+  -ms-flex: 1 1 100%;
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* -- Ligne d'informations : espacement, sans dependre de "gap" --
+   gap sur un flex n'est pas connu du moteur de secours ; la marge
+   explicite garantit l'ecart partout. */
+.mod-card-meta > * + * { margin-left: 14px; }
+
+/* ============================================================
+   V10 — PAGE SERVEURS
+   Meme traitement que Workshop et Bibliotheque : accroche doree
+   en tete, cartes en verre, etats vides dessines.
+   ============================================================ */
+
+/* L'accroche s'applique maintenant a toutes les pages internes,
+   plus seulement Workshop et Bibliotheque. */
+#serversPage .page-header,
+#friendsPage .page-header,
+#settingsPage .page-header {
+  position: relative;
+  margin-bottom: 20px;
+  padding: 4px 0 18px 16px;
+}
+#serversPage .page-header::before,
+#friendsPage .page-header::before,
+#settingsPage .page-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 22px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--or-clair), var(--or-sombre));
+}
+#serversPage .page-title,
+#friendsPage .page-title,
+#settingsPage .page-title { font-size: 27px; letter-spacing: -0.4px; }
+#serversPage .page-sub,
+#friendsPage .page-sub,
+#settingsPage .page-sub { margin-top: 5px; max-width: 640px; color: var(--texte-3); }
+
+/* -- Barre de resume -- */
+.servers-toolbar {
+  align-items: center;
+  margin-bottom: 14px;
+}
+.servers-summary { font-size: 13.5px; color: var(--texte-2); }
+.servers-summary strong { color: var(--or); font-weight: 800; }
+
+/* -- Cartes serveur : plus denses, en verre -- */
+.server-card {
+  padding: 12px 16px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--bord);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform var(--transition), border-color var(--transition),
+              box-shadow var(--transition);
+}
+.server-card + .server-card { margin-top: 8px; }
+.server-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(242, 196, 17, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 26px rgba(0, 0, 0, 0.34);
+}
+.server-name { font-size: 14px; font-weight: 700; }
+
+/* Ligne carte : pastille de mode + nom lisible */
+.server-map {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--texte-3);
+}
+.server-mode {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .6px;
+}
+.server-mode.mp { background: rgba(242, 196, 17, 0.16); color: var(--or); }
+.server-mode.zm { background: rgba(139, 92, 246, 0.18); color: #c4b5fd; }
+
+/* -- Jauge de remplissage : lisible d'un coup d'oeil -- */
+.server-players-num { font-size: 19px; font-weight: 800; color: var(--or); }
+.server-players-bar {
+  height: 4px;
+  margin: 5px 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.server-players-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--or-sombre), var(--or-clair));
+  transition: width var(--transition);
+}
+.server-players-label {
+  font-size: 9.5px;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  color: var(--texte-3);
+}
+
+/* -- Etats vides -- */
+.servers-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 64px 24px;
+  text-align: center;
+}
+.servers-empty-icon {
+  margin-bottom: 12px;
+  color: rgba(242, 196, 17, 0.42);
+  font-size: 0;
+  line-height: 0;
+}
+.servers-empty-icon svg { display: block; }
+.servers-empty.erreur .servers-empty-icon { color: rgba(224, 101, 95, 0.55); }
+.servers-empty-text { font-size: 16px; font-weight: 700; color: var(--texte); }
+.servers-empty-sub {
+  max-width: 340px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--texte-3);
+}
+
+/* ============================================================
+   V11 — REGLAGES
+   Deux vrais defauts : les champs ne s'alignaient pas d'une ligne
+   a l'autre, et la page etait a moitie en anglais (74 chaines
+   traduites dans main.html). Ici on regle l'alignement et la
+   densite, et on met la page au meme langage visuel que les autres.
+   ============================================================ */
+
+/* -- Colonne de controle a largeur fixe --
+   .settings-row est en space-between, mais les champs avaient une
+   largeur fluide : chacun demarrait juste apres son libelle, donc a
+   un x different a chaque ligne. Une base fixe les aligne tous sur
+   le bord droit, comme les interrupteurs. */
+.settings-row > div:first-child {
+  -ms-flex: 1 1 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-row .settings-input,
+.settings-row .settings-select {
+  -ms-flex: 0 0 260px;
+  flex: 0 0 260px;
+  width: 260px;
+  max-width: 260px;
+  min-width: 0;
+}
+/* Les champs de pools sont volontairement courts (valeurs numeriques). */
+.settings-row .asset-pool-input {
+  -ms-flex: 0 0 110px;
+  flex: 0 0 110px;
+  width: 110px;
+  max-width: 110px;
+}
+
+/* -- Sections : meme matiere que les cartes des autres pages -- */
+.settings-section {
+  padding: 16px 18px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--bord);
+  background: var(--verre);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 55%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.settings-section-title {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--texte-3);
+  margin-bottom: 8px;
+  padding-bottom: 10px;
+}
+
+/* -- Lignes plus denses : on passait 4 reglages a l'ecran -- */
+.settings-row { padding: 10px 0; }
+.settings-row-label { font-size: 13.5px; font-weight: 600; }
+.settings-row-desc { font-size: 11.5px; line-height: 1.45; margin-top: 2px; }
+
+/* -- Onglets -- */
+.settings-tabs { gap: 2px; }
+.settings-tab {
+  padding: 9px 15px;
+  border-radius: var(--r-s) var(--r-s) 0 0;
+  font-size: 13px;
+  transition: color var(--transition), background var(--transition);
+}
+.settings-tab:hover { background: rgba(255, 255, 255, 0.035); }
+
+/* -- A propos : un bandeau, plus un pave centre -- */
+.settings-about {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  padding: 2px 0;
+}
+.settings-about-name { font-size: 15px; font-weight: 800; color: var(--or); }
+.settings-about-version {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--texte-3);
+  font-size: 11px;
+}
+.settings-about-desc {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--texte-3);
+}
+
+/* -- Le bouton de reinitialisation n'a pas besoin de toute la largeur -- */
+#settingsResetBtn {
+  width: auto !important;
+  padding: 9px 18px;
+}
+
+/* -- Icones SVG en ligne dans les boutons et pastilles --
+   Les emoji restants (loupe, dossier, manette, ecran, groupe) sont
+   remplaces par des SVG : un emoji change de dessin selon la machine
+   et se cale mal sur la ligne de base. */
+.home-stat-ic svg,
+.amis-identite-ic svg,
+.amis-vide-ic svg,
+.btn svg { display: block; }
+.home-stat-ic,
+.amis-identite-ic,
+.amis-vide-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#verifyGameFilesBtn,
+#workshopOpenSteamBtn { align-items: center; }

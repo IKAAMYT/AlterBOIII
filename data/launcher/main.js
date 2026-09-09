@@ -337,7 +337,11 @@ var workshopBrowsePagination =
     document.getElementById('workshopBrowsePagination');
 var workshopBrowseItems = [];
 var workshopBrowseCurrentPage = 1;
-var workshopBrowseItemsPerPage = 10;
+// 12 et non 10 : la grille affiche 3 cartes par rangee a 1024px et 4 a
+// 1260px, les deux largeurs les plus courantes. 10 laissait donc une
+// derniere rangee de 2 cartes et un grand vide ; 12 tombe juste sur les
+// deux, et se divise aussi par 6.
+var workshopBrowseItemsPerPage = 12;
 var workshopBrowseLoading = false;
 var workshopBrowseSearchTerm = '';
 // État unifié browse/search (aligné sur le C++ workshopGetBrowseState)
@@ -2145,7 +2149,7 @@ function refreshModsGrid() {
     if (!ex) {
       modsItemsCache = [];
       modsGrid.innerHTML =
-          '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">Aucune map Workshop installée</div></div>';
+          '<div class="empty-state"><div class="empty-state-icon"><svg width="52" height="52" viewBox="0 0 48 48" fill="none"><path d="M24 5 6 13v22l18 8 18-8V13L24 5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6 13l18 8 18-8M24 21v22" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div><div class="empty-state-text">Aucune map installee</div><div class="empty-state-sub">Les maps et mods que tu telecharges depuis le Workshop apparaitront ici.</div><button type="button" class="btn btn-primary js-aller-workshop">Parcourir le Workshop</button></div>';
       if (modsPagination)
         modsPagination.style.display = 'none';
       return;
@@ -2211,7 +2215,7 @@ function refreshModsGrid() {
   } catch (e) {
     modsItemsCache = [];
     modsGrid.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-text">Erreur de chargement des maps Workshop</div></div>';
+        '<div class="empty-state erreur"><div class="empty-state-icon"><svg width="52" height="52" viewBox="0 0 48 48" fill="none"><path d="M24 6 3 42h42L24 6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="35" r="1.6" fill="currentColor"/></svg></div><div class="empty-state-text">Impossible de lire tes maps installees</div><div class="empty-state-sub">Verifie que le dossier du jeu est accessible, puis actualise.</div></div>';
     if (modsPagination)
       modsPagination.style.display = 'none';
   }
@@ -2221,7 +2225,7 @@ function renderModsPage() {
   modsGrid.innerHTML = '';
   if (!modsItemsCache || modsItemsCache.length === 0) {
     modsGrid.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#128230;</div><div class="empty-state-text">Aucune map Workshop installée</div></div>';
+        '<div class="empty-state"><div class="empty-state-icon"><svg width="52" height="52" viewBox="0 0 48 48" fill="none"><path d="M24 5 6 13v22l18 8 18-8V13L24 5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6 13l18 8 18-8M24 21v22" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div><div class="empty-state-text">Aucune map installee</div><div class="empty-state-sub">Les maps et mods que tu telecharges depuis le Workshop apparaitront ici.</div><button type="button" class="btn btn-primary js-aller-workshop">Parcourir le Workshop</button></div>';
     if (modsPagination)
       modsPagination.style.display = 'none';
     return;
@@ -2285,7 +2289,7 @@ function renderModsPage() {
                   : sz > 1024     ? (sz / 1024).toFixed(0) + ' KB'
                                   : sz + ' B';
       var sizeSpan = document.createElement('span');
-      sizeSpan.innerHTML = '<span class="meta-icon">&#128190;</span> ' + szStr;
+      sizeSpan.innerHTML = '<span class="meta-icon"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 3.2A1.2 1.2 0 0 1 3.7 2h6.9l3.4 3.4v7.4A1.2 1.2 0 0 1 12.8 14H3.7a1.2 1.2 0 0 1-1.2-1.2V3.2Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M5.4 2v3.5h4.3V2.4M5.4 14v-3.6h5.2V14" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg></span> ' + szStr;
       metaDiv.appendChild(sizeSpan);
       hasMeta = true;
     }
@@ -2311,7 +2315,7 @@ function renderModsPage() {
     if (mSubs > 0) {
       var subsSpan = document.createElement('span');
       subsSpan.innerHTML =
-          '<span class="meta-icon">&#128101;</span> ' + mSubs.toLocaleString();
+          '<span class="meta-icon"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5.4" r="2.3" stroke="currentColor" stroke-width="1.25"/><path d="M1.9 13.2a4.1 4.1 0 0 1 8.2 0" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M10.6 3.4a2.3 2.3 0 0 1 0 4M11.8 9.6a4.1 4.1 0 0 1 2.4 3.6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg></span> ' + mSubs.toLocaleString();
       metaDiv.appendChild(subsSpan);
       hasMeta = true;
     }
@@ -3841,14 +3845,50 @@ function escapeServerText(s) {
   return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/* Noms lisibles des cartes. Le serveur renvoie l'identifiant interne
+   ("mp_nuketown_x", "zm_der_riese") : illisible pour un joueur. */
+var NOMS_CARTES = {
+  // Multijoueur
+  mp_nuketown_x: 'Nuketown', mp_havoc: 'Havoc', mp_combine: 'Combine',
+  mp_metro: 'Metro', mp_stronghold: 'Stronghold', mp_biodome: 'Biodome',
+  mp_infection: 'Infection', mp_ethiopia: 'Hunted', mp_redwood: 'Redwood',
+  mp_conduit: 'Evac', mp_chinatown: 'Exodus', mp_crucible: 'Breach',
+  mp_sector: 'Fringe', mp_spire: 'Spire', mp_banzai: 'Splash',
+  mp_aerospace: 'Aerospace', mp_ruins: 'Rise', mp_veiled: 'Rupture',
+  mp_rome: 'Rome', mp_arena: 'Skyjacked', mp_kung_fu: 'Knockout',
+  mp_western: 'Outlaw', mp_shrine: 'Verge', mp_apartments: 'Rift',
+  // Zombies
+  zm_zod: 'Shadows of Evil', zm_factory: 'The Giant',
+  zm_castle: 'Der Eisendrache', zm_island: 'Zetsubou No Shima',
+  zm_stalingrad: 'Gorod Krovi', zm_genesis: 'Revelations',
+  zm_prototype: 'Nacht der Untoten', zm_asylum: 'Verruckt',
+  zm_sumpf: 'Shi No Numa', zm_theater: 'Kino der Toten',
+  zm_cosmodrome: 'Ascension', zm_temple: 'Shangri-La',
+  zm_moon: 'Moon', zm_tomb: 'Origins', zm_der_riese: 'Der Riese'
+};
+
+/* Rend un identifiant de carte lisible, et devine le mode.
+   Une carte inconnue (map custom du Workshop) est nettoyee au lieu
+   d'etre affichee brute : prefixe retire, underscores en espaces. */
+function joliNomCarte(brut) {
+  var id = String(brut || '').toLowerCase().trim();
+  if (!id) { return { nom: 'Carte inconnue', mode: '' }; }
+  var mode = id.indexOf('zm_') === 0 ? 'ZM' : (id.indexOf('mp_') === 0 ? 'MP' : '');
+  if (NOMS_CARTES[id]) { return { nom: NOMS_CARTES[id], mode: mode }; }
+  var n = id.replace(/^(mp|zm|cp)_/, '').replace(/_/g, ' ').trim();
+  n = n.replace(/\b[a-z]/g, function(c) { return c.toUpperCase(); });
+  return { nom: n || 'Carte inconnue', mode: mode };
+}
+
 function renderServersList(servers) {
   var list = document.getElementById('serversList');
   if (!list) return;
 
   if (!servers || servers.length === 0) {
     list.innerHTML =
-        '<div class="servers-empty"><div class="servers-empty-icon">&#128225;</div>' +
-        '<div>Aucun serveur en ligne pour le moment</div></div>';
+        '<div class="servers-empty"><div class="servers-empty-icon"><svg width="46" height="46" viewBox="0 0 48 48" fill="none"><path d="M8 40 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="24" cy="24" r="4" stroke="currentColor" stroke-width="2.2"/><path d="M30 12a17 17 0 0 1 6 6M33 6a24 24 0 0 1 9 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M6 42h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></div>' +
+        '<div class="servers-empty-text">Aucun serveur en ligne</div>' +
+        '<div class="servers-empty-sub">Personne n\'heberge de partie pour le moment. Reessaie dans quelques minutes.</div></div>';
     return;
   }
 
@@ -3864,13 +3904,18 @@ function renderServersList(servers) {
     if (max < 1) max = 18;
     var pct = Math.min(Math.round((clients / max) * 100), 100);
     var statusCls = (clients > 0) ? 'online' : 'empty';
-    var mapName = s.map ? escapeServerText(s.map) : 'Carte inconnue';
+    var carte = joliNomCarte(s.map);
+    var mapName = escapeServerText(carte.nom);
+    var modeBadge = carte.mode
+        ? '<span class="server-mode ' + (carte.mode === 'ZM' ? 'zm' : 'mp') +
+          '">' + carte.mode + '</span>'
+        : '';
 
     html += '<div class="server-card">';
     html += '<span class="server-status ' + statusCls + '"></span>';
     html += '<div class="server-main">';
     html += '<div class="server-name">' + escapeServerText(s.name || 'Serveur') + '</div>';
-    html += '<div class="server-map">' + mapName + '</div>';
+    html += '<div class="server-map">' + modeBadge + '<span>' + mapName + '</span></div>';
     html += '</div>';
     html += '<div class="server-players">';
     html += '<div class="server-players-num">' + clients + '<span style="color:#7a766c;font-size:13px;font-weight:600;"> / ' + max + '</span></div>';
@@ -3994,8 +4039,9 @@ function loadServersFallback() {
       updateServersSummary(0, 0, false);
       if (list) {
         list.innerHTML =
-            '<div class="servers-empty"><div class="servers-empty-icon">&#128225;</div>' +
-            '<div>Impossible de joindre les serveurs.</div></div>';
+            '<div class="servers-empty erreur"><div class="servers-empty-icon"><svg width="46" height="46" viewBox="0 0 48 48" fill="none"><path d="M24 6 3 42h42L24 6Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="24" cy="35" r="1.7" fill="currentColor"/></svg></div>' +
+            '<div class="servers-empty-text">Serveurs injoignables</div>' +
+            '<div class="servers-empty-sub">Verifie ta connexion, puis actualise. Le jeu reste jouable hors ligne.</div></div>';
       }
     };
     xhr.send();
@@ -5325,3 +5371,18 @@ fetchReleases();
   appliquerMaPhoto();   // affichage immediat depuis le cache local
 })();
 })();
+
+/* Le bouton "Parcourir le Workshop" de l'etat vide est cree APRES le
+   cablage initial, et setPage n'est pas exposee (tout vit dans une IIFE).
+   On passe donc par l'onglet lui-meme, ce qui marche depuis n'importe ou. */
+document.addEventListener('click', function(ev) {
+  var n = ev.target;
+  while (n && n !== document) {
+    if (n.className && String(n.className).indexOf('js-aller-workshop') !== -1) {
+      var onglet = document.querySelector('[data-page="workshop"]');
+      if (onglet) { onglet.click(); }
+      return;
+    }
+    n = n.parentNode;
+  }
+}, false);
