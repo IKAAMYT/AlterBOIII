@@ -36,7 +36,13 @@ void draw_branding() {
     return;
 
   game::render::R_AddCmdDrawText(
-      "AlterBOIII: " VERSION, std::numeric_limits<int>::max(), font, x,
+      // SHORTVERSION et non VERSION : VERSION vaut GIT_DESCRIBE, donc
+      // "v2.1.0-7-g1a2b3c4" des qu'il y a des commits apres le tag.
+      // SHORTVERSION est la forme numerique propre (2.1.0).
+      // ATTENTION : sans AUCUN tag, git describe renvoie le hash du commit
+      // et premake en extrait les chiffres — un "1a2b3c4" donnerait 1.2.3.
+      // Le tag doit exister avant le build.
+      "AlterBOIII : " SHORTVERSION, std::numeric_limits<int>::max(), font, x,
       y + static_cast<float>(font[2]) * scale, scale, scale, 0.0f, &color,
       game::itemTextStyle::NORMAL);
 }

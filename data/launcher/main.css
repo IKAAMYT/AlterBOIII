@@ -3747,3 +3747,55 @@ cards
 }
 #verifyGameFilesBtn,
 #workshopOpenSteamBtn { align-items: center; }
+
+/* ============================================================
+   V12 — LE FOND SUR TOUTE LA PAGE
+   L'artwork etait porte par .home-bg, un enfant de .home-hero.
+   Le hero ne couvre pas .home-bottom : la bande des cartes du bas
+   retombait donc sur le fond uni, et l'image s'arretait aux trois
+   quarts de la fenetre.
+   On deplace le fond sur .home-stage, qui contient hero ET bandeau.
+   ============================================================ */
+.home-stage {
+  background: url("home_splash.jpg") center center / cover no-repeat;
+}
+
+/* Le voile de lisibilite suit, sinon le texte du hero passe sur
+   l'artwork en clair. Meme degrade qu'avant, applique au conteneur. */
+.home-stage::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      rgba(10, 9, 8, 0.97) 0%,
+      rgba(10, 9, 8, 0.90) 30%,
+      rgba(10, 9, 8, 0.58) 50%,
+      rgba(10, 9, 8, 0.10) 74%,
+      rgba(10, 9, 8, 0.45) 100%),
+    linear-gradient(0deg, rgba(10, 9, 8, 0.92), transparent 38%);
+}
+
+/* Les enfants passent AU-DESSUS du voile.
+   On vise les DEUX blocs concernes, pas "> *" : .home-topright est en
+   position:absolute et un blanket "position: relative" le remettait dans
+   le flux, ce qui le sortait de la fenetre par la gauche. */
+.home-stage > .home-hero,
+.home-stage > .home-bottom {
+  position: relative;
+  z-index: 1;
+}
+
+/* L'ancien porteur du fond n'a plus lieu d'etre. */
+.home-bg,
+.home-bg-fade {
+  display: none;
+}
+.home-hero {
+  background: transparent;
+  overflow: visible;
+}
