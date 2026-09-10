@@ -9,6 +9,10 @@
 
 #include <discord_rpc.h>
 
+#include <utils/io.hpp>
+
+#include <rapidjson/document.h>
+
 #include <ctime>
 #include <unordered_map>
 
@@ -101,7 +105,81 @@ static __declspec(noinline) bool seh_get_client_count(int max_clients,
 
 namespace discord {
 namespace {
-constexpr const char *DISCORD_APP_ID = "1520258667071537233";
+constexpr const char *DISCORD_APP_ID_DEFAUT = "1520258667071537233";
+
+// L'App ID peut etre remplace sans recompiler, via la cle "discord_app_id"
+// de boiii_players/user/launcher_settings.json. Un App ID qui n'existe pas,
+// ou dont on n'est pas proprietaire, fait echouer Discord_Initialize en
+// silence : plus aucune presence n'apparait. Pouvoir en changer a chaud
+// permet de trancher cette cause en trente secondes.
+const char *get_discord_app_id() {
+  static std::string app_id;
+  static bool charge = false;
+  if (charge) {
+    return app_id.c_str();
+  }
+  charge = true;
+  app_id = DISCORD_APP_ID_DEFAUT;
+
+  std::string data;
+  if (utils::io::read_file("boiii_players/user/launcher_settings.json",
+                           &data) &&
+      !data.empty()) {
+    rapidjson::Document doc;
+    if (!doc.Parse(data.c_str()).HasParseError() && doc.IsObject()) {
+      const auto it = doc.FindMember("discord_app_id");
+      if (it != doc.MemberEnd() && it->value.IsString()) {
+        const std::string val = it->value.GetString();
+        // Un snowflake Discord : uniquement des chiffres, 17 a 20.
+        if (val.size() >= 17 && val.size() <= 20 &&
+            val.find_first_not_of("0123456789") == std::string::npos) {
+          app_id = val;
+        }
+      }
+    }
+  }
+  return app_id.c_str();
+}
+
+// Discord REFUSE une presence dont "details" ou "state" fait moins de deux
+// caracteres. Le champ n'est pas simplement ignore : c'est toute la mise a
+// jour qui est rejetee, donc plus rien ne s'affiche. On tombait dedans en
+// zombies partie privee tant que le round n'etait pas remonte (state = "")
+// et en campagne partie privee (state = "" par construction).
+// Les grandes images en jeu utilisent le nom de la carte comme cle d'asset.
+// Cela suppose que les 53 assets de cartes ont ete televerses sur l'app
+// Discord. Tant qu'ils n'y sont pas, la cle pointe dans le vide et AUCUNE
+// image ne s'affiche. On retombe donc sur "logo" par defaut, et on rebascule
+// sur les cartes avec "discord_map_images": "1" une fois les assets en ligne.
+bool images_de_cartes_activees() {
+  static bool valeur = false;
+  static bool charge = false;
+  if (charge) {
+    return valeur;
+  }
+  charge = true;
+
+  std::string data;
+  if (utils::io::read_file("boiii_players/user/launcher_settings.json",
+                           &data) &&
+      !data.empty()) {
+    rapidjson::Document doc;
+    if (!doc.Parse(data.c_str()).HasParseError() && doc.IsObject()) {
+      const auto it = doc.FindMember("discord_map_images");
+      if (it != doc.MemberEnd() && it->value.IsString()) {
+        valeur = std::string(it->value.GetString()) == "1";
+      }
+    }
+  }
+  return valeur;
+}
+
+const char *texte_presence(std::string &valeur, const char *repli) {
+  if (valeur.size() < 2) {
+    valeur = repli;
+  }
+  return valeur.c_str();
+}
 
 time_t start_time = 0;
 time_t match_time = 0;
@@ -254,7 +332,8 @@ void update_discord() {
       dp.state = ui_level ? "Main Menu" : "Loading...";
       dp.largeImageKey = "logo";
       dp.largeImageText = "AlterBOIII par IKAAM";
-      dp.smallImageKey = "sexy";
+      // "sexy" n'existe pas sur l'app AlterBOIII ; "boiii" si.
+      dp.smallImageKey = "boiii";
       Discord_UpdatePresence(&dp);
       return;
     }
@@ -332,10 +411,11 @@ void update_discord() {
       }
     }
 
-    dp.details = details.c_str();
-    dp.state = state.c_str();
+    dp.details = texte_presence(details, "AlterBOIII");
+    dp.state = texte_presence(state, "En partie");
 
-    const bool known_map = map_names.count(mapname) > 0;
+    const bool known_map =
+        images_de_cartes_activees() && map_names.count(mapname) > 0;
     dp.largeImageKey = known_map ? mapname.c_str() : "logo";
 
     std::string large_text =
@@ -393,7 +473,9 @@ public:
     handlers.errored = errored;
     handlers.disconnected = errored;
 
-    Discord_Initialize(DISCORD_APP_ID, &handlers, 1, nullptr);
+    const char *app_id = get_discord_app_id();
+    printf("Discord: App ID %s\n", app_id);
+    Discord_Initialize(app_id, &handlers, 1, nullptr);
 
     scheduler::loop(Discord_RunCallbacks, scheduler::pipeline::async, 1s);
     scheduler::loop(update_discord, scheduler::pipeline::main, 5s);
