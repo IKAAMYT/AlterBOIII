@@ -25,6 +25,8 @@
 #include <utils/io.hpp>
 #include <utils/nt.hpp>
 
+#include <rapidjson/document.h>
+
 #include <richedit.h>
 #include <dwmapi.h>
 
@@ -53,6 +55,39 @@ constexpr int32_t CONSOLE_MIN_WIDTH = 900;
 constexpr int32_t CONSOLE_MIN_HEIGHT = 520;
 constexpr int32_t CONSOLE_HEADER_HEIGHT = 36;
 constexpr int32_t CONSOLE_INPUT_HEIGHT = 26;
+
+// Taille par defaut de la console. Elle etait calculee a 3/4 de l'ecran et
+// plafonnee a 1400x900 : sur un 1920x1080 la fenetre s'ouvrait en 1400x810,
+// soit les trois quarts de l'ecran pour une console de debogage.
+constexpr int32_t CONSOLE_DEFAUT_MAX_WIDTH = 1100;
+constexpr int32_t CONSOLE_DEFAUT_MAX_HEIGHT = 620;
+
+// Surchargeable sans recompiler via "console_width" / "console_height" dans
+// boiii_players/user/launcher_settings.json.
+int32_t taille_console_reglage(const char *cle) {
+  std::string data;
+  if (!utils::io::read_file("boiii_players/user/launcher_settings.json",
+                            &data) ||
+      data.empty()) {
+    return 0;
+  }
+  rapidjson::Document doc;
+  if (doc.Parse(data.c_str()).HasParseError() || !doc.IsObject()) {
+    return 0;
+  }
+  const auto it = doc.FindMember(cle);
+  if (it == doc.MemberEnd() || !it->value.IsString()) {
+    return 0;
+  }
+  try {
+    const long val = std::stol(it->value.GetString());
+    if (val >= 640 && val <= 7680) {
+      return static_cast<int32_t>(val);
+    }
+  } catch (...) {
+  }
+  return 0;
+}
 constexpr int32_t CONSOLE_MARGIN = 8;
 constexpr int32_t COMPLETION_HINT_HEIGHT = 40;
 constexpr int32_t COMPLETION_HINT_MAX_HEIGHT = 8 + 14 * 11;
@@ -1325,23 +1360,31 @@ void sys_create_console_stub(const HINSTANCE h_instance) {
     return;
   }
 
-  RECT rect{};
-  rect.left = 0;
-  rect.right = 1200;
-  rect.top = 0;
-  rect.bottom = 720;
+  // Le RECT 1200x720 qui se trouvait ici etait passe a AdjustWindowRect puis
+  // jamais relu : code mort, la taille venait entierement du calcul ci-dessous.
   constexpr DWORD window_style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
-  AdjustWindowRect(&rect, window_style, FALSE);
 
   HDC dc = GetDC(GetDesktopWindow());
   const int32_t swidth = GetDeviceCaps(dc, 8);
   const int32_t sheight = GetDeviceCaps(dc, 10);
   ReleaseDC(GetDesktopWindow(), dc);
 
+  // 3/5 de l'ecran plutot que 3/4, et un plafond plus bas : une console de
+  // debogage n'a pas a couvrir l'ecran au demarrage. Elle reste
+  // redimensionnable a la souris.
+  const int32_t largeur_reglee = taille_console_reglage("console_width");
+  const int32_t hauteur_reglee = taille_console_reglage("console_height");
+
   const int32_t window_width =
-      (std::min)(std::max(CONSOLE_MIN_WIDTH, swidth * 3 / 4), 1400);
+      largeur_reglee > 0
+          ? (std::min)(largeur_reglee, swidth)
+          : (std::min)((std::max)(CONSOLE_MIN_WIDTH, swidth * 3 / 5),
+                       CONSOLE_DEFAUT_MAX_WIDTH);
   const int32_t window_height =
-      (std::min)(std::max(CONSOLE_MIN_HEIGHT, sheight * 3 / 4), 900);
+      hauteur_reglee > 0
+          ? (std::min)(hauteur_reglee, sheight)
+          : (std::min)((std::max)(CONSOLE_MIN_HEIGHT, sheight * 3 / 5),
+                       CONSOLE_DEFAUT_MAX_HEIGHT);
   const int32_t window_x = (swidth - window_width) / 2;
   const int32_t window_y = (sheight - window_height) / 2;
 
