@@ -3799,3 +3799,54 @@ cards
   background: transparent;
   overflow: visible;
 }
+
+/* ============================================================
+   V13 — BANDEAU DE MISE A JOUR DU CLIENT
+   Meme placement que le bandeau d'erreur : sous la barre du haut,
+   qui fait 64px (voir V6). En dore, puisqu'il annonce une bonne
+   nouvelle et non une panne.
+   ============================================================ */
+.maj-banner {
+  position: fixed;
+  left: 50%;
+  top: 74px;
+  transform: translateX(-50%);
+  z-index: 99997;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 90%;
+  padding: 10px 14px;
+  border: 1px solid rgba(242, 196, 17, 0.34);
+  border-radius: 12px;
+  background: rgba(28, 23, 10, 0.96);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 60%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 12px 34px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  color: var(--texte);
+  font-size: 13px;
+}
+.maj-banner-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--or);
+}
+.maj-banner-ico svg { display: block; }
+.maj-banner-text { flex: 1 1 auto; line-height: 1.35; }
+.maj-banner .btn { flex: 0 0 auto; }
+.maj-banner-close {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--texte-3);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.maj-banner-close:hover { color: var(--texte); }

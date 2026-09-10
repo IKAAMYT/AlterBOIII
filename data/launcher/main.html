@@ -488,6 +488,14 @@
                 <button type="button" class="settings-toggle active" id="settingsAutoUpdate"
                   data-setting="autoUpdate"></button>
               </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Mise à jour automatique du client</div>
+                  <div class="settings-row-desc">Utilise la dernière version publiée au lancement du jeu. Le client redémarre pour l'appliquer.</div>
+                </div>
+                <button type="button" class="settings-toggle" id="settingsAutoUpdateClient"
+                  data-setting="autoUpdateClient"></button>
+              </div>
             </div>
 
             <div class="settings-section">
@@ -1146,6 +1154,12 @@
 
 
   <!-- Bandeau état de connexion (IKAAM) -->
+  <div class="maj-banner" id="bandeauMaj" style="display:none;">
+    <span class="maj-banner-ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.4v7.6M5.2 7.2 8 10l2.8-2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.6 11.6v1.1a1 1 0 0 0 1 1h8.8a1 1 0 0 0 1-1v-1.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+    <span class="maj-banner-text" id="bandeauMajTexte"></span>
+    <button type="button" class="btn btn-primary btn-sm" id="bandeauMajBtn">Mettre à jour et jouer</button>
+    <button type="button" class="maj-banner-close" id="bandeauMajFermer" title="Plus tard">&times;</button>
+  </div>
   <div class="conn-banner" id="connBanner">
     <span class="conn-banner-ico">&#9888;</span>
     <span class="conn-banner-text">Serveurs IKAAM injoignables — vérifie ta connexion. Le jeu reste jouable.</span>

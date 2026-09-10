@@ -3052,8 +3052,19 @@ document.getElementById('playBtn').onclick = function() {
     if (selectedVersion !== 'latest' && _versionsData[selectedVersion]) {
       exeName = _versionsData[selectedVersion].name;
       exeUrl = _versionsData[selectedVersion].url;
+      // Version figee choisie a la main : on gele aussi les donnees.
       if (opts.toLowerCase().indexOf('-noupdate') === -1) {
         opts = (opts + ' -noupdate').trim();
+      }
+    } else if (selectedVersion === 'latest' && getSetting('autoUpdateClient')) {
+      // Mise a jour automatique du client : on part sur le dernier exe
+      // publie s'il est plus recent que celui qui tourne.
+      // Ici on n'ajoute PAS "-noupdate" : le joueur veut justement etre a
+      // jour, et ce drapeau couperait aussi les donnees du jeu.
+      var relMaj = majDisponible();
+      if (relMaj) {
+        exeName = relMaj.name;
+        exeUrl = relMaj.url;
       }
     }
 
@@ -3237,7 +3248,11 @@ var ASSET_POOL_DEFAULTS = {
   ap_xcam : 256,
   ap_tracer : 128,
   ap_vehicledef : 128,
-  ap_ttf : 64
+  ap_ttf : 64,
+  // Utiliser d'office le dernier exe publie quand on clique sur Jouer.
+  // Desactive par defaut : cela relance un AUTRE processus, autant que le
+  // joueur l'ait choisi.
+  autoUpdateClient : false
 };
 
 function loadAllSettings() {
@@ -4147,6 +4162,97 @@ try {
 } catch (e) {
 }
 
+/* ─────────────────────────────────────────────────────────────
+   MISE A JOUR DU CLIENT
+   Le C++ sait deja telecharger un exe depuis une URL vers
+   <jeu>/versions/ puis relancer dessus (handle_version_launch).
+   Ce mecanisme existe depuis la v2.2.4 amont, donc il est present
+   dans les exe que les joueurs ont DEJA : tout ce bloc part par
+   ui_rev et fonctionne sans qu'ils aient a recompiler quoi que ce
+   soit. ES5 uniquement.
+   ───────────────────────────────────────────────────────────── */
+var _derniereRelease = null;   // release la plus recente ayant un exe
+var _majTraitee = false;       // garde-fou : une seule fois par session
+
+/* Compare deux versions x.y.z. Renvoie vrai si a est plus recente que b. */
+function versionPlusRecente(a, b) {
+  var pa = String(a || '').replace(/^v/i, '').split('.');
+  var pb = String(b || '').replace(/^v/i, '').split('.');
+  for (var i = 0; i < 3; i++) {
+    var na = parseInt(pa[i], 10) || 0;
+    var nb = parseInt(pb[i], 10) || 0;
+    if (na !== nb) { return na > nb; }
+  }
+  return false;
+}
+
+function versionActuelle() {
+  try {
+    var ex = getExternal();
+    if (ex && ex.getVersion) { return String(ex.getVersion() || ''); }
+  } catch (e) {}
+  return '';
+}
+
+/* Y a-t-il mieux que ce qui tourne ? Renvoie la release ou null. */
+function majDisponible() {
+  if (!_derniereRelease) { return null; }
+  var actuelle = versionActuelle();
+  // Version inconnue : on ne propose rien plutot que de proposer a tort.
+  if (!actuelle) { return null; }
+  return versionPlusRecente(_derniereRelease.tag, actuelle)
+             ? _derniereRelease
+             : null;
+}
+
+/* Telecharge le nouvel exe et relance dessus.
+   ATTENTION : le C++ ajoute toujours "-launch", il n'existe donc AUCUN
+   moyen de recuperer l'exe sans demarrer le jeu. Le libelle du bouton doit
+   le dire.
+   On n'ajoute surtout PAS "-noupdate" ici : ce drapeau coupe aussi la mise
+   a jour des donnees du jeu (updater.cpp), pas seulement du binaire. */
+function lancerAvecMaj(rel) {
+  try {
+    var opts = window.getSelectedLaunchOption
+                   ? window.getSelectedLaunchOption() : '';
+    var pseudo = window.getPlayerName ? window.getPlayerName() : '';
+    getExternal().launchGame(pseudo, opts, rel.name, rel.url);
+  } catch (e) {
+    if (window.showToast) {
+      showToast('Mise a jour impossible a demarrer.', 'error', 6000);
+    }
+  }
+}
+
+function proposerMaj() {
+  if (_majTraitee) { return; }
+  var rel = majDisponible();
+  if (!rel) { return; }
+  _majTraitee = true;   // jamais deux fois, meme si la comparaison deraille
+
+  if (getSetting('autoUpdateClient')) {
+    if (window.showToast) {
+      showToast('Version ' + rel.tag + ' disponible, elle sera utilisee au lancement.',
+                'info', 6000);
+    }
+    return;   // le bouton Jouer s'en charge
+  }
+
+  var b = document.getElementById('bandeauMaj');
+  if (!b) { return; }
+  var t = document.getElementById('bandeauMajTexte');
+  if (t) {
+    t.textContent = 'AlterBOIII ' + rel.tag + ' est disponible (tu es en ' +
+                    versionActuelle() + ').';
+  }
+  var bouton = document.getElementById('bandeauMajBtn');
+  if (bouton) { bouton.onclick = function() { lancerAvecMaj(rel); }; }
+  var fermer = document.getElementById('bandeauMajFermer');
+  if (fermer) { fermer.onclick = function() { b.style.display = 'none'; }; }
+  b.style.display = '';
+}
+
+
 function fetchReleases() {
   if (!versionOptions)
     return;
@@ -4172,6 +4278,7 @@ function fetchReleases() {
     selectVersion(_selectedVersion,
                   _selectedVersion === 'latest' ? 'Latest (Auto-update)'
                                                 : _selectedVersion);
+    proposerMaj();
   }
 
   xhr.open('GET', url, true);
@@ -4204,6 +4311,15 @@ function fetchReleases() {
                 url : boiiiAsset.browser_download_url,
                 name : 'alterbo3-' + tagName + '.exe'
               };
+              // GitHub renvoie les releases de la plus recente a la plus
+              // ancienne : la premiere qui porte un exe est la derniere.
+              if (!_derniereRelease) {
+                _derniereRelease = {
+                  tag : tagName,
+                  url : boiiiAsset.browser_download_url,
+                  name : 'alterbo3-' + tagName + '.exe'
+                };
+              }
               addVersionOption(tagName, tagName);
             }
           }
