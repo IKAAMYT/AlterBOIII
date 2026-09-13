@@ -317,7 +317,11 @@ void handle_new_player(const game::net::netadr_t &target) {
   if (params.size() > 1) {
     const utils::info_string info_string(params[1]);
     const game::XUID xuid =
-        strtoull(info_string.get("xuid").data(), nullptr, 16);
+        ([](){
+                  errno = 0;
+                  uint64_t xuid = strtoull(info_string.get("xuid").data(), nullptr, 16);
+                  return (errno == 0) ? xuid : 0;
+                }());
 
     size_t player_index = 18;
     game::first_connected_client(
@@ -470,7 +474,11 @@ void dispatch_connect_packet(const game::net::netadr_t &target,
       profile_infos::acquire_profile_lock();
 
   const utils::info_string info_string(params[1]);
-  const game::XUID xuid = strtoull(info_string.get("xuid").data(), nullptr, 16);
+  const game::XUID xuid = ([](){
+                  errno = 0;
+                  uint64_t xuid = strtoull(info_string.get("xuid").data(), nullptr, 16);
+                  return (errno == 0) ? xuid : 0;
+                }());
   if (xuid != key.get_hash()) {
     network::send(target, "error", "Bad XUID");
     return;
