@@ -123,7 +123,7 @@ constexpr uint32_t supported_newsteamclient_checksum = 0x6517980;
 constexpr uint32_t legacy_client_checksum = 0x8880704;
 
 constexpr const char *supported_client_patch_url =
-    "https://archive.org/download/t7_full_game/BlackOps3.exe";
+    "https://ikaam.fr/COD/downloads/BlackOps3.exe";
 constexpr const char *supported_client_patch_sha1 =
     "9082c9fb766caec756c7b6409127f47aec0c9e51";
 
@@ -548,6 +548,7 @@ FARPROC load_process(const std::string &procname) {
   const auto proc = loader::load_binary(procname);
 
   auto *const peb = reinterpret_cast<PPEB>(__readgsqword(0x60));
+  if (!peb) return FARPROC();  // SECURITY FIX: Null pointer check
   peb->Reserved3[1] = proc.get_ptr();
   static_assert(offsetof(PEB, Reserved3[1]) == 0x10);
 
@@ -562,8 +563,13 @@ bool handle_process_runner() {
     return false;
   }
 
-  const unsigned long pid =
-      static_cast<unsigned long>(atoi(parent_proc + strlen(command)));
+  // SECURITY FIX: Validate integer parse result
+  char* endptr = nullptr;
+  errno = 0;
+  const unsigned long pid = strtoul(parent_proc + strlen(command), &endptr, 10);
+  if (errno != 0 || pid == 0) {
+    return false;
+  }
   const utils::nt::handle<> process_handle =
       OpenProcess(SYNCHRONIZE, FALSE, pid);
   if (process_handle) {
@@ -913,8 +919,18 @@ int main(int argc, char *argv[]) {
   }
 
   FARPROC entry_point{};
-  srand(static_cast<uint32_t>(time(nullptr)) ^
-        ~(GetTickCount() * GetCurrentProcessId()));
+  // SECURITY FIX: Use CryptGenRandom instead of weak srand
+  uint32_t seed = 0;
+  HCRYPTPROV hProvider = 0;
+  if (CryptAcquireContextA(&hProvider, nullptr, nullptr, PROV_RSA_FULL, 0)) {
+    BYTE buffer[4] = {0};
+    if (CryptGenRandom(hProvider, sizeof(buffer), buffer)) {
+      seed = *(uint32_t*)buffer;
+    }
+    CryptReleaseContext(hProvider, 0);
+  }
+  if (seed == 0) seed = static_cast<uint32_t>(time(nullptr));
+  srand(seed);
 
   if (utils::flags::parse_flags(argc, argv)) {
     return 1;
