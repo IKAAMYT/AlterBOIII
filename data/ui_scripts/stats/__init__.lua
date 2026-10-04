@@ -93,7 +93,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       refreshCurrencyModels(controllerIndex)
       CoD.OverlayUtility.ShowToast(
         "BlackMarketEquipped",
-        newValue == 1 and "Local currencies maxed." or "Local currencies cleared.",
+        newValue == 1 and "Monnaies locales au maximum." or "Monnaies locales remises à zéro.",
         nil,
         "uie_t7_icon_codpoints"
       )
@@ -102,7 +102,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       UpdateInfoModels(itemModel)
       LuaUtils.UI_ShowErrorMessageDialog(
         controllerIndex,
-        "Could not update currencies. Return to the Zombies menu and try again."
+        "Impossible de mettre à jour les monnaies. Retournez au menu Zombies et réessayez."
       )
     end
   end
@@ -139,8 +139,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Local Currency",
-        "Uses locally saved COD Points, Liquid Divinium, GobbleGums, and Cookbook Distills.",
+        "Monnaie locale",
+        "Utilise les Points COD, le Divinium liquide, les GobbleGums et les distillats enregistrés localement.",
         "MPStatsSettings_local_currency",
         "cg_local_currency",
         {
@@ -155,8 +155,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Unlimited GobbleGums",
-        "Uses unlimited GobbleGums without replacing your earned inventory.",
+        "GobbleGums illimités",
+        "Utilise des GobbleGums illimités sans remplacer l'inventaire déjà gagné.",
         "MPStatsSettings_unlimited_gobblegums",
         "cg_unlockall_gobblegums",
         {
@@ -171,8 +171,8 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Max Local Currencies",
-        "Sets COD Points, Liquid Divinium, and Cookbook Distills to maximum or zero.",
+        "Monnaies locales au maximum",
+        "Met les Points COD, le Divinium liquide et les distillats au maximum ou à zéro.",
         "MPStatsSettings_max_currencies",
         "cg_max_local_currencies",
         {
