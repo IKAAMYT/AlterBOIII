@@ -18,6 +18,7 @@
 #include <steam/steam.hpp>
 
 #include "component/updater.hpp"
+#include "launcher/bundled_ui_scripts.hpp"
 #include "launcher/html/html_window.hpp"
 #include "launcher/launcher.hpp"
 #include <game/game.hpp>
@@ -1075,6 +1076,10 @@ int main(int argc, char *argv[]) {
       if (!is_server) {
         launcher::check_self_update();
         launcher::ensure_launcher_ui();
+
+        // AlterBO3 (IKAAM) : installe les Lua livres dans le zip la ou le jeu
+        // les lit (voir bundled_ui_scripts.hpp).
+        launcher::install_bundled_ui_scripts();
       }
 
       if (initial_update_required()) {
