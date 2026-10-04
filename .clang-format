@@ -308,7 +308,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -380,6 +380,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -700,7 +702,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -772,6 +774,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -1090,7 +1094,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -1162,6 +1166,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -1480,7 +1486,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -1552,6 +1558,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -1870,7 +1878,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -1942,6 +1950,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -2260,7 +2270,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -2332,6 +2342,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -2650,7 +2662,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -2722,6 +2734,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -3040,7 +3054,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -3112,6 +3126,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -3430,7 +3446,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -3502,6 +3518,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -3820,7 +3838,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -3892,6 +3910,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always
@@ -4210,7 +4230,7 @@ SeparateDefinitionBlocks: Leave
 
 # Sort includes natively.
 # Options: Never, CaseSensitive, CaseInsensitive
-SortIncludes: Never
+SortIncludes: CaseInsensitive
 
 # Sort using declarations.
 # Options: Never, Lexicographic, LexicographicNumeric
@@ -4282,6 +4302,8 @@ Standard: Latest
 
 # Use CR LF instead of LF.
 UseCRLF: false
+
+InsertNewlineAtEOF: true
 
 # Tab style.
 # Options: Never, ForIndentation, ForContinuationAndIndentation, AlignWithSpaces, Always

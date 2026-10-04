@@ -1,10 +1,11 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
 #include <game/utils.hpp>
+#include <loader/component_loader.hpp>
 
-#include "network_password.hpp"
 #include "hash.hpp"
+#include "network_password.hpp"
 #include "scheduler.hpp"
 
 #include <utils/hook.hpp>
@@ -39,6 +40,10 @@ bool is_password_set() {
 }
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "network_password"; }
+#endif
+
   void post_unpack() override {
     scheduler::once(
         [] {

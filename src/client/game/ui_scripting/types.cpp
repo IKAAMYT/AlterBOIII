@@ -1,10 +1,11 @@
 #include <std_include.hpp>
-#include "types.hpp"
+
 #include "execution.hpp"
 #include "stack_guard.hpp"
+#include "types.hpp"
 
 namespace ui_scripting {
-using namespace game::ui::lua::hks;
+using namespace game::lua::hks;
 /***************************************************************
  * Lightuserdata
  **************************************************************/
@@ -215,7 +216,7 @@ bool table_value::operator==(const table_value &value) {
  * Function
  **************************************************************/
 
-function::function(lua_function func) {
+function::function(lua_CFunction *func) {
   lua_State *state = *primary_luaVM;
   if (state) {
     this->ptr = cclosure_Create(state, func, 0, 0, 0);

@@ -1,17 +1,18 @@
 #include <std_include.hpp>
-#include <iomanip>
-#include <utils/io.hpp>
-#include <utils/http.hpp>
-#include <utils/string.hpp>
-#include <game/game.hpp>
-#include "workshop.hpp"
-#include "steamcmd.hpp"
+
 #include "download_overlay.hpp"
 #include "scheduler.hpp"
-#include <curl/curl.h>
+#include "steamcmd.hpp"
 #include "unzip.h"
-#include <zlib.h>
+#include "workshop.hpp"
+#include <curl/curl.h>
+#include <game/game.hpp>
+#include <iomanip>
+#include <utils/http.hpp>
+#include <utils/io.hpp>
+#include <utils/string.hpp>
 #include <zip.h>
+#include <zlib.h>
 
 namespace steamcmd {
 namespace {
@@ -371,7 +372,7 @@ void initialize_download(std::string workshop_id, std::string modtype) {
     scheduler::once(
         [] {
           game::ui::UI_OpenErrorPopupWithMessage(
-              0, game::errorCode::UI,
+              game::LOCAL_CLIENT_0, game::errorCode::UI,
               "A download is already in progress from the launcher. Wait for "
               "it to finish.");
         },
@@ -605,8 +606,8 @@ void initialize_download(std::string workshop_id, std::string modtype) {
   if (error_msg) {
     scheduler::once(
         [error_msg] {
-          game::ui::UI_OpenErrorPopupWithMessage(0, game::errorCode::UI,
-                                                 error_msg);
+          game::ui::UI_OpenErrorPopupWithMessage(
+              game::LOCAL_CLIENT_0, game::errorCode::UI, error_msg);
         },
         scheduler::main);
   } else if (result == 0) {
@@ -621,7 +622,8 @@ void initialize_download(std::string workshop_id, std::string modtype) {
                 "connect to the server?",
                 [addr_copy] {
                   game::cbuf::Cbuf_AddText(
-                      0, utils::string::va("connect %s\n", addr_copy.c_str()));
+                      game::LOCAL_CLIENT_0,
+                      utils::string::va("connect %s\n", addr_copy.c_str()));
                 });
           },
           scheduler::main);
@@ -629,7 +631,7 @@ void initialize_download(std::string workshop_id, std::string modtype) {
       scheduler::once(
           [] {
             game::ui::UI_OpenErrorPopupWithMessage(
-                0, game::errorCode::UI,
+                game::LOCAL_CLIENT_0, game::errorCode::UI,
                 "Workshop item downloaded successfully!");
           },
           scheduler::main);
@@ -639,7 +641,7 @@ void initialize_download(std::string workshop_id, std::string modtype) {
   download_overlay::clear();
 
   // Refresh steam workshop items with command
-  game::cbuf::Cbuf_AddText(0, "userContentReload\n");
+  game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, "userContentReload\n");
   printf("Workshop items refreshed\n");
   workshop::downloading_workshop_item = false;
 }

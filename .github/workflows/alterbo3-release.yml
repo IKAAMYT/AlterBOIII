@@ -60,7 +60,9 @@ jobs:
   build:
     name: Build AlterBO3 (Release)
     needs: validate
-    runs-on: windows-2022
+    # Ezz compile desormais en C++23 complet : il faut VS 2026 (runner
+    # windows-2025), premake "vs2026" et la solution au format .slnx.
+    runs-on: windows-2025
     steps:
       - name: Check out files
         uses: actions/checkout@v4
@@ -70,21 +72,24 @@ jobs:
           lfs: false
 
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.3.1
+        uses: microsoft/setup-msbuild@v3
+        with:
+          # '[18.0,)' = VS 2026 (support C++23 complet)
+          vs-version: "[18.0,)"
 
       - name: Install premake5
         uses: Jarod42/install-premake5@v7
         with:
-          msdev: vs2022
+          msdev: vs2026
 
       - name: Generate project files
-        run: premake5 vs2022
+        run: premake5 vs2026
 
       - name: Set up problem matching
         uses: ammaraskar/msvc-problem-matcher@master
 
       - name: Build Release
-        run: msbuild /m /v:minimal /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=ClangCL build/boiii.sln
+        run: msbuild /m /v:minimal /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=ClangCL build/boiii.slnx
 
       - name: Stage AlterBO3 package
         shell: bash

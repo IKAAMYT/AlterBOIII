@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 enum class component_priority {
   min = 0,
   // must run after the steam_proxy
@@ -7,6 +9,10 @@ enum class component_priority {
   // must run after the updater
   steam_proxy,
   updater,
+#ifndef NDEBUG
+  // Logger thread startup
+  log,
+#endif
   // must have the highest priority
   arxan,
 };
@@ -18,8 +24,11 @@ enum class component_type {
 };
 
 struct generic_component {
-  static constexpr auto type = component_type::any;
+  static constexpr component_type type = component_type::any;
 
+#ifndef NDEBUG
+  virtual std::string name() { return "generic"; }
+#endif
   virtual ~generic_component() = default;
 
   virtual void post_load() {}
@@ -34,9 +43,17 @@ struct generic_component {
 };
 
 struct client_component : generic_component {
-  static constexpr auto type = component_type::client;
+#ifndef NDEBUG
+  std::string name() override { return "generic_client"; }
+#endif
+
+  static constexpr component_type type = component_type::client;
 };
 
 struct server_component : generic_component {
-  static constexpr auto type = component_type::server;
+#ifndef NDEBUG
+  std::string name() override { return "generic_server"; }
+#endif
+
+  static constexpr component_type type = component_type::server;
 };

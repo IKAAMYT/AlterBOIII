@@ -1,9 +1,10 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
-#include <game/game.hpp>
 
-#include <utils/hook.hpp>
+#include <game/game.hpp>
+#include <loader/component_loader.hpp>
+
 #include <utils/flags.hpp>
+#include <utils/hook.hpp>
 
 namespace intro {
 namespace {
@@ -26,6 +27,10 @@ void cinematic_start_playback_stub(const char *name, const char *key,
 } // namespace
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "intro"; }
+#endif
+
 public:
   void post_unpack() override {
     no_intro = utils::flags::has_flag("nointro");

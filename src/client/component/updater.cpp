@@ -1,17 +1,19 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include "updater.hpp"
 #include <game/game.hpp>
+#include <loader/component_loader.hpp>
 
-#include <utils/flags.hpp>
-#include <utils/properties.hpp>
-#include <utils/progress_ui.hpp>
 #include <updater/updater.hpp>
+#include <utils/flags.hpp>
+#include <utils/progress_ui.hpp>
+#include <utils/properties.hpp>
 
 namespace updater {
 namespace {
 bool automatic_updates_enabled() {
-  const auto stored = utils::properties::load("launcherUiSettings");
+  const std::optional<std::string> stored =
+      utils::properties::load("launcherUiSettings");
   if (!stored)
     return true;
   rapidjson::Document document;
@@ -35,24 +37,29 @@ void report_updater_error(const char *message) {
 }
 } // namespace
 
-void update() {
-  if (utils::flags::has_flag("noupdate") ||
-      (!utils::flags::has_flag("update") && !automatic_updates_enabled())) {
-    return;
-  }
+void update(bool force) {
+  if (force ||
+      (!utils::flags::has_flag("noupdate") &&
+       (utils::flags::has_flag("update") || utils::flags::has_flag("beta") ||
+        automatic_updates_enabled()))) {
 
-  try {
-    run(game::get_appdata_path());
-  } catch (update_cancelled &) {
-    TerminateProcess(GetCurrentProcess(), 0);
-  } catch (const std::exception &e) {
-    report_updater_error(e.what());
-  } catch (...) {
-    report_updater_error("Unknown error occurred during update.");
+    try {
+      run(game::get_appdata_path());
+    } catch (update_cancelled &) {
+      TerminateProcess(GetCurrentProcess(), 0);
+    } catch (const std::exception &e) {
+      report_updater_error(e.what());
+    } catch (...) {
+      report_updater_error("Unknown error occurred during update.");
+    }
   }
 }
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "updater"; }
+#endif
+
 public:
   component() {
     this->update_thread_ = std::thread([] { update(); });

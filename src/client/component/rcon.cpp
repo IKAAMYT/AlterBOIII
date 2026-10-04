@@ -1,9 +1,10 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include "network.hpp"
-#include "console.hpp"
 #include "command.hpp"
+#include "console.hpp"
+#include "network.hpp"
 #include "scheduler.hpp"
 
 #include <game/utils.hpp>
@@ -88,6 +89,10 @@ void rcon_handler(const game::net::netadr_t &target,
 } // namespace
 
 struct component final : server_component {
+#ifndef NDEBUG
+  std::string name() override { return "rcon"; }
+#endif
+
   void post_unpack() override {
     network::on("rcon", rcon_handler);
     rcon_timeout = game::register_dvar_int("rcon_timeout", 500, 100, 10000,

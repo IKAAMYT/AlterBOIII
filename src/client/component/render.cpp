@@ -1,8 +1,9 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include <game/game.hpp>
 #include <component/scheduler.hpp>
+#include <game/game.hpp>
 
 #include <game/impl/scr/place.hpp>
 
@@ -21,11 +22,8 @@ void R_StoreWindowSettings_AllowPositiveViewScale(
   R_StoreWindowSettings_hook.invoke(wndParms);
 
 #ifndef NDEBUG
-  str1024_t vidConfigSerializationBuf;
-  game::trace("R_StoreWindowSettings called at 0x%p with vidConfig: %s",
-              game::derelocate(callerAddr),
-              vidConfig->serialize<std::size(vidConfigSerializationBuf)>(
-                  vidConfigSerializationBuf));
+  game::trace("R_StoreWindowSettings called at {:p} with vidConfig: {}",
+              game::derelocate(callerAddr), vidConfig->serialize());
 #endif
 
   if (vidConfig->sceneAspectRatio > DEFAULT_UI_VIEW_ASPECT_RATIO &&
@@ -43,17 +41,18 @@ void R_StoreWindowSettings_AllowPositiveViewScale(
   }
 
 #ifndef NDEBUG
-  memset(vidConfigSerializationBuf, 0, std::size(vidConfigSerializationBuf));
   game::trace(
-      "R_StoreWindowSettings returning from call at 0x%p with vidConfig: %s",
-      game::derelocate(callerAddr),
-      vidConfig->serialize<std::size(vidConfigSerializationBuf)>(
-          vidConfigSerializationBuf));
+      "R_StoreWindowSettings returning from call at {:p} with vidConfig: {}",
+      game::derelocate(callerAddr), vidConfig->serialize());
 #endif
 }
 
 utils::hook::detour ScrPlace_Init_hook;
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "render"; }
+#endif
+
 public:
   void post_unpack() override {
     if (game::ultrawide()) {

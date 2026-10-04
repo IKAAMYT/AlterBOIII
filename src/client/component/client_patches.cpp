@@ -1,19 +1,20 @@
 #include <std_include.hpp>
-#include <cstdint>
+
 #include <atomic>
+#include <cstdint>
 #include <loader/component_loader.hpp>
 
 #include "scheduler.hpp"
 
 #include <game/game.hpp>
-#include <game/utils.hpp>
-#include <game/impl/snd/snd.hpp>
-#include <game/impl/snd/sd/sd.hpp>
-#include <game/impl/cl/cl.hpp>
 #include <game/impl/cg/cg.hpp>
+#include <game/impl/cl/cl.hpp>
+#include <game/impl/snd/sd/sd.hpp>
+#include <game/impl/snd/snd.hpp>
+#include <game/utils.hpp>
 
-#include <utils/string.hpp>
 #include <utils/hook.hpp>
+#include <utils/string.hpp>
 
 #include <mmeapi.h>
 
@@ -80,15 +81,28 @@ MMRESULT mixer_open_stub() { return MMSYSERR_NODRIVER; }
 bool is_mod_loaded_stub() { return false; }
 
 void patch_is_mod_loaded_checks() {
-  const std::vector<uintptr_t> is_mod_loaded_addresses = {
-      0x1420F7484_g, 0x1420F74A4_g, 0x1420F73E4_g, 0x1420F73B4_g, 0x1420F6E57_g,
-      0x1413E6A54_g, 0x1415E7EBB_g, 0x1415E87BB_g, 0x1415EBAC9_g, 0x1415F1F09_g,
-      0x1415F1FB9_g, 0x1415F2080_g, 0x1415F7F40_g, 0x141A8D0ED_g, 0x141AA70F9_g,
-      0x141EA06FB_g, 0x141EA8C7E_g, 0x141EB1A39_g, 0x141ECBA9D_g, 0x1420F6E1D_g,
+  static constexpr uintptr_t is_mod_loaded_addresses[] = {
+      0x1420EAD04, 0x1420EAD24, 0x1420EAC64, 0x1420EAC34, 0x1420EA6D7,
+      0x1413E6A74, 0x1415E7EDB, 0x1415E87DB, 0x1415EBAE9, 0x1415F1F29,
+      0x1415F1FD9, 0x1415F20A0, 0x1415F7F60, 0x141A80D1D, 0x141A9AD29,
+      0x141E93C6B, 0x141E9C1EE, 0x141EA4FA9, 0x141EBF00D, 0x1420EA69D,
   };
 
-  for (const auto &address : is_mod_loaded_addresses) {
-    utils::hook::call(address, is_mod_loaded_stub);
+  for (const uintptr_t &address : is_mod_loaded_addresses) {
+    utils::hook::call(game::relocate(address), is_mod_loaded_stub);
+  }
+}
+
+void patch_legacy_is_mod_loaded_checks() {
+  static constexpr uintptr_t is_mod_loaded_addresses[] = {
+      0x1420F7484, 0x1420F74A4, 0x1420F73E4, 0x1420F73B4, 0x1420F6E57,
+      0x1413E6A54, 0x1415E7EBB, 0x1415E87BB, 0x1415EBAC9, 0x1415F1F09,
+      0x1415F1FB9, 0x1415F2080, 0x1415F7F40, 0x141A8D0ED, 0x141AA70F9,
+      0x141EA06FB, 0x141EA8C7E, 0x141EB1A39, 0x141ECBA9D, 0x1420F6E1D,
+  };
+
+  for (const uintptr_t &address : is_mod_loaded_addresses) {
+    utils::hook::call(game::relocate(address), is_mod_loaded_stub);
   }
 }
 
@@ -98,55 +112,6 @@ float cl_key_state_yaw_speed_stub(void *key) {
 
 float cl_key_state_pitch_speed_stub(void *key) {
   return game::cl::CL_KeyState(key) * cl_pitch_speed.get_float();
-}
-
-game::fileHandle_t
-fs_f_open_file_write_to_dir_stub(const char *filename,
-                                 [[maybe_unused]] const char *dir,
-                                 const char *os_base_path) {
-  return game::fs::FS_FOpenFileWriteToDir(filename, "boiii_players",
-                                          os_base_path);
-}
-
-game::fileHandle_t
-fs_f_open_file_read_from_dir_stub(const char *filename,
-                                  [[maybe_unused]] const char *dir,
-                                  const char *os_base_path) {
-  return game::fs::FS_FOpenFileReadFromDir(filename, "boiii_players",
-                                           os_base_path);
-}
-
-int i_stricmp_stub(const char *s0, [[maybe_unused]] const char *s1) {
-  return game::I_stricmp(s0, "boiii_players");
-}
-
-void fs_add_game_directory_stub(const char *path,
-                                [[maybe_unused]] const char *dir) {
-  utils::hook::invoke<void>(0x1422A2AF0_g, path, "boiii_players");
-}
-
-void patch_players_folder_name() {
-  // Override 'players' folder
-  utils::hook::call(0x14134764F_g, fs_f_open_file_write_to_dir_stub); // ??
-  utils::hook::set<uint8_t>(0x14134762E_g, 0xEB);                     // ^^
-
-  utils::hook::call(0x1413477EE_g, fs_f_open_file_write_to_dir_stub); // ??
-  utils::hook::set<uint8_t>(0x1413477CD_g, 0xEB);                     // ^^
-
-  utils::hook::call(0x141C20A1F_g, fs_f_open_file_write_to_dir_stub); // ??
-  utils::hook::set<uint8_t>(0x141C209FE_g, 0xEB);                     // ^^
-
-  utils::hook::call(0x1422F391E_g, fs_f_open_file_write_to_dir_stub); // ??
-
-  utils::hook::call(0x141C2090F_g, fs_f_open_file_read_from_dir_stub); // ??
-  utils::hook::set<uint8_t>(0x141C208EE_g, 0xEB);                      // ^^
-
-  utils::hook::call(0x1422F3773_g, fs_f_open_file_read_from_dir_stub); // ??
-
-  utils::hook::call(0x1422A2A61_g, i_stricmp_stub); // ??
-  utils::hook::call(0x1422A2C82_g, i_stricmp_stub); // FS_AddGameDirectory
-
-  utils::hook::call(0x1422A45A4_g, fs_add_game_directory_stub); // FS_Startup
 }
 
 void stub_func() { return; }
@@ -208,7 +173,8 @@ void live_delayed_com_error_stub(const char *comErrorString, int32_t code) {
   void *return_address = _ReturnAddress();
   // Log caller and error message
   game::com::Com_Printf(
-      0, game::consoleLabel_e::DEFAULT,
+      game::consoleChannel_e::CHANNEL_DONT_FILTER,
+      game::consoleLabel_e::DEFAULT,
       "Live_DelayedComError called from 0x%p with message: %s and code: %d\n",
       return_address, comErrorString, code);
   printf(
@@ -259,12 +225,6 @@ T *return_static_alloc([[maybe_unused]] size_t size) {
 
 template <auto &allocation,
           typename T = std::remove_reference_t<decltype(allocation)>>
-void clear(T *ptr) {
-  memset(ptr, 0, sizeof(T));
-}
-
-template <auto &allocation,
-          typename T = std::remove_reference_t<decltype(allocation)>>
 T *Hunk_UserAlloc_ReturnStaticAllocation(
     [[maybe_unused]] game::hunk::HunkUser *user, [[maybe_unused]] size_t size,
     [[maybe_unused]] int32_t alignment, [[maybe_unused]] const char *name) {
@@ -300,9 +260,6 @@ void Hunk_UserFree_ResetGlobal([[maybe_unused]] game::hunk::HunkUser *user,
                                T *ptr) {
   memset(ptr, 0, sizeof(T));
 }
-
-utils::hook::detour CG_FreeCGEnts_hook;
-utils::hook::detour CG_ClearCGEnts_hook;
 
 // TODO: use when TAC protection removed
 // utils::hook::detour AllocatePerLocalClientMemory_hook;
@@ -341,19 +298,19 @@ void store_tac_protected_allocs() {
     protection removed
   */
   {
-    utils::hook::call(0x140840929_g,
+    utils::hook::call(game::cg::CG_AllocateClientMemory.offset(0x39),
                       Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cgArray>);
     utils::hook::call(
-        0x1408421C3_g,
+        game::cg::CG_AllocateClientMemory.offset(0x18D3),
 
         Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cgsArray>);
     utils::hook::call(
-        0x140843A4F_g,
+        game::cg::CG_AllocateClientMemory.offset(0x315F),
         Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cg_viewModelArray>);
     utils::hook::call(
-        0x140843A70_g,
+        game::cg::CG_AllocateClientMemory.offset(0x3180),
         Hunk_UserAlloc_ReturnStaticAllocation<game::cg::cg_attachmentsArray>);
-    utils::hook::call(0x14085B9F5_g,
+    utils::hook::call(game::cg::CG_InitAndAllocCGEntsArray.offset(0x65),
 
                       Hunk_UserAlloc_ReturnStaticAllocation_FirstNull<
                           game::cg::cg_entitiesArray>);
@@ -361,21 +318,21 @@ void store_tac_protected_allocs() {
 
   // CG global hunk frees
   {
-    utils::hook::call(0x140853E13_g,
+    utils::hook::call(game::cg::CG_FreeClientMemory.offset(0x83),
                       Hunk_UserFree_ResetGlobal<game::cg::cg_attachmentsArray>);
-    utils::hook::call(0x140853E22_g,
+    utils::hook::call(game::cg::CG_FreeClientMemory.offset(0x92),
 
                       Hunk_UserFree_ResetGlobal<game::cg::cg_viewModelArray>);
-    utils::hook::call(0x140855728_g,
+    utils::hook::call(game::cg::CG_FreeClientMemory.offset(0x1998),
 
                       Hunk_UserFree_ResetGlobal<game::cg::cgsArray>);
-    utils::hook::call(0x140856EC3_g,
+    utils::hook::call(game::cg::CG_FreeClientMemory.offset(0x3133),
                       Hunk_UserFree_ResetGlobal<game::cg::cgArray>);
 
-    CG_FreeCGEnts_hook.create(game::cg::CG_FreeCGEnts.get(),
-                              game::cg::CG_FreeCGEnts_Impl);
-    CG_ClearCGEnts_hook.create(game::cg::CG_ClearCGEnts.get(),
-                               game::cg::CG_ClearCGEnts_Impl);
+    utils::hook::jump(game::cg::CG_FreeCGEnts.get(),
+                      game::cg::CG_FreeCGEnts_Impl);
+    utils::hook::jump(game::cg::CG_ClearCGEnts.get(),
+                      game::cg::CG_ClearCGEnts_Impl);
   }
 
   /*
@@ -386,7 +343,7 @@ void store_tac_protected_allocs() {
   */
   {
     utils::hook::call(
-        0x1419D7E22_g,
+        game::G_InitGame.offset(game::select(0x1CAE, 0xDA02, 0x0)),
         return_static_alloc<game::level::g_entities_cl_allocation>);
   }
 }
@@ -394,11 +351,8 @@ void store_tac_protected_allocs() {
 template <const int32_t NonZeroVal>
   requires(NonZeroVal != 0)
 int32_t Dvar_GetInt_NonZero(game::EngineDependentDvar dvar) {
-  int32_t val = game::Dvar_GetInt(dvar);
-  if (val == 0) {
-    return NonZeroVal;
-  }
-  return val;
+  const int32_t val = game::Dvar_GetInt(dvar);
+  return val ? val : NonZeroVal;
 }
 
 utils::hook::detour TaskManager2_ProcessDemonwareTask_Safe_hook;
@@ -431,7 +385,7 @@ void fix_mapswitch_crashes() {
   */
   constexpr const int32_t NETCHAN_EMERGENCYFREEPERCENT_DEFAULT_VAL = 10;
   utils::hook::call(
-      0x1421739C1_g,
+      game::net::Netchan_AllocMessage.offset(0x31),
       reinterpret_cast<void *>(
           Dvar_GetInt_NonZero<NETCHAN_EMERGENCYFREEPERCENT_DEFAULT_VAL>));
 
@@ -453,7 +407,7 @@ template <const game::RestartMethod_t RestartMethod>
 void SV_RestartCmd_RotateOrDefault() {
   if (game::get_sv_running() &&
       !game::com::Com_SessionMode_IsMode(game::eModes::COUNT) /* main menu */) {
-    std::string_view curr_gametype;
+    std::string_view curr_gametype = TDM_GAMETYPE;
     const std::string_view curr_mapname =
         game::get_mapname().value_or("mp_nuketown");
 
@@ -461,14 +415,15 @@ void SV_RestartCmd_RotateOrDefault() {
     if (gametype_dvar_val.has_value()) {
       curr_gametype = gametype_dvar_val.value();
 
-    } else if (utils::string::starts_with(curr_mapname,
-                                          MULTIPLAYER_MAP_PREFIX)) {
-      curr_gametype = TDM_GAMETYPE;
+    } else if (!utils::string::starts_with(curr_mapname,
+                                           MULTIPLAYER_MAP_PREFIX)) {
 
-    } else if (utils::string::starts_with(curr_mapname, ZOMBIES_MAP_PREFIX)) {
-      curr_gametype = ZCLASSIC_GAMETYPE;
-    } else if (utils::string::starts_with(curr_mapname, CAMPAIGN_MAP_PREFIX)) {
-      curr_gametype = CAMPAIGN_GAMETYPE;
+      if (utils::string::starts_with(curr_mapname, ZOMBIES_MAP_PREFIX)) {
+        curr_gametype = ZCLASSIC_GAMETYPE;
+      } else if (utils::string::starts_with(curr_mapname,
+                                            CAMPAIGN_MAP_PREFIX)) {
+        curr_gametype = CAMPAIGN_GAMETYPE;
+      }
     }
 
     const char *rotate_cmd = utils::string::va(
@@ -489,6 +444,10 @@ utils::hook::detour Com_FPSLimit_hook;
 } // namespace
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "client_patches"; }
+#endif
+
 public:
   void post_unpack() override {
 
@@ -503,22 +462,32 @@ public:
                                        live_delayed_com_error_stub);
 
     // Don't modify process priority
-    utils::hook::nop(0x142334C98_g, 6);
+    utils::hook::nop(game::select(0x1422BBB28, 0x142334C98, 0x0), 6);
 
     // Kill microphones for now
-    utils::hook::set(0x15AAE9254_g, mixer_open_stub);
+    utils::hook::set(game::select(0x15AA6A29C, 0x15AAE9254, 0x0),
+                     mixer_open_stub);
 
-    preload_map_hook.create(0x14135A1E0_g, preload_map_stub);
+    preload_map_hook.create(game::cl::CL_PreloadMap, preload_map_stub);
 
     // Keep client ranked when mod loaded
-    utils::hook::jump(0x1420D5BA0_g, is_mod_loaded_stub);
-    patch_is_mod_loaded_checks();
+    utils::hook::jump(game::scr::Scr_IsModLoaded, is_mod_loaded_stub);
+
+    if (game::is_legacy_client()) {
+      patch_legacy_is_mod_loaded_checks();
+    } else {
+      patch_is_mod_loaded_checks();
+    }
 
     // Kill Client/Server Index Mismatch error
-    utils::hook::set<uint8_t>(0x1400A7588_g, 0xEB);
+    utils::hook::set<uint8_t>(
+        game::bg::cache::BG_Cache_CheckForChecksumMismatchForClient.offset(
+            0x18),
+        0xEB);
 
     // Always get loadscreen gametype from s_gametype
-    utils::hook::set<uint8_t>(0x14228F5DC_g, 0xEB);
+    utils::hook::set<uint8_t>(game::select(0x142232ABC, 0x14228F5DC, 0x0),
+                              0xEB);
 
     cl_yaw_speed = game::register_dvar_float(
         "cl_yawspeed", 140.0f, std::numeric_limits<float>::min(),
@@ -530,13 +499,15 @@ public:
         "Max pitch speed in degrees for game pad");
 
     // CL_AdjustAngles
-    utils::hook::call(0x1412F3324_g,
+    utils::hook::call(game::select(0x1412F3344, 0x1412F3324, 0x0),
                       cl_key_state_yaw_speed_stub); // cl_yawspeed
-    utils::hook::call(0x1412F3344_g, cl_key_state_yaw_speed_stub); // ^^
+    utils::hook::call(game::select(0x1412F3364, 0x1412F3344, 0x0),
+                      cl_key_state_yaw_speed_stub); // ^^
 
-    utils::hook::call(0x1412F3380_g,
+    utils::hook::call(game::select(0x1412F33A0, 0x1412F3380, 0x0),
                       cl_key_state_pitch_speed_stub); // cl_pitchspeed
-    utils::hook::call(0x1412F33A1_g, cl_key_state_pitch_speed_stub); // ^^
+    utils::hook::call(game::select(0x1412F33C1, 0x1412F33A1, 0x0),
+                      cl_key_state_pitch_speed_stub); // ^^
 
     /*
       CL_CheckForResend inexplicably, inconsistently triggers a segmentation
@@ -576,9 +547,11 @@ public:
     */
     // CL_MapLoading call to CL_CheckForResend
     // Note: crash inconsistently occurs when CL_CheckForResend is called here.
-    utils::hook::call(0x141359DB4_g, game::cl::CL_CheckForResend_Impl);
+    utils::hook::call(game::select(0x141359DD4, 0x141359DB4, 0x0),
+                      game::cl::CL_CheckForResend_Impl);
     // CL_Frame call to CL_CheckForResend
-    utils::hook::call(0x1413514BE_g, game::cl::CL_CheckForResend_Impl);
+    utils::hook::call(game::select(0x1413514DE, 0x1413514BE, 0x0),
+                      game::cl::CL_CheckForResend_Impl);
 
     CL_CheckForResendHook.create(game::cl::CL_CheckForResend.get(),
                                  game::cl::CL_CheckForResend_Impl);
@@ -592,8 +565,6 @@ public:
     Com_FPSLimit_hook.create(
         game::com::Com_FPSLimit.get(),
         return_const<std::numeric_limits<uint32_t>::max()>);
-
-    patch_players_folder_name();
   }
 };
 } // namespace client_patches

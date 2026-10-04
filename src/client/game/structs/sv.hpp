@@ -1,14 +1,14 @@
 #pragma once
 
+#include "asm.hpp"
 #include "core.hpp"
+#include "lobby/core.hpp"
+#include "net/net.hpp"
 #include "phys/core.hpp"
 #include "quake/core.hpp"
-#include "net/net.hpp"
 #include "scr/core.hpp"
 #include "scr/scr.hpp"
 #include "snd/snd.hpp"
-#include "asm.hpp"
-#include "lobby/core.hpp"
 
 #include <cstdint>
 
@@ -184,7 +184,7 @@ enum class ReliableCommand : char {
   UPDATE_FOV = 's',              // 0x73: CG_UpdateFov
   TEAM_OPS = 't',                // 0x74: CG_TeamOpsSetID / Progress / ShowHUD
   CHECKPOINT_RESTORE = 'u',      // 0x75: CL_Checkpoint_Restore
-  FRIEND_CHAT_MSG = 'v',         // 0x76: CG_FriendChatMessage
+  FRIEND_CHAT_MSG = 'v',         // 0x76: CG_AddToTeamChat
   UPDATE_ZOMBIE_DOUBLE_XP = 'w', // 0x77: Live_DoubleXPUpdateZombieDoubleXP
   INC_LOOT_CURRENCY = 'x',       // 0x78: Loot_IncCurrency (Vials or MP Loot XP)
   CONSUME_INVENTORY_ITEM = 'y',  // 0x79: LiveInventory_ConsumeItem
@@ -773,7 +773,7 @@ struct CharacterItemInfo {
   const char *assetName;
   const char *displayName;
   gfx::GfxImageHandle icon;
-  db::xasset::XModelPtr models[11];
+  db::xasset::xmodel::XModelPtr models[11];
   uint32_t accentColorCount;
   ColorOptionSet *colorOptions;
   int32_t impactType[2];
@@ -827,7 +827,7 @@ struct CharacterBodyType {
   XString frontendVignetteStruct;
   db::xasset::XCamPtr frontendVignetteXCam;
   db::xasset::XAnimPartsPtr frontendVignetteXAnim;
-  db::xasset::XModelPtr frontendVignetteWeaponModel;
+  db::xasset::xmodel::XModelPtr frontendVignetteWeaponModel;
   uint32_t kvpCount;
   scr::ScriptBundleKVP *kvpItems;
   db::xasset::PlayerSoundsTablePtr characterMovementSounds;
@@ -837,8 +837,8 @@ struct CharacterBodyType {
   db::xasset::FootstepTableDefPtr characterFootstepsNPC;
   db::xasset::FootstepTableDefPtr characterFootstepsNPCLoud;
   db::xasset::FootstepTableDefPtr characterFootstepsNPCQuiet;
-  db::xasset::XModelPtr dogtagFriendly;
-  db::xasset::XModelPtr dogTagEnemy;
+  db::xasset::xmodel::XModelPtr dogtagFriendly;
+  db::xasset::xmodel::XModelPtr dogTagEnemy;
   XString cardBackIcon;
   XString realName;
   int32_t age;

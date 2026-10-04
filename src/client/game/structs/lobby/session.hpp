@@ -1,10 +1,11 @@
 #pragma once
 
+#include <cstdint>
+
+#include <game/structs/lobby/core.hpp>
 #include <game/structs/macros.hpp>
 #include <game/structs/net/core.hpp>
 #include <game/structs/weapon.hpp>
-#include "core.hpp"
-#include <cstdint>
 
 namespace game {
 namespace lobby {

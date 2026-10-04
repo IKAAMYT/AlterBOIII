@@ -1,11 +1,13 @@
 #pragma once
 
-#include "../math.hpp"
-#include "../snd/snd.hpp"
-#include "../core.hpp"
-#include "../asm.hpp"
-#include "game/symbol.hpp"
 #include <cstdint>
+#include <game/structs/asm.hpp>
+#include <game/structs/core.hpp>
+#include <game/structs/db/xasset/destructible.hpp>
+#include <game/structs/db/xasset/phys.hpp>
+#include <game/structs/math.hpp>
+#include <game/structs/snd/snd.hpp>
+#include <game/symbol.hpp>
 
 namespace game {
 
@@ -44,7 +46,7 @@ enum class PhysicsOwnerType : int32_t {
 struct broad_phase_memory_info {
 public:
   static constexpr symbol<thiscall_t<void(broad_phase_memory_info *)>>
-      constructor{0x0, 0x14000EEC0};
+      constructor{0x0, 0x0, 0x14000EEC0};
 
   inline broad_phase_memory_info() { constructor(this); }
   int32_t m_max_num_gjk_ci;
@@ -91,27 +93,6 @@ struct pulse_sum_node {
 ASSERT_SIZE(pulse_sum_node, 0x70);
 
 typedef db::xasset::FxImpactTable *FxImpactTablePtr;
-
-struct PhysPreset {
-  const char *name;
-  int32_t flags;
-  float mass;
-  float bounce;
-  float friction;
-  float damping_linear;
-  float damping_angular;
-  float bulletForceScale;
-  float explosiveForceScale;
-  const char *sndAliasPrefix;
-  int32_t canFloat;
-  float gravityScale;
-  vec3_t centerOfMassOffset;
-  vec3_t buoyancyBoxMin;
-  vec3_t buoyancyBoxMax;
-  db::xasset::FxEffectDefHandle trailFX;
-  FxImpactTablePtr impactFX;
-  snd::SoundsImpactTablePtr impactSounds;
-};
 
 struct rigid_body_constraint_contact;
 struct rigid_body_constraint_custom_path;
@@ -182,10 +163,10 @@ public:
       rigid_body *, const float mass, const math::Dir3 *inertia,
       const math::RotTranMat43 *mat, const math::Dir3 *t_vel,
       const math::Dir3 *a_vel, const int32_t stable_min_contact_count)>>
-      set{0x0, 0x14002C840};
+      set{0x1420C8840, 0x0, 0x14002C840};
   static constexpr symbol<
       thiscall_t<void(rigid_body *, const math::Dir3 *inertia)>>
-      set_inertia{0x0, 0x14002CDA0};
+      set_inertia{0x0, 0x0, 0x14002CDA0};
 
   math::Dir3 m_last_position;
   math::Dir3 m_moved_vec;
@@ -274,7 +255,7 @@ public:
 ASSERT_SIZE(gjk_geom_list_t, 0x10);
 struct PhysObjUserData {
 public:
-  const PhysPreset *physPreset;
+  const db::xasset::phys::PhysPreset *physPreset;
   rigid_body *body;
   vehicle::NitrousVehicle *vehicle;
   gjk_geom_list_t m_gjk_geom_list;
@@ -309,13 +290,10 @@ public:
 };
 ASSERT_SIZE(PhysObjUserData, 0x160);
 
-struct DestructibleDef; // TODO
-typedef DestructibleDef *DestructibleDefPtr;
-
 struct ZBarrierBoard {
-  db::xasset::XModel *pBoardModel;
-  db::xasset::XModel *pAlternateBoardModel;
-  db::xasset::XModel *pUpgradedBoardModel;
+  db::xasset::xmodel::XModel *pBoardModel;
+  db::xasset::xmodel::XModel *pAlternateBoardModel;
+  db::xasset::xmodel::XModel *pUpgradedBoardModel;
   const char *pTearAnim;
   const char *pBoardAnim;
   db::xasset::FxEffectDefHandle repairEffect1;
@@ -354,7 +332,7 @@ struct ZBarrierDef {
   scr::ScrString_t zombieReachThroughAnimState;
   int32_t numAttackSlots;
   float attackSpotHorzOffset;
-  db::xasset::XModel *pCollisionModel;
+  db::xasset::xmodel::XModel *pCollisionModel;
   ZBarrierBoard boards[6];
 };
 ASSERT_SIZE(ZBarrierDef, 0x300);
@@ -465,142 +443,7 @@ struct DestructibleState {
   int32_t time;
 };
 
-enum class AttachPointType : uint32_t {
-  ATTACH_POINT_WORLD = 0x0,
-  ATTACH_POINT_DYNENT = 0x1,
-  ATTACH_POINT_ENT = 0x2,
-  ATTACH_POINT_BONE = 0x3,
-};
-
-enum class ConstraintType : uint32_t {
-  CONSTRAINT_NONE = 0x0,
-  CONSTRAINT_POINT = 0x1,
-  CONSTRAINT_DISTANCE = 0x2,
-  CONSTRAINT_HINGE = 0x3,
-  CONSTRAINT_ACTUATOR = 0x4,
-  CONSTRAINT_FAKE_SHAKE = 0x5,
-  CONSTRAINT_LAUNCH = 0x6,
-  CONSTRAINT_ANTENNA = 0x7,
-  CONSTRAINT_ROPE = 0x8,
-  CONSTRAINT_LIGHT = 0x9,
-  NUM_CONSTRAINT_TYPES = 0xA,
-};
-
-#pragma pack(push, 1)
-struct PhysConstraint {
-  scr::ScrString_t targetname;
-  ConstraintType type;
-  AttachPointType attach_point_type1;
-  int32_t target_index1;
-  scr::ScrString_t target_ent1;
-  scr::ScrString_t target_bone1;
-  AttachPointType attach_point_type2;
-  int32_t target_index2;
-  scr::ScrString_t target_ent2;
-  scr::ScrString_t target_bone2;
-  vec3_t offset;
-  vec3_t pos;
-  vec3_t pos2;
-  vec3_t dir;
-  int32_t flags;
-  int32_t timeout;
-  int32_t min_health;
-  int32_t max_health;
-  float distance;
-  float damp;
-  float power;
-  vec3_t force_scale;
-  float misc_scale;
-  float minAngle;
-  float maxAngle;
-  float minAngleYaw;
-  float maxAngleYaw;
-  uint8_t _padding94[4];
-  db::xasset::MaterialHandle material;
-  int32_t model;
-  int32_t slice_count;
-  float gravity;
-  qboolean useAntennaXAxis;
-  intptr_t constraintHandle;
-  int32_t rope_index;
-  int32_t centity_num[5];
-};
-ASSERT_SIZE(PhysConstraint, 0xD0);
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct PhysConstraints {
-  const char *name;
-  uint32_t count;
-  uint8_t _padding0C[4];
-  PhysConstraint data[8];
-};
-ASSERT_SIZE(PhysConstraints, 0x690);
-typedef PhysConstraints *PhysConstraintsPtr;
-#pragma pack(pop)
-
 typedef int32_t XPartBits[12];
-
-#pragma pack(push, 1)
-struct DestructibleStage {
-  scr::ScrString_t showBone;
-  scr::ScrString_t cosmeticShowBones[4];
-  float breakHealth;
-  float maxTime;
-  uint32_t flags;
-  db::xasset::FxEffectDefHandle baseEffect;
-  scr::ScrString_t baseEffectTag;
-  scr::ScrString_t breakAnim;
-  db::xasset::FxEffectDefHandle breakEffect;
-  scr::ScrString_t breakEffectTag;
-  uint8_t _padding3C[4];
-  const char *breakSound;
-  const char *breakNotify;
-  const char *loopSound;
-  db::xasset::XModelPtr spawnModel[3];
-  PhysPreset *physPreset;
-};
-ASSERT_SIZE(DestructibleStage, 0x78);
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct DestructiblePiece {
-  DestructibleStage stages[7];
-  uint8_t parentPiece;
-  uint8_t _padding151[3];
-  float parentDamagePercent;
-  float bulletDamageScale;
-  float explosiveDamageScale;
-  float meleeDamageScale;
-  float impactDamageScale;
-  float entityDamageTransfer;
-  uint8_t _padding16C[4];
-  PhysConstraintsPtr physConstraints;
-  int32_t health;
-  uint8_t _padding17C[4];
-  const char *damageSound;
-  db::xasset::FxEffectDefHandle burnEffect;
-  const char *burnSound;
-  scr::ScrString_t enableLabel;
-  XPartBits hideBones;
-  uint8_t _padding1CC[4];
-};
-ASSERT_SIZE(DestructiblePiece, 0x3C8);
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-struct DestructibleDef {
-  const char *name;
-  db::xasset::XModelPtr model;
-  db::xasset::XModelPtr pristineModel;
-  int32_t numPieces;
-  uint8_t _padding1C[4];
-  DestructiblePiece *pieces;
-  qboolean clientOnly;
-  qboolean syncBaseHealthWithEntity;
-};
-ASSERT_SIZE(DestructibleDef, 0x30);
-#pragma pack(pop)
 
 #pragma pack(push, 1)
 struct Destructible {
@@ -613,7 +456,7 @@ struct Destructible {
   uint8_t _padding16[2];
   int32_t pieceCount;
   uint8_t _padding1C[4];
-  DestructibleDef *ddef;
+  db::xasset::destructible::DestructibleDef *ddef;
   uint32_t flags;
   DestructibleState states[5];
   bool bHasBeenHit;
@@ -992,19 +835,19 @@ struct __attribute__((aligned(8))) rigid_body_constraint_wheel {
   struct syms {
     static constexpr symbol<thiscall_t<void(rigid_body_constraint_wheel *,
                                             float torque, double delta_t)>>
-        add_wheel_torque{0x14002A9A0, 0x14002A710};
+        add_wheel_torque{0x14002A9A0, 0x14002A9A0, 0x14002A710};
     static constexpr symbol<thiscall_t<void(rigid_body_constraint_wheel *)>>
-        set_no_collision{0x14002B3A0, 0x14002B110};
+        set_no_collision{0x14002B3A0, 0x14002B3A0, 0x14002B110};
     static constexpr symbol<thiscall_t<void(
         const rigid_body_constraint_wheel *, const math::RotTranMat43 *b1_mat,
         math::Dir3 *const p0, math::Dir3 *const p1)>>
-        get_wheel_collide_segment{0x14002AE00, 0x14002AB70};
+        get_wheel_collide_segment{0x14002AE00, 0x14002AE00, 0x14002AB70};
     static constexpr symbol<thiscall_t<void(
         rigid_body_constraint_wheel *, const rigid_body *rb,
         const math::Dir3 *hitp_loc, const math::Dir3 *hitn_loc)>>
-        set_collision{0x14002B340, 0x14002B0B0};
+        set_collision{0x14002B340, 0x14002B340, 0x14002B0B0};
     static constexpr symbol<thiscall_t<void(rigid_body_constraint_wheel *)>>
-        calc_penetration_depth{0x14002A9D0, 0x14002A740};
+        calc_penetration_depth{0x14002A9D0, 0x14002A9D0, 0x14002A740};
   };
 
   pulse_sum_cache m_ps_cache_list[4];
@@ -1165,31 +1008,32 @@ struct phys_sys {
 public:
   static constexpr symbol<rigid_body_constraint_custom_orientation *(
       rigid_body *const b1, rigid_body *const b2, const int no_error)>
-      create_rbc_custom_orientation{0x0, 0x14000B810};
+      create_rbc_custom_orientation{0x14000B9A0, 0x0, 0x14000B810};
   static constexpr symbol<rigid_body *(const int no_error)> create_rigid_body{
-      0x0, 0x14000BC90};
+      0x14000BE20, 0x0, 0x14000BC90};
   static inline void destroy(rigid_body *const rb) {
-    static constexpr symbol<void(rigid_body *const rb)> sym{0x0, 0x14000BD50};
+    static constexpr symbol<void(rigid_body *const rb)> sym{0x0, 0x0,
+                                                            0x14000BD50};
     return sym(rb);
   }
 
   static inline void destroy(user_rigid_body *const rb) {
-    static constexpr symbol<void(user_rigid_body *const rb)> sym{0x0,
+    static constexpr symbol<void(user_rigid_body *const rb)> sym{0x0, 0x0,
                                                                  0x14000BEE0};
     return sym(rb);
   }
   static constexpr symbol<void(rigid_body *const rb)> destroy_all_constraint{
-      0x0, 0x14000BF30};
+      0x14000C0C0, 0x0, 0x14000BF30};
   static constexpr symbol<void(rigid_body *const rb)> fixup_wheel_constraints{
-      0x0, 0x14000C460};
+      0x0, 0x0, 0x14000C460};
   static constexpr symbol<environment_rigid_body *()>
-      get_environment_rigid_body{0x0, 0x14000C4D0};
+      get_environment_rigid_body{0x0, 0x0, 0x14000C4D0};
   static constexpr symbol<void(phys_collision_callback_t collision_callback)>
-      set_collision_callback{0x0, 0x14000C500};
+      set_collision_callback{0x14000C690, 0x0, 0x14000C500};
   static constexpr symbol<void(const float max_delta_t)> set_max_delta_t{
-      0x0, 0x14000C510};
-  static constexpr symbol<void(const int max_v_iters)> set_v_tol{0x0,
-                                                                 0x14000C520};
+      0x14000C6A0, 0x0, 0x14000C510};
+  static constexpr symbol<void(const int max_v_iters)> set_v_tol{
+      0x14000C6B0, 0x0, 0x14000C520};
 };
 
 enum class TraceBrushType : int32_t {

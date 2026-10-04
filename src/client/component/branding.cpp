@@ -1,6 +1,7 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
+#include <loader/component_loader.hpp>
 
 // In case of clangd compilation
 #if __has_include("version.hpp")
@@ -16,41 +17,42 @@
 
 #include "scheduler.hpp"
 
-#include <utils/hook.hpp>
 #include <utils/flags.hpp>
+#include <utils/hook.hpp>
 
 namespace branding {
 namespace {
 void draw_branding() {
-  if (game::com::Com_IsInGame()) {
-    return;
+  if (!game::com::Com_IsInGame()) {
+    constexpr float x = 4.0;
+    constexpr float y = 0.0;
+    constexpr float scale = 0.45f;
+    game::vec4_t color = {.r = 0.666f, .g = 0.666f, .b = 0.666f, .a = 0.666f};
+
+    static const uint32_t *font = reinterpret_cast<const uint32_t *>(
+        game::select(0x1432D2918, 0x1433519B0, 0x1410E1BE0));
+
+    game::render::R_AddCmdDrawText(
+        // SHORTVERSION et non VERSION : VERSION vaut GIT_DESCRIBE, donc
+        // "v2.1.0-7-g1a2b3c4" des qu'il y a des commits apres le tag.
+        // SHORTVERSION est la forme numerique propre (2.1.0).
+        // ATTENTION : sans AUCUN tag, git describe renvoie le hash du commit
+        // et premake en extrait les chiffres — un "1a2b3c4" donnerait 1.2.3.
+        // Le tag doit exister avant le build.
+        "AlterBOIII : " SHORTVERSION, std::numeric_limits<int>::max(), font, x,
+        y + static_cast<float>(font[2]) * scale, scale, scale, 0.0f, &color,
+        game::itemTextStyle::NORMAL);
   }
-
-  constexpr float x = 4.0;
-  constexpr float y = 0.0;
-  constexpr float scale = 0.45f;
-  game::vec4_t color = {.r = 0.666f, .g = 0.666f, .b = 0.666f, .a = 0.666f};
-
-  const uint32_t *font = reinterpret_cast<uint32_t *(*)()>(0x141CAC8E0_g)();
-  if (!font)
-    return;
-
-  game::render::R_AddCmdDrawText(
-      // SHORTVERSION et non VERSION : VERSION vaut GIT_DESCRIBE, donc
-      // "v2.1.0-7-g1a2b3c4" des qu'il y a des commits apres le tag.
-      // SHORTVERSION est la forme numerique propre (2.1.0).
-      // ATTENTION : sans AUCUN tag, git describe renvoie le hash du commit
-      // et premake en extrait les chiffres — un "1a2b3c4" donnerait 1.2.3.
-      // Le tag doit exister avant le build.
-      "AlterBOIII : " SHORTVERSION, std::numeric_limits<int>::max(), font, x,
-      y + static_cast<float>(font[2]) * scale, scale, scale, 0.0f, &color,
-      game::itemTextStyle::NORMAL);
 }
 
 const char *get_ingame_console_prefix_stub() { return "AlterBOIII> "; }
 } // namespace
 
 struct component final : client_component {
+#ifndef NDEBUG
+  std::string name() override { return "branding"; }
+#endif
+
   void post_unpack() override {
     if (!utils::flags::has_flag("nobranding")) {
 
@@ -61,10 +63,12 @@ struct component final : client_component {
       // du jeu, SANS controle de taille. La chaine d'origine est le titre
       // retail, mais on reste volontairement court : ne rallonge pas ceci
       // sans avoir verifie la taille du tampon a cette adresse.
-      utils::hook::copy_string(0x14303F3D8_g, "AlterBO3");
+      utils::hook::copy_string(game::select(0x142FC02D8, 0x14303F3D8, 0x0),
+                               "AlterBO3");
 
       // Change ingame console prefix
-      utils::hook::call(0x141339970_g, get_ingame_console_prefix_stub);
+      utils::hook::call(game::con::Con_DrawInput.offset(0x90),
+                        get_ingame_console_prefix_stub);
     }
   }
 };

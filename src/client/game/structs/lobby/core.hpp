@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../core.hpp"
-#include "../net/net.hpp"
-#include "../dw/net.hpp"
+#include <game/structs/core.hpp>
+#include <game/structs/dw/net.hpp>
+#include <game/structs/net/net.hpp>
 
 #include <cstdint>
 #include <optional>

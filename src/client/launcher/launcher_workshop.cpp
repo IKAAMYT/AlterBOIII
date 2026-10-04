@@ -1,27 +1,34 @@
 #include <std_include.hpp>
-#include "html/html_frame.hpp"
-#include "launcher_workshop.hpp"
+
 #include <game/game.hpp>
-#include "../component/workshop.hpp"
+
+#include <component/workshop.hpp>
+
+#include <launcher/html/html_frame.hpp>
+#include <launcher/launcher_workshop.hpp>
+
 #include <atomic>
 #include <chrono>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <map>
 #include <mutex>
+#include <regex>
+#include <set>
+#include <sstream>
+#include <thread>
+
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
-#include <regex>
-#include <set>
-#include <thread>
+
 #include <utils/compression.hpp>
+#include <utils/finally.hpp>
 #include <utils/http.hpp>
 #include <utils/io.hpp>
 #include <utils/nt.hpp>
 #include <utils/string.hpp>
-#include <sstream>
-#include <iomanip>
 
 namespace launcher::workshop {
 std::chrono::steady_clock::time_point download_start_time;
@@ -140,7 +147,7 @@ void monitor_initial_dump_phase(std::string workshop_id) {
 
 void try_refresh_workshop_content() {
   try {
-    game::cbuf::Cbuf_AddText(0, "userContentReload\n");
+    game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, "userContentReload\n");
     printf("Workshop items refreshed in-game.\n");
   } catch (...) {
     // Game not running yet, nothing to refresh
@@ -601,7 +608,8 @@ bool copy_directory_recursive_with_progress(
     if (workshop_cancel_requested.load())
       return false;
 
-    const auto rel = std::filesystem::relative(entry.path(), from, ec);
+    const std::filesystem::path rel =
+        std::filesystem::relative(entry.path(), from, ec);
     if (ec)
       return false;
     const auto dest_path = to / rel;
@@ -1279,8 +1287,9 @@ bool has_zone_content(const std::filesystem::path &dir) {
 
 std::filesystem::path
 get_steam_workshop_content_path(const std::filesystem::path &game_path) {
-  auto steamapps = game_path.parent_path().parent_path();
-  auto ws_path = steamapps / "workshop" / "content" / game::APP_ID_STR;
+  const std::filesystem::path steamapps = game_path.parent_path().parent_path();
+  const std::filesystem::path ws_path =
+      steamapps / "workshop" / "content" / game::APP_ID_STR;
   std::error_code ec;
   if (std::filesystem::exists(ws_path, ec))
     return ws_path;
@@ -1441,7 +1450,8 @@ std::string find_installed_workshop_item(const std::filesystem::path &game_path,
   return "";
 }
 
-void workshop_download_thread(std::string workshop_id) {
+void workshop_download_thread(std::string workshop_id,
+                              const bool update_existing) {
   try {
     if (::workshop::downloading_workshop_item) {
       set_workshop_status("Error: An in-game download is already in progress.",
@@ -1452,23 +1462,29 @@ void workshop_download_thread(std::string workshop_id) {
     }
 
     ::workshop::launcher_downloading = true;
+    const auto reset_downloading =
+        utils::finally([]() { ::workshop::launcher_downloading = false; });
     reset_workshop_status();
     workshop_cancel_requested = false;
     workshop_paused = false;
     set_workshop_status("Initializing...", -1.0, "Workshop ID: " + workshop_id);
 
-    char cwd[MAX_PATH];
-    GetCurrentDirectoryA(sizeof(cwd), cwd);
-    std::filesystem::path game_path(cwd);
+    const auto game_path = game::get_game_path();
+    std::filesystem::path existing_install;
 
     {
       auto existing = find_installed_workshop_item(game_path, workshop_id);
-      if (!existing.empty()) {
+      if (!existing.empty() && !update_existing) {
         set_workshop_status("Already installed.", 100.0,
                             "This workshop item is already installed at:\n" +
                                 existing +
                                 "\nRemove it first if you want to reinstall.");
         return;
+      }
+      if (!existing.empty()) {
+        existing_install = existing;
+        set_workshop_status("Preparing update...", -1.0,
+                            "Updating: " + existing_install.string());
       }
     }
 
@@ -1570,8 +1586,8 @@ void workshop_download_thread(std::string workshop_id) {
       ULARGE_INTEGER total_free_bytes{};
       const uint64_t required_space =
           expected_size * 2 + (512ULL * 1024 * 1024);
-      if (GetDiskFreeSpaceExA(cwd, &free_bytes_available, &total_bytes,
-                              &total_free_bytes)) {
+      if (GetDiskFreeSpaceExW(game_path.c_str(), &free_bytes_available,
+                              &total_bytes, &total_free_bytes)) {
         if (free_bytes_available.QuadPart < required_space) {
           set_workshop_status(
               "Error: Not enough disk space.", 0.0,
@@ -1587,15 +1603,15 @@ void workshop_download_thread(std::string workshop_id) {
     std::filesystem::path content_path = steamcmd_dir / "steamapps" /
                                          "workshop" / "content" /
                                          game::APP_ID_STR / workshop_id;
-    std::filesystem::path download_path = steamcmd_dir / "steamapps" /
-                                          "workshop" / "downloads" /
-                                          game::APP_ID_STR / workshop_id;
-    std::filesystem::path alt_content_path = game_path / "steamapps" /
-                                             "workshop" / "content" /
-                                             game::APP_ID_STR / workshop_id;
-    std::filesystem::path alt_download_path = game_path / "steamapps" /
-                                              "workshop" / "downloads" /
-                                              game::APP_ID_STR / workshop_id;
+    const std::filesystem::path download_path = steamcmd_dir / "steamapps" /
+                                                "workshop" / "downloads" /
+                                                game::APP_ID_STR / workshop_id;
+    const std::filesystem::path alt_content_path =
+        game_path / "steamapps" / "workshop" / "content" / game::APP_ID_STR /
+        workshop_id;
+    const std::filesystem::path alt_download_path =
+        game_path / "steamapps" / "workshop" / "downloads" / game::APP_ID_STR /
+        workshop_id;
 
     std::string steamapps_folder = "./steamcmd/steamapps";
 
@@ -1876,7 +1892,8 @@ void workshop_download_thread(std::string workshop_id) {
 
           {
             ULARGE_INTEGER free_avail{};
-            if (GetDiskFreeSpaceExA(cwd, &free_avail, nullptr, nullptr)) {
+            if (GetDiskFreeSpaceExW(game_path.c_str(), &free_avail, nullptr,
+                                    nullptr)) {
               if (free_avail.QuadPart < 100ULL * 1024 * 1024) {
                 TerminateProcess(pi.hProcess, 1);
                 set_workshop_status(
@@ -2241,12 +2258,31 @@ void workshop_download_thread(std::string workshop_id) {
       }
     }
 
-    set_workshop_status("Installing files...", 99.9,
+    set_workshop_status(existing_install.empty() ? "Installing files..."
+                                                 : "Installing update...",
+                        99.9,
                         "Type: " + mod_type + " | Folder: " + workshop_id);
 
     std::filesystem::path dest_parent =
         (mod_type == "mod") ? (game_path / "mods") : (game_path / "usermaps");
-    std::filesystem::path dest = dest_parent / workshop_id / "zone";
+    std::filesystem::path dest;
+    if (existing_install.empty()) {
+      dest = dest_parent / workshop_id / "zone";
+    } else if (has_zone_content(existing_install / "zone")) {
+      dest = existing_install / "zone";
+    } else {
+      std::error_code existing_ec;
+      for (const auto &entry :
+           std::filesystem::directory_iterator(existing_install, existing_ec)) {
+        if (entry.is_directory(existing_ec) &&
+            has_zone_content(entry.path() / "zone")) {
+          dest = entry.path() / "zone";
+          break;
+        }
+      }
+      if (dest.empty())
+        dest = existing_install / "zone";
+    }
     std::error_code ec;
     std::filesystem::create_directories(dest, ec);
     if (ec) {
@@ -2437,8 +2473,6 @@ void workshop_download_thread(std::string workshop_id) {
   } catch (...) {
     set_workshop_status("Error: Workshop download crashed.", 0.0, "");
   }
-
-  ::workshop::launcher_downloading = false;
 }
 } // namespace
 
@@ -2621,9 +2655,7 @@ void register_callbacks(html_frame *frame) {
         auto id = extract_workshop_id(params[0].get_string());
         if (id.empty())
           return CComVariant("");
-        char cwd[MAX_PATH];
-        GetCurrentDirectoryA(sizeof(cwd), cwd);
-        std::filesystem::path game_path(cwd);
+        const auto game_path = game::get_game_path();
         auto existing = find_installed_workshop_item(game_path, id);
         return CComVariant(existing.c_str());
       });
@@ -2644,8 +2676,28 @@ void register_callbacks(html_frame *frame) {
               "Error: A launcher download is already in progress.");
         workshop_cancel_requested = false;
         reset_workshop_status();
-        std::thread(workshop_download_thread, id).detach();
+        std::thread(workshop_download_thread, id, false).detach();
         return CComVariant("Download started");
+      });
+
+  frame->register_callback(
+      "workshopUpdate",
+      [](const std::vector<html_argument> &params) -> CComVariant {
+        if (params.empty() || !params[0].is_string())
+          return CComVariant("Error: no ID");
+        auto id = extract_workshop_id(params[0].get_string());
+        if (id.empty())
+          return CComVariant("Error: Invalid Workshop ID or link.");
+        if (::workshop::downloading_workshop_item)
+          return CComVariant("Error: An in-game download is already in "
+                             "progress. Wait for it to finish.");
+        if (::workshop::launcher_downloading.load())
+          return CComVariant(
+              "Error: A launcher download is already in progress.");
+        workshop_cancel_requested = false;
+        reset_workshop_status();
+        std::thread(workshop_download_thread, id, true).detach();
+        return CComVariant("Update started");
       });
 
   frame->register_callback(

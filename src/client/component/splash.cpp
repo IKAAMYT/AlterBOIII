@@ -1,11 +1,12 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include "splash.hpp"
 #include "resource.hpp"
+#include "splash.hpp"
 
-#include <utils/nt.hpp>
 #include <utils/image.hpp>
+#include <utils/nt.hpp>
 
 namespace splash {
 namespace {
@@ -135,6 +136,10 @@ void draw() {
 } // namespace
 
 struct component final : client_component {
+#ifndef NDEBUG
+  std::string name() override { return "splash"; }
+#endif
+
   component() {
     image = load_splash_image();
     window_thread = std::thread([] { draw(); });

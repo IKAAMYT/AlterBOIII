@@ -1,6 +1,7 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
+#include <loader/component_loader.hpp>
 
 #include <utils/hook.hpp>
 
@@ -8,13 +9,15 @@ namespace status {
 namespace {
 thread_local game::ClientNum_t g_client_num{0};
 
-void print_client_num(const int channel, const game::consoleLabel_e label,
-                      const char *fmt, const game::ClientNum_t client_num) {
+void print_client_num(const game::consoleChannel_e channel,
+                      const game::consoleLabel_e label, const char *fmt,
+                      const game::ClientNum_t client_num) {
   g_client_num = client_num;
   game::com::Com_Printf(channel, label, fmt, client_num);
 }
 
-void print_client_xuid(const int channel, const game::consoleLabel_e label,
+void print_client_xuid(const game::consoleChannel_e channel,
+                       const game::consoleLabel_e label,
                        [[maybe_unused]] const char *fmt, const uint64_t xuid) {
   if (game::sv::SV_IsTestClient(g_client_num)) {
     game::com::Com_Printf(channel, label, "%16s ", "bot0");
@@ -26,21 +29,28 @@ void print_client_xuid(const int channel, const game::consoleLabel_e label,
 } // namespace
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "status"; }
+#endif
+
   void post_unpack() override {
     // Patch the status command for test clients
-    utils::hook::call(game::select(0x142246E37, 0x14052C527), print_client_num);
-    utils::hook::call(game::select(0x142246EDE, 0x14052C5CE),
+    utils::hook::call(game::select(0x1421EA2E7, 0x142246E37, 0x14052C527),
+                      print_client_num);
+    utils::hook::call(game::select(0x1421EA38E, 0x142246EDE, 0x14052C5CE),
                       print_client_xuid);
 
-    utils::hook::copy_string(game::select(0x143050480, 0x140E85A20),
-                             "num score ping xuid             name             "
-                             "address                  qport  \n");
-    utils::hook::copy_string(game::select(0x1430504E0, 0x140E85A80),
-                             "--- ----- ---- ---------------- ---------------- "
-                             "------------------------ ------ \n");
-
-    utils::hook::copy_string(game::select(0x1430417C0, 0x140E76D50),
-                             "%i.%i.%i.%i:%i");
+    utils::hook::copy_string(
+        game::select(0x142FD13A0, 0x143050480, 0x140E85A20),
+        "num score ping xuid             name             "
+        "address                  qport  \n");
+    utils::hook::copy_string(
+        game::select(0x142FD1400, 0x1430504E0, 0x140E85A80),
+        "--- ----- ---- ---------------- ---------------- "
+        "------------------------ ------ \n");
+    // Removes the "(%d)" `netsrc_t` suffix from `NetAdr_ToString` serialization
+    utils::hook::copy_string(
+        game::select(0x142FC26E0, 0x1430417C0, 0x140E76D50), "%i.%i.%i.%i:%i");
   }
 };
 } // namespace status

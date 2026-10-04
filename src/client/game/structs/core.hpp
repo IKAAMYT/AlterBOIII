@@ -1,18 +1,16 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
-#include <stdfloat>
-#include <csetjmp>
-#include <variant>
 
-#include <structs/str.hpp>
-#include <structs/atomic.hpp>
 #include <game/structs/macros.hpp>
 #include <game/structs/quake/vec.hpp>
+#include <game/symbol.hpp>
+#include <structs/atomic.hpp>
+#include <structs/func.hpp>
+#include <structs/str.hpp>
 
-#define PROTOCOL 8
-#define SUB_PROTOCOL 1
+inline constexpr auto PROTOCOL = 8;
+inline constexpr auto SUB_PROTOCOL = 1;
 
 namespace game {
 
@@ -444,8 +442,92 @@ template <typename T> using LocalClientPool = array<T, LOCAL_CLIENT_COUNT>;
 template <typename T>
 using AtomicLocalClientPool = atomicarray<T, LOCAL_CLIENT_COUNT>;
 
-template <typename ClientType, typename ServerType>
-using EngineDependent = std::variant<ClientType, ServerType>;
+template <typename ClientType, typename ServerType> struct EngineDependent {
+public:
+  // Unions cannot be used as base struct/class, so we wrap an anonymous union
+  // in a struct here as a workaround.
+  union {
+  public:
+    const ClientType *cl;
+    const ServerType *sv;
+  };
+
+  const void *ptr;
+
+  inline constexpr operator const ServerType *() const noexcept { return sv; }
+
+  inline constexpr operator const ClientType *() const noexcept { return cl; }
+
+  inline constexpr operator const void *() const noexcept { return ptr; }
+
+  inline constexpr operator bool() const noexcept { return sv != nullptr; }
+
+  // Function-based constructors to allow usage without violating CPP 2003 PoD
+  // conformance
+  static inline constexpr EngineDependent<ClientType, ServerType>
+  from(const ServerType *s) noexcept {
+    return {.sv = s};
+  }
+
+  static inline constexpr EngineDependent<ClientType, ServerType>
+  from(const ClientType *c) noexcept {
+    return {.cl = c};
+  }
+
+  static inline constexpr EngineDependent<ClientType, ServerType>
+  from(const void *v) noexcept {
+    return {.ptr = v};
+  }
+};
+
+template <typename ClientType, typename ServerType> struct EngineDependentMut {
+public:
+  // Unions cannot be used as base struct/class, so we wrap an anonymous union
+  // in a struct here as a workaround.
+  union {
+  public:
+    ClientType *cl;
+    ServerType *sv;
+  };
+
+  void *ptr;
+
+  inline constexpr operator ServerType *() noexcept { return sv; }
+
+  inline constexpr operator const ServerType *() const noexcept { return sv; }
+
+  inline constexpr operator ClientType *() noexcept { return cl; }
+
+  inline constexpr operator const ClientType *() const noexcept { return cl; }
+
+  inline constexpr operator void *() noexcept { return ptr; }
+
+  inline constexpr operator const void *() const noexcept { return ptr; }
+
+  inline constexpr operator bool() const noexcept { return sv != nullptr; }
+
+  inline constexpr
+  operator EngineDependent<ClientType, ServerType>() const noexcept {
+    return {.sv = sv};
+  }
+
+  // Function-based constructors to allow usage without violating CPP 2003 PoD
+  // conformance
+  static inline constexpr EngineDependentMut<ClientType, ServerType>
+  from(ServerType *s) noexcept {
+    return {.sv = s};
+  }
+
+  static inline constexpr EngineDependentMut<ClientType, ServerType>
+  from(ClientType *c) noexcept {
+    return {.cl = c};
+  }
+
+  static inline constexpr EngineDependentMut<ClientType, ServerType>
+  from(void *v) noexcept {
+    return {.ptr = v};
+  }
+};
 
 typedef str8_t clanAbbrev_t;
 typedef str32_t name_t;
@@ -476,6 +558,18 @@ enum class ZoneType : uint32_t {
   USERMAP = 0x2,
   COUNT = 0x3
 };
+inline constexpr const char *serialize(ZoneType zoneType) {
+  switch (zoneType) {
+  case ZoneType::OFFICIAL:
+    return "ZoneType::OFFICIAL";
+  case ZoneType::MOD:
+    return "ZoneType::MOD";
+  case ZoneType::USERMAP:
+    return "ZoneType::USERMAP";
+  default:
+    return "ZoneType::INVALID";
+  }
+}
 IMPL_ENUM_OPERATORS(ZoneType);
 
 inline constexpr const char *dirname(ZoneType zoneType) {
@@ -1185,18 +1279,6 @@ struct outPacket_t {
   int32_t p_realtime;
 };
 
-#pragma pack(push, 1)
-class tlAtomicMutex {
-public:
-  uint64_t ThreadId;
-  int LockCount;
-  uint8_t _padding0C[4];
-  tlAtomicMutex *ThisPtr;
-};
-ASSERT_SIZE(tlAtomicMutex, 0x18);
-#pragma pack(pop)
-
-// Unverified.
 enum class consoleChannel_e : uint32_t {
   CHANNEL_DONT_FILTER = 0x0,
   CHANNEL_GAMENOTIFY = 0x1,
@@ -1211,6 +1293,7 @@ enum class consoleChannel_e : uint32_t {
   BUILTIN_CHANNEL_COUNT = 0xA,
   FIRST_DEBUG_CHANNEL = 0x9,
 };
+IMPL_ENUM_OPERATORS(consoleChannel_e);
 
 enum class RestartMethod_t : uint32_t {
   FULL = 0x0,
@@ -1234,4 +1317,31 @@ struct viewClampState {
   float startTime;
 };
 
+enum class BuildIntField : int32_t {
+  BUILD_NUMBER = 0x0,
+  CHANGELIST = 0x1,
+  INFO_VERSION = 0x2,
+};
+IMPL_ENUM_OPERATORS(BuildIntField);
+
+enum class BuildStringField : int32_t {
+  MAJOR_VERSION = 0x0,
+  MINOR_VERSION = 0x1,
+  BUILD_ID = 0x2,
+  BUILD_VERSION = 0x3,
+  BUILD_MACHINE = 0x4,
+  BUILD_TYPE = 0x5,
+  BUILD_TIME = 0x6,
+  BUILD_DISPLAY_NAME = 0x7,
+  BUILD_NAME = 0x8,
+  BUILD_BASE_NAME = 0x9,
+  BUILD_CONFIG = 0xA,
+  BUILD_MODE = 0xB,
+  BUILD_PROJECT_NAME = 0xC,
+  BUILD_LOCAL_CHANGES = 0xD,
+  BUILD_INFO_NAME = 0xE,
+  BUILD_INFO_SOURCE = 0xF,
+  BUILD_INFO_STRING = 0x10,
+};
+IMPL_ENUM_OPERATORS(BuildStringField);
 } // namespace game

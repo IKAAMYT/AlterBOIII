@@ -1,11 +1,11 @@
 #pragma once
 
-#include <game/structs/macros.hpp>
 #include <game/structs/db/xasset/core.hpp>
+#include <game/structs/macros.hpp>
 
 #include <cstdint>
-#include <str.hpp>
 #include <hash.hpp>
+#include <str.hpp>
 
 namespace game {
 namespace bg {
@@ -245,11 +245,12 @@ template <typename Asset> struct bgCachedData {
     memset(this, 0, sizeof(std::remove_pointer_t<decltype(this)>));
   }
 };
-typedef bgCachedData<db::xasset::XModel> bgCachedModels;
+typedef bgCachedData<db::xasset::xmodel::XModel> bgCachedModels;
 typedef bgCachedData<db::xasset::RumbleInfo> bgCachedRumbles;
 typedef bgCachedData<db::xasset::ShellshockParams> bgCachedShellshocks;
 typedef bgCachedData<db::xasset::XCam> bgCachedXCams;
-typedef bgCachedData<db::xasset::DestructibleDef> bgCachedDestructibles;
+typedef bgCachedData<db::xasset::destructible::DestructibleDef>
+    bgCachedDestructibles;
 typedef bgCachedData<db::xasset::StreamerHint> bgCachedStreamerHint;
 typedef bgCachedData<db::xasset::FxEffectDefHandle> bgCachedFX;
 typedef bgCachedData<db::xasset::TagFxSet> bgCachedTagFxSet;
@@ -257,7 +258,7 @@ typedef bgCachedData<db::xasset::TagFxSet> bgCachedTagFxSet;
 typedef djb2Hash_t BGCacheNameHash;
 PACKED(struct bgCachedGenericData {
   str1024_t name;
-  int32_t nameHash;
+  djb2Hash_t nameHash;
   volatile uint8_t refCount;
   uint8_t _padding0D[3];
 
@@ -273,10 +274,15 @@ PACKED(struct bgCachedGenericData {
     }
   }
 
+  inline static constexpr djb2Hash_t hashName(const char *name) {
+    return djb2<BGCACHE_NAMEHASH_DJB2_INITIAL_SEED,
+                BGCACHE_NAMEHASH_DJB2_CONSTANT>(name);
+    ;
+  }
+
   inline constexpr void setName(const char *new_name) volatile {
     if (new_name) {
-      nameHash = djb2<BGCACHE_NAMEHASH_DJB2_INITIAL_SEED,
-                      BGCACHE_NAMEHASH_DJB2_CONSTANT>(new_name);
+      nameHash = hashName(new_name);
       strscpy(name, new_name);
     } else {
       clearName();
@@ -355,6 +361,18 @@ struct bgCacheChecksumInfo {
   volatile uint32_t clientChecksum;
 };
 
+struct BGCacheInfoDef {
+  BGCacheTypes type;
+  str128_t name;
+};
+
+PACKED(struct BGCacheInfo {
+  const char *name;
+  BGCacheInfoDef *def;
+  int32_t defCount;
+  uint8_t _padding14[4];
+});
+ASSERT_SIZE(BGCacheInfo, 0x18);
 } // namespace cache
 } // namespace bg
 } // namespace game

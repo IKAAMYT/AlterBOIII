@@ -1,12 +1,13 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include "scheduler.hpp"
+#include <loader/component_loader.hpp>
 
 #include "download_overlay.hpp"
 #include "workshop.hpp"
 
-#include <utils/hook.hpp>
 #include <utils/concurrency.hpp>
+#include <utils/hook.hpp>
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
@@ -500,6 +501,10 @@ bool show_confirmation_blocking(const std::string &title,
 }
 
 struct component final : client_component {
+#ifndef NDEBUG
+  std::string name() override { return "download_overlay"; }
+#endif
+
   void post_unpack() override {
     scheduler::once(setup_present_hook, scheduler::async);
   }

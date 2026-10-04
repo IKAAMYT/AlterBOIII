@@ -1,9 +1,9 @@
 #pragma once
 #include "memory.hpp"
 #include <cstdarg>
+#include <macros.hpp>
 #include <stdexcept>
 #include <string>
-#include <macros.hpp>
 
 namespace utils::string {
 
@@ -74,10 +74,21 @@ private:
 
 const char *va(const char *fmt, ...);
 
-std::vector<std::string> split(const std::string &s, char delim);
+std::vector<std::string> split(const std::string &s,
+                               const std::string_view &delim);
+inline std::vector<std::string> split(const std::string &s, char delim) {
+  return split(s, std::string_view(&delim, 1));
+}
+std::vector<std::string_view> split(const std::string_view &s,
+                                    const std::string_view &delim);
+inline std::vector<std::string_view> split(const std::string_view &s,
+                                           char delim) {
+  return split(s, std::string_view(&delim, 1));
+}
 
 std::string to_lower(std::string text);
 std::string to_upper(std::string text);
+
 bool contains(const std::string_view &text, const std::string_view &substring);
 bool starts_with(const std::string_view &text,
                  const std::string_view &substring);
@@ -101,8 +112,16 @@ std::string replace(std::string str, const std::string &from,
 
 void trim(std::string &str);
 
+std::string_view &ltrim(std::string_view &str);
+std::string_view &rtrim(std::string_view &str);
+inline std::string_view &trim(std::string_view &str) {
+  return ltrim(rtrim(str));
+}
+
 void copy(char *dest, size_t max_size, const char *src);
 std::string join(std::vector<std::string> strings,
+                 const std::string &separator);
+std::string join(std::vector<std::string_view> strings,
                  const std::string &separator);
 
 template <size_t Size> void copy(char (&dest)[Size], const char *src) {

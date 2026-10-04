@@ -1,8 +1,9 @@
 #include <std_include.hpp>
+
 #include "lobby_server.hpp"
 
-#include "../services.hpp"
 #include "../keys.hpp"
+#include "../services.hpp"
 
 #include <utils/cryptography.hpp>
 #include <utils/string.hpp>

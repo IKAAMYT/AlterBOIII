@@ -20,6 +20,10 @@ repo_dir() {
 	realpath "$repo_dir"
 }
 
+REPO_DIR="$(repo_dir)"
+. "${REPO_DIR}/scripts/unix/env.sh"
+BUILD_DIR="${REPO_DIR}/build"
+
 CLEAN=0
 RELEASE=0
 OUTPUT_DIR=""
@@ -27,7 +31,7 @@ TIDY=0
 EXEC_ARBITRARY=0
 EXEC_ARGS=()
 MARCH="x86-64"
-NUM_THREADS="$(nproc)"
+NUM_THREADS="$(num_threads)"
 BOIII_EXE="boiii.exe"
 TLS_DLL="tlsdll.dll"
 
@@ -79,14 +83,54 @@ build_type() {
 	fi
 }
 
+cc_is_gcc() {
+	local cc
+	cc="$1"
+	if [ -z "$cc" ]; then
+		if [ -n "$CC" ]; then
+			cc="$(resolve_path "$CC")"
+		else
+			return 1
+		fi
+	fi
+
+	if [ -n "$cc" ] && [ -f "$cc" ]; then
+		grep -q '__GNUC__' <<<"$("$cc" -E -dM - </dev/null)"
+	else
+		return 1
+	fi
+}
+
+cc_is_clang() {
+	local cc
+	cc="$1"
+	if [ -z "$cc" ]; then
+		if [ -n "$CC" ]; then
+			cc="$(resolve_path "$CC")"
+		else
+			return 1
+		fi
+	fi
+
+	if [ -n "$cc" ] && [ -f "$cc" ]; then
+		grep -q '__clang__' <<<"$("$cc" -E -dM - </dev/null)"
+	else
+		return 1
+	fi
+}
+
 get_clang() {
-	resolve_path "clang"
+	if cc_is_clang "$CC"; then
+		resolve_path "$CC"
+	else
+		resolve_path "clang"
+	fi
 }
 
 get_llvm_bin() {
 	"$(get_clang)" -### 2>&1 |
 		grep 'InstalledDir:' |
-		sed 's/.*InstalledDir:\s*//' |
+		sed 's/^[ \t]*InstalledDir:[ \t]//' |
 		normalize_path
 }
 
@@ -140,7 +184,9 @@ get_llvm_lld_link() {
 }
 
 get_llvm_clangpp() {
-	if ! first_in_dir "$(get_llvm_bin)" "clang++" "clangpp"; then
+	if cc_is_clang "$CXX"; then
+		resolve_path "$CXX"
+	elif ! first_in_dir "$(get_llvm_bin)" "clang++" "clangpp"; then
 		echo "Error: Could not find clang++ or clangpp in LLVM bin directory: \"$(get_llvm_bin)\"." >&2
 		exit 1
 	fi
@@ -202,6 +248,10 @@ get_llvm_coverage() {
 	fi
 }
 
+get_ld_mold() {
+	resolve_path "ld.mold"
+}
+
 # shellcheck disable=SC2329
 get_llvm_sysroot() {
 	normalize_path "$(get_llvm_bin)/.."
@@ -242,25 +292,30 @@ cross_env() {
 		shift
 	done
 
-	# Put LLVM bin path before all others.
+	# Place LLVM bin path before all others.
 	# premake5 uses `windres` verbatim, with first resolved on path, to
 	# compile the resources.
 	# On most unix-like systems, this will not be LLVM windres, but GNU windres, which
 	# does not support COFF relocations, and thus fails to compile the resources with errors.
-	# By placing the LLVM bin directory path first, we ensure that premake5 finds the correct windres, and thus can compile the resources successfully.
+	# By placing the LLVM bin directory path first, we ensure that premake5 finds the correct windres,
+	# and thus can compile the resources successfully.
 	TEMP_PATH="$(get_llvm_bin):${PATH}"
 	# ensure LLVM windres with "windres" basename exists on path, somewhere.
 	temp_windres_link_dir="$(mktemp -d)"
-	resolved_windres="$(env PATH="$TEMP_PATH" which windres 2>/dev/null | normalize_path)"
+	resolved_windres="$(env PATH="$TEMP_PATH" which windres 2>/dev/null)"
+	if [ -n "$resolved_windres" ]; then
+		resolved_windres="$(normalize_path "$resolved_windres")"
+	fi
 
-	if ! windres_is_llvm "$resolved_windres"; then
+	if [ -z "$resolved_windres" ] || ! windres_is_llvm "$resolved_windres"; then
 		ln -s "$(get_llvm_windres)" "${temp_windres_link_dir}/windres"
 		TEMP_PATH="${temp_windres_link_dir}:${TEMP_PATH}"
 	fi
 
 	exit_code=0
-	if ! env --chdir="${REPO_DIR}" \
-		env PATH="${TEMP_PATH}" \
+	if ! chdir "${REPO_DIR}" \
+		env \
+		PATH="${TEMP_PATH}" \
 		CC="$TEMP_CC" \
 		CXX="$TEMP_CXX" \
 		CPP="$TEMP_CPP" \
@@ -316,7 +371,7 @@ clangd_flag_indent() {
 		in="$(cat -)"
 	fi
 
-	sed "s/^\s*/${FLAG_INDENTATION}/g" <<<"$in"
+	sed "s/^[ \t]*/${FLAG_INDENTATION}/g" <<<"$in"
 }
 
 SRC_INCLUDE_PATHS=(
@@ -325,12 +380,13 @@ SRC_INCLUDE_PATHS=(
 )
 
 DEP_INCLUDE_PATHS=(
+	"deps"
 	"deps/SteamworkSDK/public"
 	"deps/argparse/include"
 	"deps/frozen/include"
 	"deps/Microsoft.Web.WebView2/build/native/include"
 	"deps/curl/include"
-	"deps/asmjit/src/asmjit"
+	"deps/asmjit"
 	"deps/imgui"
 	"deps/discord-rpc/include"
 	"deps/libtommath"
@@ -410,6 +466,7 @@ premake() {
 
 	while [ "$#" -gt 0 ]; do
 		args+=("$1")
+		shift
 	done
 
 	args+=("gmake")
@@ -428,21 +485,22 @@ link_capitalized_headers() {
 
 	for header_lower in "${!needs_capitalized[@]}"; do
 		header="${needs_capitalized["$header_lower"]}"
-		find_capitalized="$(find "${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}" -name "${header}")"
-		if [ -z "$find_capitalized" ]; then
-			find_case_insensitive="$(find "${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}" -iname "$header_lower")"
-			if [ -n "$find_case_insensitive" ]; then
-				find_dir="$(dirname "$find_case_insensitive")"
-				link_out="${find_dir}/${header}"
-				echo "Linking ${find_case_insensitive} -> ${link_out}"
-				if ! ln -s "$find_case_insensitive" "${link_out}"; then
-					echo "Error: Failed to link ${find_case_insensitive} to ${link_out}" >&2
-					return 1
-				fi
-
-			else
-				echo "Error: Could not find required header '$header' (case-insensitive) in MSVC toolchain include path: '${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}')." >&2
-				return 1
+		if ! [ -e "${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}/${header}" ]; then
+			find_capitalized="$(find "${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}" -name "${header}")"
+			if [ -z "$find_capitalized" ]; then
+				while IFS=$'\n' read -r match; do
+					if [ -n "$match" ]; then
+						find_dir="$(dirname "$match")"
+						link_out="${find_dir}/${header}"
+						if ! [ -e "$link_out" ]; then
+							echo "Linking ${match} -> ${link_out}"
+							if ! ln -sf "$match" "${link_out}"; then
+								echo "Error: Failed to link ${match} to ${link_out}" >&2
+								return 1
+							fi
+						fi
+					fi
+				done < <(find "${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}" -iname "$header_lower")
 			fi
 		fi
 	done
@@ -567,9 +625,9 @@ elif [ "${#EXEC_ARGS[@]}" -gt 0 ]; then
 	exit 1
 fi
 
-. "$(repo_dir)/scripts/unix/env.sh"
-REPO_DIR="$(repo_dir)"
-BUILD_DIR="${REPO_DIR}/build"
+TARGET_TRIPLE="x86_64-unknown-windows-msvc"
+DEFAULT_TOOLCHAIN_PATH="/opt/${TARGET_TRIPLE}"
+[ -z "$WINDOWS_MSVC_SYSROOT" ] && [ -d "DEFAULT_TOOLCHAIN_PATH" ] && WINDOWS_MSVC_SYSROOT="${DEFAULT_TOOLCHAIN_PATH}"
 
 if [ -z "$WINDOWS_MSVC_SYSROOT" ]; then
 	echo "Error: WINDOWS_MSVC_SYSROOT environment variable is not set." >&2
@@ -588,8 +646,10 @@ if ! [ -d "$msvc_toolchain_sysroot" ]; then
 	exit 1
 fi
 
-WINDOWS_MSVC_TOOLCHAIN_BIN_PATH="${msvc_toolchain_sysroot}/bin/x86_64-unknown-windows-msvc"
-WINDOWS_MSVC_TOOLCHAIN_LIB_PATH="${msvc_toolchain_sysroot}/lib/x86_64-unknown-windows-msvc"
+WINDOWS_MSVC_TOOLCHAIN_BIN_PATH="${msvc_toolchain_sysroot}/bin"
+WINDOWS_MSVC_TOOLCHAIN_LIB_PATH="${msvc_toolchain_sysroot}/lib"
+# For structure used in https://github.com/trcrsired/windows-msvc-sysroot
+WINDOWS_MSVC_TOOLCHAIN_LIB_PATH_NESTED="${msvc_toolchain_sysroot}/lib/x86_64-unknown-windows-msvc"
 WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH="${msvc_toolchain_sysroot}/include"
 
 cflags=(
@@ -600,6 +660,7 @@ cflags=(
 	"-fuse-ld=lld"
 	"--target=x86_64-windows-msvc"
 	"-L${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH}"
+	"-L${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH_NESTED}"
 	"-L${WINDOWS_MSVC_TOOLCHAIN_BIN_PATH}"
 	"-I${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}")
 cxxflags=(
@@ -618,17 +679,19 @@ ldflags=("-static"
 	"-isystem"
 	"${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}"
 	"-Wl,-libpath:${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH}"
+	"-Wl,-libpath:${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH_NESTED}"
 	"-Wl,-libpath:${WINDOWS_MSVC_TOOLCHAIN_BIN_PATH}"
 	"-fuse-ld=lld"
 	"--target=x86_64-windows-msvc"
 	"-L${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH}"
+	"-L${WINDOWS_MSVC_TOOLCHAIN_LIB_PATH_NESTED}"
 	"-L${WINDOWS_MSVC_TOOLCHAIN_BIN_PATH}"
 	"-Wl,/subsystem:windows")
 if [ "$RELEASE" -eq 1 ]; then
 	ldflags+=("-Wl,/release")
 fi
 
-resflags=("-I${msvc_toolchain_sysroot}/include")
+resflags=("--target=pe-x86-64" "-I${msvc_toolchain_sysroot}/include")
 
 disabled_warnings=(
 	"unknown-warning-option"

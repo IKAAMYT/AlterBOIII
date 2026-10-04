@@ -38,21 +38,23 @@ enum class token_type {
   t_game,
   t_anim,
   t_autoexec,
-  t_namespace_kw,  // #namespace
-  t_using,         // #using
-  t_include,       // #include
-  t_function_kw,   // function
-  t_private,       // private
-  t_world,         // world
-  t_waitrealtime,  // waitrealtime
-  t_const_kw,      // const
-  t_precache,      // #precache
-  t_insert,        // #insert
-  t_waittill,      // waittill
-  t_waittillmatch, // waittillmatch
-  t_notify_kw,     // notify
-  t_endon_kw,      // endon
-  t_classes,       // classes
+  t_namespace_kw,   // #namespace
+  t_using,          // #using
+  t_include,        // #include
+  t_function_kw,    // function
+  t_private,        // private
+  t_world,          // world
+  t_waitrealtime,   // waitrealtime
+  t_const_kw,       // const
+  t_precache,       // #precache
+  t_insert,         // #insert
+  t_using_animtree, // #using_animtree
+  t_animtree,       // #animtree
+  t_waittill,       // waittill
+  t_waittillmatch,  // waittillmatch
+  t_notify_kw,      // notify
+  t_endon_kw,       // endon
+  t_classes,        // classes
 
   // operators
   t_plus,      // +
@@ -107,6 +109,7 @@ enum class token_type {
   t_semicolon,    // ;
   t_comma,        // ,
   t_dot,          // .
+  t_triple_dot,   // ...
   t_colon,        // :
   t_double_colon, // ::
   t_hash,         // #
@@ -118,16 +121,16 @@ enum class token_type {
 struct token {
   token_type type;
   std::string value;
-  int line;
-  int column;
+  int32_t line;
+  int32_t column;
 };
 
 struct lexer_result {
   bool success;
   std::vector<token> tokens;
   std::string error;
-  int error_line;
-  int error_column;
+  int32_t error_line;
+  int32_t error_column;
 };
 
 lexer_result tokenize(const std::string &source);

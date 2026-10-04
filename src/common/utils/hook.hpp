@@ -1,11 +1,12 @@
 #pragma once
 
-#include <asmjit/core/jitruntime.h>
-#include <asmjit/x86/x86assembler.h>
+#include <asmjit/core/jit_runtime.h>
+#include <asmjit/x86/x86_assembler.h>
+
 #include <optional>
-#include <vector>
 #include <string>
 #include <utils/nt.hpp>
+#include <vector>
 
 using namespace asmjit::x86;
 
@@ -48,11 +49,11 @@ void **get_vtable_entry(Class *obj, T (Class::*entry)(Args...)) {
   return &obj_v_table[index];
 }
 
-class assembler : public Assembler {
+class assembler {
 public:
-  using Assembler::Assembler;
-  using Assembler::call;
-  using Assembler::jmp;
+  Assembler wrapped;
+
+  inline assembler(asmjit::CodeHolder *holder) : wrapped(holder) {}
 
   void pushad64();
   void popad64();
@@ -66,8 +67,22 @@ public:
     this->restore_stack_after_call();
   }
 
-  asmjit::Error call(void *target);
-  asmjit::Error jmp(void *target);
+  inline asmjit::Error call(Mem target) { return get().call(target); }
+  inline asmjit::Error call(void *target) { return get().call(target); }
+  inline asmjit::Error call(uintptr_t target) { return get().call(target); }
+
+  inline asmjit::Error jmp(Mem target) { return get().jmp(target); }
+  inline asmjit::Error jmp(void *target) { return get().jmp(target); }
+  inline asmjit::Error jmp(uintptr_t target) { return get().jmp(target); }
+
+  inline constexpr operator Assembler *() noexcept { return &wrapped; }
+
+  inline constexpr operator const Assembler *() const noexcept {
+    return &wrapped;
+  }
+
+  inline constexpr Assembler &get() noexcept { return wrapped; }
+  inline constexpr const Assembler &get() const noexcept { return wrapped; }
 };
 
 class detour {
@@ -215,35 +230,45 @@ std::vector<uint8_t> move_hook(void *pointer);
 std::vector<uint8_t> move_hook(size_t pointer);
 
 template <typename T> T extract(void *address) {
-  auto *const data = static_cast<uint8_t *>(address);
-  const auto offset = *reinterpret_cast<int32_t *>(data);
+  uint8_t *const data = static_cast<uint8_t *>(address);
+  const int32_t offset = *reinterpret_cast<int32_t *>(data);
   return reinterpret_cast<T>(data + offset + 4);
 }
 
 void *follow_branch(void *address);
 
-template <typename T> static void set(void *place, T value = false) {
+template <typename T> inline void set(void *place, T value = false) {
   copy(place, &value, sizeof(value));
 }
 
-template <typename T> static void set(const size_t place, T value = false) {
+template <typename T, const size_t N>
+inline void set(void *place, const T (&arr)[N]) {
+  copy(place, arr, sizeof(T) * N);
+}
+
+template <typename T> inline void set(const uintptr_t place, T value = false) {
   return set<T>(reinterpret_cast<void *>(place), value);
 }
 
+template <typename T, const size_t N>
+inline void set(uintptr_t place, const T (&arr)[N]) {
+  copy<T, N>(reinterpret_cast<void *>(place), arr, sizeof(T) * N);
+}
+
 template <typename T, typename... Args>
-static T invoke(size_t func, Args... args) {
+inline T invoke(size_t func, Args... args) {
   return reinterpret_cast<T (*)(Args...)>(func)(args...);
 }
 
 template <typename T, typename... Args>
-static T invoke(void *func, Args... args) {
+inline T invoke(void *func, Args... args) {
   return static_cast<T (*)(Args...)>(func)(args...);
 }
 void nop_branch(uint8_t *address);
 
 template <typename T>
   requires(!std::is_same_v<T, uint8_t>)
-void nop_branch(T *address) {
+inline void nop_branch(T *address) {
   return nop_branch(reinterpret_cast<uint8_t *>(
       const_cast<std::remove_const_t<std::remove_volatile_t<T>> *>(address)));
 }

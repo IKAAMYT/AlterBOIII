@@ -1,13 +1,14 @@
 #pragma once
 
-#include <game/structs/scr/core.hpp>
 #include <game/structs/macros.hpp>
+#include <game/structs/scr/core.hpp>
 
 namespace game {
 namespace scr {
 namespace vm {
 namespace anim {
 
+// Verified
 PACKED(struct scrAnimPub_t {
   uint32_t animtrees;
   uint32_t animtree_node;

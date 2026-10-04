@@ -1,10 +1,14 @@
 #include <std_include.hpp>
+
 #include "console.hpp"
-#include <loader/component_loader.hpp>
+
 #include <resource.hpp>
 
 #include <game/game.hpp>
-#include "command.hpp"
+
+#include <component/command.hpp>
+#include <component/lua/lua_state.hpp>
+#include <loader/component_loader.hpp>
 
 #if __has_include("version.hpp")
 #include "version.hpp"
@@ -14,11 +18,11 @@
 #endif
 #endif
 
-#include <utils/thread.hpp>
-#include <utils/hook.hpp>
-#include <utils/flags.hpp>
 #include <utils/concurrency.hpp>
+#include <utils/flags.hpp>
+#include <utils/hook.hpp>
 #include <utils/image.hpp>
+#include <utils/thread.hpp>
 
 #include "scheduler.hpp"
 
@@ -27,11 +31,11 @@
 
 #include <rapidjson/document.h>
 
-#include <richedit.h>
 #include <dwmapi.h>
+#include <richedit.h>
 
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <sstream>
@@ -94,7 +98,6 @@ constexpr int32_t COMPLETION_HINT_MAX_HEIGHT = 8 + 14 * 11;
 
 namespace console {
 namespace {
-utils::image::object logo;
 std::atomic_bool started{false};
 std::atomic_bool terminate_runner{false};
 utils::concurrency::container<std::function<void(const std::string &message)>>
@@ -191,7 +194,7 @@ bool dvar_name_less(const std::string &a, const std::string &b) {
 std::string to_lower_copy(const std::string_view s) {
   std::string out(s);
   for (char &c : out) {
-    const unsigned char uc = static_cast<unsigned char>(c);
+    const uint8_t uc = static_cast<uint8_t>(c);
     c = static_cast<char>(std::tolower(uc));
   }
   return out;
@@ -209,8 +212,8 @@ bool ci_contains(const std::string_view haystack,
   for (size_t i = 0; i < end; ++i) {
     size_t j = 0;
     for (; j < needle.size(); ++j) {
-      const unsigned char a = static_cast<unsigned char>(haystack[i + j]);
-      const unsigned char b = static_cast<unsigned char>(needle[j]);
+      const uint8_t a = static_cast<uint8_t>(haystack[i + j]);
+      const uint8_t b = static_cast<uint8_t>(needle[j]);
       if (std::tolower(a) != std::tolower(b)) {
         break;
       }
@@ -661,7 +664,8 @@ void merge_dynamic_names() {
     return;
   }
 
-  std::vector<std::string> custom_dvars = game::get_registered_dvar_names();
+  const std::vector<std::string> &custom_dvars =
+      game::get_registered_dvar_names();
   std::vector<std::string> custom_commands =
       command::get_registered_command_names();
 
@@ -672,10 +676,10 @@ void merge_dynamic_names() {
   }
 
   merged.reserve(merged.size() + custom_dvars.size() + custom_commands.size());
-  for (auto &name : custom_dvars) {
-    merged.push_back(std::move(name));
+  for (const std::string &name : custom_dvars) {
+    merged.push_back(name);
   }
-  for (auto &name : custom_commands) {
+  for (std::string &name : custom_commands) {
     merged.push_back(std::move(name));
   }
 
@@ -747,19 +751,26 @@ bool collect_dvar_matches(const std::string &current,
   constexpr size_t max_matches = 50;
   matches.clear();
 
-  const auto begin_it =
-      std::lower_bound(snapshot.begin(), snapshot.end(), partial,
-                       [](const std::string &s, const std::string &p) {
-                         return compare_dvar_names_ci(s, p) < 0;
-                       });
+  const std::_Vector_iterator<
+      std::_Vector_val<std::_Simple_types<std::basic_string<char>>>>
+      begin_it =
+          std::lower_bound(snapshot.begin(), snapshot.end(), partial,
+                           [](const std::string &s, const std::string &p) {
+                             return compare_dvar_names_ci(s, p) < 0;
+                           });
 
-  auto end_it = begin_it;
+  std::_Vector_iterator<
+      std::_Vector_val<std::_Simple_types<std::basic_string<char>>>>
+      end_it = begin_it;
   while (end_it != snapshot.end() && starts_with_ci(*end_it, partial)) {
     ++end_it;
   }
 
   std::unordered_set<std::string> added_ci;
-  for (auto it = begin_it; it != end_it && matches.size() < max_matches; ++it) {
+  for (std::_Vector_iterator<
+           std::_Vector_val<std::_Simple_types<std::basic_string<char>>>>
+           it = begin_it;
+       it != end_it && matches.size() < max_matches; ++it) {
     matches.push_back(*it);
     added_ci.insert(to_lower_copy(*it));
   }
@@ -767,7 +778,8 @@ bool collect_dvar_matches(const std::string &current,
   if (matches.size() < max_matches) {
     const std::string partial_lower = to_lower_copy(partial);
 
-    std::vector<std::pair<size_t, const std::string *>> substring_hits;
+    typedef std::pair<size_t, const std::string *> substring_hit_t;
+    std::vector<substring_hit_t> substring_hits;
     substring_hits.reserve(snapshot.size());
 
     for (const std::string &name : snapshot) {
@@ -783,14 +795,14 @@ bool collect_dvar_matches(const std::string &current,
     }
 
     std::sort(substring_hits.begin(), substring_hits.end(),
-              [](const auto &a, const auto &b) {
+              [](substring_hit_t &a, substring_hit_t &b) {
                 if (a.first != b.first) {
                   return a.first < b.first;
                 }
                 return dvar_name_less(*a.second, *b.second);
               });
 
-    for (const auto &hit : substring_hits) {
+    for (const substring_hit_t &hit : substring_hits) {
       if (matches.size() >= max_matches) {
         break;
       }
@@ -906,10 +918,9 @@ bool try_autocomplete_dvar(const HWND input_hwnd) {
       bool all_match = true;
       for (size_t i = 1; i < matches.size(); ++i) {
         if (common_len >= matches[i].size() ||
-            static_cast<char>(std::tolower(
-                static_cast<unsigned char>(matches[i][common_len]))) !=
-                static_cast<char>(
-                    std::tolower(static_cast<unsigned char>(c)))) {
+            static_cast<char>(
+                std::tolower(static_cast<uint8_t>(matches[i][common_len]))) !=
+                static_cast<char>(std::tolower(static_cast<uint8_t>(c)))) {
           all_match = false;
           break;
         }
@@ -951,8 +962,13 @@ void print_message(const char *message) {
   OutputDebugStringA(message);
 #endif
 
+#ifndef NDEBUG
+  game::trace("[printf] {}", message);
+#endif
+
   if (started.load(std::memory_order_seq_cst) && !terminate_runner) {
-    game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT, "%s", message);
+    game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                          game::consoleLabel_e::DEFAULT, "%s", message);
   }
 }
 
@@ -1206,16 +1222,18 @@ LRESULT con_wnd_proc(const HWND hwnd, const UINT msg, const WPARAM wparam,
     if (!close_requested.exchange(true)) {
       ShowWindow(hwnd, SW_HIDE);
       force_exit_after(3000);
-      game::cbuf::Cbuf_AddText(0, "quit\n");
+      game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, "quit\n");
     }
     [[fallthrough]];
   default:
-    return utils::hook::invoke<LRESULT>(game::select(0x142332960, 0x1405973E0),
-                                        hwnd, msg, wparam, lparam);
+    return utils::hook::invoke<LRESULT>(
+        game::select(0x1422B97F0, 0x142332960, 0x1405973E0), hwnd, msg, wparam,
+        lparam);
   }
 
-  return utils::hook::invoke<LRESULT>(game::select(0x142332960, 0x1405973E0),
-                                      hwnd, msg, wparam, lparam);
+  return utils::hook::invoke<LRESULT>(
+      game::select(0x1422B97F0, 0x142332960, 0x1405973E0), hwnd, msg, wparam,
+      lparam);
 }
 
 LRESULT input_line_wnd_proc(const HWND hwnd, const UINT msg,
@@ -1276,7 +1294,8 @@ LRESULT input_line_wnd_proc(const HWND hwnd, const UINT msg,
   }
 
   const LRESULT result = utils::hook::invoke<LRESULT>(
-      game::select(0x142332C60, 0x1405976E0), hwnd, msg, wparam, lparam);
+      game::select(0x1422B9AF0, 0x142332C60, 0x1405976E0), hwnd, msg, wparam,
+      lparam);
 
   if (msg == WM_SETFOCUS) {
     restore_input_caret();
@@ -1416,15 +1435,6 @@ void sys_create_console_stub(const HINSTANCE h_instance) {
 
   ReleaseDC(*game::s_wcd::hWnd, dc);
 
-  if (logo) {
-    utils::hook::set<HWND>(game::s_wcd::codLogo,
-                           CreateWindowExA(0, "Static", nullptr, 0x5000000Eu, 5,
-                                           5, 0, 0, *game::s_wcd::hWnd,
-                                           reinterpret_cast<HMENU>(1),
-                                           h_instance, nullptr));
-    SendMessageA(*game::s_wcd::codLogo, STM_SETIMAGE, IMAGE_BITMAP, logo);
-  }
-
   utils::hook::set<HWND>(
       game::s_wcd::hwndInputLine,
       CreateWindowExA(0, "edit", nullptr, 0x50800080u, CONSOLE_MARGIN, 500, 0,
@@ -1476,7 +1486,7 @@ void sys_create_console_stub(const HINSTANCE h_instance) {
   SetFocus(*game::s_wcd::hwndInputLine);
   restore_input_caret();
   game::con::Con_GetTextCopy(
-      text, std::min(0x4000, static_cast<int32_t>(sizeof(text))));
+      text, std::min<int32_t>(0x4000, static_cast<int32_t>(sizeof(text))));
   append_text_with_severity(*game::s_wcd::hwndBuffer, text);
   resize_console_controls(*game::s_wcd::hWnd);
 }
@@ -1502,7 +1512,115 @@ void set_title(const std::string &title) {
   }
 }
 
+namespace lua {
+using namespace game::lua;
+using namespace game::lua::hks;
+
+void print(const std::string_view &msg) {
+#ifndef NDEBUG
+  game::trace("[Lua][Console] {}", msg);
+#endif
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "^7%s\n", msg.data());
+}
+
+void print_info(const std::string_view &msg) {
+#ifndef NDEBUG
+  game::trace("[Lua][Console][Info] {}", msg);
+#endif
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "^4%s^7\n", msg.data());
+}
+
+void print_error(const std::string_view &msg) {
+#ifndef NDEBUG
+  game::trace("[Lua][Console][Error] {}", msg);
+#endif
+
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "^1Error: %s^7\n",
+                        msg.data());
+}
+
+void print_warning(const std::string_view &msg) {
+#ifndef NDEBUG
+  game::trace("[Lua][Console][Warn] {}", msg);
+#endif
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "^3%s^7\n", msg.data());
+}
+
+std::string concat_string_args(lua_State *s, hksInt32 firstIndex = 1) {
+  std::string text;
+  for (hksInt32 i = firstIndex; i <= lua_gettop(s); ++i) {
+    text += lua_tostring(s, i);
+  }
+  return text;
+}
+
+luaReturnCount_e print(lua_State *s) {
+
+  print(concat_string_args(s));
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e print_info(lua_State *s) {
+  print_info(concat_string_args(s));
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e print_file(lua_State *s) {
+  if (lua_gettop(s) > 1 && lua_isstring(s, 1)) {
+    std::string msg =
+        std::format("[Lua][Console][File][{}] ", lua_tostring(s, 1));
+    msg += concat_string_args(s, 2);
+    print_info(msg);
+  }
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e print_error(lua_State *s) {
+  print_error(concat_string_args(s));
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e print_warning(lua_State *s) {
+  print_warning(concat_string_args(s));
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e show_external_console(lua_State *s) {
+  game::sys::Sys_ShowConsole();
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+void register_lua_libs() {
+  static constexpr const luaL_Reg ConsoleLibrary[] = {
+      lua_state::luaL_LoggedReg<"Console", "Print", print>(),
+      lua_state::luaL_LoggedReg<"Console", "PrintFile", print_file>(),
+      lua_state::luaL_LoggedReg<"Console", "PrintInfo", print_info>(),
+      lua_state::luaL_LoggedReg<"Console", "PrintError", print_error>(),
+      lua_state::luaL_LoggedReg<"Console", "PrintWarning", print_warning>(),
+      lua_state::luaL_LoggedReg<"Console", "ShowExternalConsole",
+                                show_external_console>(),
+      {nullptr, nullptr},
+  };
+  lua_state::register_library("Console", ConsoleLibrary);
+}
+
+} // namespace lua
+
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "console"; }
+#endif
+
   component() {
     SetConsoleTitleA("ALTERBOIII V" SHORTVERSION);
 
@@ -1524,14 +1642,18 @@ struct component final : generic_component {
   }
 
   void post_unpack() override {
+    lua::register_lua_libs();
     if (utils::flags::has_flag("nologs")) {
       return;
     }
 
-    if (!game::is_server()) {
-      utils::hook::set<uint8_t>(0x14133D2FE_g,
+    if (game::is_client()) {
+      // `Con_ToggleConsole`: skip block executed if `UGC_ActiveMod_Loaded`
+      // returns `true`
+      utils::hook::set<uint8_t>(game::select(0x14133D31E, 0x14133D2FE, 0x0),
                                 0xEB); // Always enable ingame console
-      utils::hook::jump(0x141344E44_g, 0x141344E2E_g);
+      utils::hook::jump(game::select(0x141344E64, 0x141344E44, 0x0),
+                        game::select(0x141344E4E, 0x141344E2E, 0x0));
 
       if (utils::nt::is_wine() && !utils::flags::has_flag("console")) {
         return;
@@ -1540,13 +1662,10 @@ struct component final : generic_component {
 
     utils::hook::jump(printf, print_stub);
 
-    utils::hook::jump(game::select(0x142332C30, 0x1405976B0), queue_message);
-    utils::hook::nop(game::select(0x142332C4A, 0x1405976CA),
+    utils::hook::jump(game::select(0x1422B9AC0, 0x142332C30, 0x1405976B0),
+                      queue_message);
+    utils::hook::nop(game::select(0x1422B9ADA, 0x142332C4A, 0x1405976CA),
                      2); // Print from every thread
-
-    const std::string res = utils::nt::load_resource(IMAGE_LOGO);
-    const utils::image::image img = utils::image::load_image(res);
-    logo = utils::image::create_bitmap(img);
 
     terminate_runner = false;
     load_dvar_list();

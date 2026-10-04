@@ -1,17 +1,18 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
-#include <game/game.hpp>
 
+#include <game/game.hpp>
+#include <loader/component_loader.hpp>
+
+#include "download_overlay.hpp"
 #include "fastdl.hpp"
 #include "scheduler.hpp"
-#include "download_overlay.hpp"
 
-#include <utils/string.hpp>
-#include <utils/io.hpp>
-#include <utils/http.hpp>
-#include <utils/cryptography.hpp>
 #include <utils/concurrency.hpp>
+#include <utils/cryptography.hpp>
 #include <utils/finally.hpp>
+#include <utils/http.hpp>
+#include <utils/io.hpp>
+#include <utils/string.hpp>
 
 #include <curl/curl.h>
 #include <fstream>
@@ -110,8 +111,8 @@ bool is_safe_relative_path(const std::string &path_string) {
 void show_ingame_error(const std::string &error) {
   scheduler::once(
       [error] {
-        game::ui::UI_OpenErrorPopupWithMessage(0, game::errorCode::UI,
-                                               error.data());
+        game::ui::UI_OpenErrorPopupWithMessage(
+            game::LOCAL_CLIENT_0, game::errorCode::UI, error.data());
       },
       scheduler::main);
 }
@@ -403,7 +404,8 @@ void perform_download(const download_context &context) {
         utils::string::va("You don't have this map. Would you like to download "
                           "it?\nMap: %s\nDownload size: %.2f GB",
                           context.mapname.data(), size_gb),
-        "FastDL - Map Download", MB_YESNO | MB_ICONQUESTION);
+        "FastDL - Map Download",
+        MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND);
 
     if (result != IDYES) {
       throw download_is_cancelled();
@@ -437,11 +439,10 @@ void perform_download(const download_context &context) {
 
 void start_map_download(const download_context &context) {
   bool expected = false;
-  if (!download_active.compare_exchange_strong(expected, true)) {
-    return;
+  if (download_active.compare_exchange_strong(expected, true)) {
+    scheduler::once([context]() { perform_download(context); },
+                    scheduler::async);
   }
-
-  scheduler::once([context]() { perform_download(context); }, scheduler::async);
 }
 
 void cancel_download() { download_cancelled.store(true); }
@@ -622,6 +623,10 @@ std::string fastdl_ui::get_relevant_file_name() const {
 }
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "fastdl"; }
+#endif
+
 public:
   void pre_destroy() override { cancel_download(); }
 };

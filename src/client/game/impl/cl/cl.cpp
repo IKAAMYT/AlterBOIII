@@ -1,10 +1,11 @@
 #include <std_include.hpp>
-#include "cl.hpp"
-#include <cstring>
-#include <cstdio>
 
-#include "../cg/cg.hpp"
+#include "cl.hpp"
+#include <cstdio>
+#include <cstring>
+
 #include "../../../component/auth.hpp"
+#include "../cg/cg.hpp"
 #include <utils/string.hpp>
 
 namespace game {

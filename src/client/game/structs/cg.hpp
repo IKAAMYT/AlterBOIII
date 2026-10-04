@@ -1,9 +1,9 @@
 #pragma once
 
 #include "core.hpp"
-#include "weapon.hpp"
-#include "phys/core.hpp"
 #include "ik.hpp"
+#include "phys/core.hpp"
+#include "weapon.hpp"
 
 namespace game {
 namespace cg {
@@ -100,8 +100,8 @@ struct ClientPlayerAttachmentInfoPool {
 
 #pragma pack(push, 1)
 struct ClientPlayerWeaponInfo {
-  db::xasset::XModel *handModel;
-  db::xasset::XModel *rocketModel;
+  db::xasset::xmodel::XModel *handModel;
+  db::xasset::xmodel::XModel *rocketModel;
   qboolean registered;
   uint8_t _padding14[4];
   weapon::Weapon weapon;

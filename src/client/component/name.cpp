@@ -1,24 +1,25 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include "name.hpp"
-#include "steam_proxy.hpp"
 #include "command.hpp"
+#include "name.hpp"
 #include "network.hpp"
 #include "party.hpp"
-#include "toast.hpp"
 #include "scheduler.hpp"
+#include "steam_proxy.hpp"
+#include "toast.hpp"
 #include <game/utils.hpp>
 
-#include <utils/byte_buffer.hpp>
-#include <utils/nt.hpp>
-#include <utils/string.hpp>
-#include <utils/properties.hpp>
-#include <utils/concurrency.hpp>
 #include <str.hpp>
+#include <utils/byte_buffer.hpp>
+#include <utils/concurrency.hpp>
+#include <utils/nt.hpp>
+#include <utils/properties.hpp>
+#include <utils/string.hpp>
 
-#include "sv.hpp"
 #include "game_event.hpp"
+#include "sv.hpp"
 
 #include <mutex>
 #include <optional>
@@ -545,6 +546,10 @@ void initialize() {
 }
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "name"; }
+#endif
+
   void post_load() override {
     if (game::is_client()) {
       load_player_name();
