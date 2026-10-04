@@ -1,9 +1,10 @@
 #include <std_include.hpp>
+
 #include "steam.hpp"
 
-#include <utils/nt.hpp>
-#include <utils/io.hpp>
 #include <utils/flags.hpp>
+#include <utils/io.hpp>
+#include <utils/nt.hpp>
 
 #include "../component/steam_proxy.hpp"
 

@@ -1,13 +1,14 @@
 #pragma once
 
-#include "core.hpp"
-#include "../core.hpp"
-#include "../vehicle.hpp"
-#include "../user.hpp"
-#include "../phys/core.hpp"
-#include "../ai.hpp"
-#include "../scr/scr.hpp"
-#include "../lobby/core.hpp"
+#include <game/structs/scr/scr.hpp>
+
+#include <game/structs/ai.hpp>
+#include <game/structs/core.hpp>
+#include <game/structs/level/core.hpp>
+#include <game/structs/lobby/core.hpp>
+#include <game/structs/phys/core.hpp>
+#include <game/structs/user.hpp>
+#include <game/structs/vehicle.hpp>
 
 namespace game {
 
@@ -182,6 +183,7 @@ struct gclient_s {
   int32_t lastStandTime;
 };
 typedef gclient_s gclient_t;
+// FIXME: correct size is 0x171F0. This struct needs to be corrected.
 ASSERT_SIZE(gclient_s, 0x17200);
 
 #pragma pack(pop)
@@ -492,7 +494,7 @@ ASSERT_SIZE(gentity_s, GENTITY_SIZE);
 
 // level_locals_t has size 0x23A10 on both client and server
 PACKED(struct level_locals_t {
-  gclient_s *clients;
+  gclient_t *clients;
   gentity_t *gentities;
   int32_t gentitySize;
   int32_t num_entities;

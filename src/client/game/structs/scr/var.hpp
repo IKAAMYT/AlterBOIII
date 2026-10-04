@@ -2,8 +2,8 @@
 
 #include "game/structs/macros.hpp"
 #include "game/structs/quake/vec.hpp"
-#include "game/structs/scr/primitives.hpp"
 #include "game/structs/scr/builtin/core.hpp"
+#include "game/structs/scr/primitives.hpp"
 #include <cstdint>
 namespace game {
 namespace scr {
@@ -181,6 +181,7 @@ union ScrVarValueUnion_t {
   uint64_t uint64Value;
   builtin::BuiltinFunction func;
   builtin::BuiltinMethod method;
+  scr_anim_t anim;
   uintptr_t uintptrValue;
   float floatValue;
   ScrString_t stringValue;
@@ -238,8 +239,10 @@ struct ScrVarValue_t {
       return resolved && resolved->type == ScrVarType::ARRAY;
     }
     case ScrVarType::STRING:
-    case ScrVarType::VECTOR: {
       return index->type == ScrVarType::INT;
+    case ScrVarType::VECTOR: {
+      return index->type == ScrVarType::INT &&
+             index->u.uintValue < vec3_t::size();
     }
     default: {
       return false;

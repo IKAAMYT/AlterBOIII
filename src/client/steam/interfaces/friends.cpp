@@ -1,8 +1,9 @@
 #include <std_include.hpp>
+
 #include "../steam.hpp"
 
-#include "component/name.hpp"
 #include "component/chat.hpp"
+#include "component/name.hpp"
 #include "component/steam_proxy.hpp"
 
 namespace steam {

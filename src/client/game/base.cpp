@@ -1,7 +1,8 @@
 #include <std_include.hpp>
-#include <utils/nt.hpp>
-#include <utils/flags.hpp>
+
 #include "base.hpp"
+#include <utils/flags.hpp>
+#include <utils/nt.hpp>
 
 namespace game {
 namespace {
@@ -26,28 +27,30 @@ uintptr_t get_engine_base() {
   return base;
 }
 
+uint32_t header_checksum() {
+  static const uint32_t result =
+      get_host_library().get_optional_header()->CheckSum;
+  return result;
+}
+
+bool is_new_client() {
+  static const bool result = header_checksum() == 0x6531394;
+  return result;
+}
+
 bool is_server() {
-  static const bool is_server =
-      get_host_library().get_optional_header()->CheckSum == 0x14C28B4;
+  static const bool is_server = header_checksum() == 0x14C28B4;
   return is_server;
 }
 
-bool is_client() {
-  static const bool is_client = []() -> bool {
-    if (utils::flags::has_flag("newsteamclient")) {
-      return get_host_library().get_optional_header()->CheckSum == 0x6517980;
-    }
-
-    return get_host_library().get_optional_header()->CheckSum == 0x888C368;
-  }();
-
-  return is_client;
+bool is_legacy_client() {
+  static const bool is_legacy_client = header_checksum() == 0x888C368;
+  return is_legacy_client;
 }
 
-bool is_legacy_client() {
-  static const bool is_legacy_client =
-      get_host_library().get_optional_header()->CheckSum == 0x8880704;
-  return is_legacy_client;
+bool is_client() {
+  static const bool is_client = is_legacy_client() || is_new_client();
+  return is_client;
 }
 
 std::filesystem::path game_directory() {

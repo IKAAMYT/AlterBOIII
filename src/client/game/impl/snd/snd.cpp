@@ -1,17 +1,18 @@
 #include <std_include.hpp>
+
 #include "hash.hpp"
-#include "stdlib.h"
 #include "stdint.h"
-#include <cstring>
+#include "stdlib.h"
 #include <cstdint>
+#include <cstring>
 
 #ifndef NDEBUG
-#include <unordered_map>
 #include <str.hpp>
+#include <unordered_map>
 #endif
 
-#include "snd.hpp"
 #include "sd/sd.hpp"
+#include "snd.hpp"
 
 #include <utils/string.hpp>
 
@@ -63,7 +64,8 @@ void SND_EnqueueLoadedAssets_Impl(SndBankLoad *load) {
     sd_byte *allocation =
         sd::SD_HeapAlloc(loaded_sd_alloc_name, load->loadedDataSize, 0x1000u);
     load->loadedData = allocation;
-    com::Com_Printf(0x9, consoleLabel_e::LUI, "SOUND loaded alloc %s %p %p\n",
+    com::Com_Printf(consoleChannel_e::CHANNEL_INFO, consoleLabel_e::LUI,
+                    "SOUND loaded alloc %s %p %p\n",
                     load->loadAssetBank.filename, load->loadedEntries,
                     allocation);
     sys::Sys_LeaveCriticalSection(sys::CriticalSection::SOUND_BANK);
@@ -109,8 +111,9 @@ bool SND_StartTocRead_Impl(SndBankLoad *load, SndAssetBankLoad *assetBank,
       assetBank->entryCount = entryCount;
       assetBank->entries = (SndAssetBankEntry *)allocation;
       if (allocation) {
-        com::Com_Printf(0x9, consoleLabel_e::LUI, "SOUND entry alloc %s %d\n",
-                        assetBank->filename, entryCount);
+        com::Com_Printf(consoleChannel_e::CHANNEL_INFO, consoleLabel_e::LUI,
+                        "SOUND entry alloc %s %d\n", assetBank->filename,
+                        entryCount);
         int64_t entryOffset = assetBank->header.entryOffset;
         stream::stream_fileid fileHandle = assetBank->fileHandle;
         SndAssetBankEntry *data = assetBank->entries;
@@ -124,7 +127,7 @@ bool SND_StartTocRead_Impl(SndBankLoad *load, SndAssetBankLoad *assetBank,
       } else {
         SND_BankLoadError(load);
         com::Com_Printf(
-            0x9, consoleLabel_e::LUI,
+            consoleChannel_e::CHANNEL_ERROR, consoleLabel_e::LUI,
             "SOUND ERROR: unable to allocate sound bank entries for %s\n",
             assetBank->filename);
         entryCount = 0;

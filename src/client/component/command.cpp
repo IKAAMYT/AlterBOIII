@@ -1,10 +1,11 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include "command.hpp"
 #include <utils/hook.hpp>
-#include <utils/string.hpp>
 #include <utils/memory.hpp>
+#include <utils/string.hpp>
 
 #include <game/game.hpp>
 
@@ -223,10 +224,16 @@ size_t get_registered_command_count() {
 }
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "command"; }
+#endif
+
   void post_unpack() override {
     // Disable whitelist
-    utils::hook::jump(game::select(0x1420EE860, 0x1404F9CD0),
+    utils::hook::jump(game::select(0x1420E20E0, 0x1420EE860, 0x1404F9CD0),
                       update_whitelist_stub);
+
+    add("savegamerprofilestats", [] {});
 
     if (!game::is_server()) {
       register_client_compatibility_commands();

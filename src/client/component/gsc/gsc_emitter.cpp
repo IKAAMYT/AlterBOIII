@@ -1,4 +1,5 @@
 #include <std_include.hpp>
+
 #include "gsc_emitter.hpp"
 #include <algorithm>
 #include <cstring>
@@ -13,56 +14,51 @@ using namespace game::scr;
 using namespace game::scr::vm;
 using namespace game::scr::vm::op;
 
-uint32_t align_value(uint32_t val, uint32_t alignment) {
+int64_t parse_int(const std::string &v) {
+  int64_t val;
+  if (v.size() > 2 && v[0] == '0' && (v[1] == 'x' || v[1] == 'X'))
+    val = std::stoll(v, nullptr, 16);
+  else {
+    val = std::stoll(v);
+  }
+  return val;
+}
+
+template <typename T> inline constexpr T align_value(T val, T alignment) {
   return (val + alignment - 1) & ~(alignment - 1);
 }
 
-void write_u8(std::vector<uint8_t> &buf, uint8_t v) { buf.push_back(v); }
-void write_u16(std::vector<uint8_t> &buf, uint16_t v) {
-  buf.push_back(v & 0xFF);
-  buf.push_back((v >> 8) & 0xFF);
+template <const size_t Align>
+inline size_t write_align(std::vector<uint8_t> &buf, uint8_t fill = 0x00) {
+  const size_t pos = buf.size();
+  const size_t aligned = align_value(pos, Align);
+  if (aligned > pos) {
+    buf.resize(aligned);
+    memset(&buf[pos], fill, aligned - pos);
+  }
+
+  return aligned;
 }
-void write_u32(std::vector<uint8_t> &buf, uint32_t v) {
-  const size_t s = buf.size();
-  buf.resize(s + sizeof(uint32_t));
-  std::memcpy(&buf[s], &v, sizeof(uint32_t));
+
+template <typename T>
+inline size_t write_align(std::vector<uint8_t> &buf, uint8_t fill = 0x00) {
+  return write_align<sizeof(T)>(buf, fill);
 }
+
 template <typename T> void write(std::vector<uint8_t> &buf, T v) {
   const size_t s = buf.size();
   buf.resize(s + sizeof(T));
   std::memcpy(&buf[s], &v, sizeof(T));
 }
-void write_i16(std::vector<uint8_t> &buf, int16_t v) {
-  write_u16(buf, static_cast<uint16_t>(v));
-}
-void write_float(std::vector<uint8_t> &buf, float v) {
-  const size_t s = buf.size();
-  buf.resize(s + sizeof(float));
-  std::memcpy(&buf[s], &v, sizeof(float));
-}
-
-void write_at_u16(std::vector<uint8_t> &buf, size_t offset, uint16_t v) {
-  buf[offset] = v & 0xFF;
-  buf[offset + 1] = (v >> 8) & 0xFF;
-}
-
-void write_at_u32(std::vector<uint8_t> &buf, size_t offset, uint32_t v) {
-  std::memcpy(&buf[offset], &v, sizeof(uint32_t));
-}
-
-void write_at_i16(std::vector<uint8_t> &buf, size_t offset, int16_t v) {
-  write_at_u16(buf, offset, static_cast<uint16_t>(v));
-}
-
-uint64_t align_value64(uint64_t val, uint64_t alignment) {
-  return (val + alignment - 1) & ~(alignment - 1);
-}
 
 template <typename T>
-void write_aligned(std::vector<uint8_t> &buf, T val, uint64_t alignment) {
-  const uint64_t aligned = align_value64(buf.size(), alignment);
-  buf.resize(aligned + sizeof(val));
-  memcpy(buf.data() + aligned, &val, sizeof(val));
+void write_at(std::vector<uint8_t> &buf, size_t offset, T v) {
+  size_t end = offset + sizeof(T);
+  if (end > buf.size()) {
+    buf.resize(end);
+  }
+
+  memcpy(&buf[offset], &v, sizeof(T));
 }
 
 // T7 PC opcode table
@@ -93,6 +89,23 @@ struct import_entry {
   std::vector<std::pair<size_t, uint32_t>> references;
 };
 
+struct animation_ref {
+  size_t name_str_index;
+  std::pair<size_t, uint32_t> reference;
+};
+
+struct animtree_entry {
+  uint32_t name_str_index;
+  std::vector<std::pair<size_t, uint32_t>> references;
+  std::vector<animation_ref> anims;
+};
+
+struct Local {
+  ScrVarCanonicalName_t name;
+  size_t index;
+  ParamPassMode pass;
+};
+
 struct export_entry {
   uint32_t function_hash;
   uint32_t namespace_hash;
@@ -101,24 +114,21 @@ struct export_entry {
   std::vector<uint8_t> bytecode;
   uint32_t bytecode_offset;
 
-  std::vector<uint32_t> local_hashes;
-  std::unordered_map<uint32_t, uint8_t> local_indices;
+  std::unordered_map<ScrVarCanonicalName_t, Local> locals;
+  std::vector<ScrVarCanonicalName_t> local_names;
 
-  uint8_t add_local(uint32_t hash) {
-    auto it = local_indices.find(hash);
-    if (it != local_indices.end())
-      return it->second;
-    uint8_t idx = static_cast<uint8_t>(local_hashes.size());
-    local_hashes.push_back(hash);
-    local_indices[hash] = idx;
-    return idx;
+  Local &add_local(ScrVarCanonicalName_t hash, ParamPassMode pass = {}) {
+    if (locals.contains(hash)) {
+      return locals[hash];
+    }
+
+    locals[hash] = {.name = hash, .index = locals.size(), .pass = pass};
+    local_names.push_back(hash);
+    return locals[hash];
   }
 
-  uint8_t get_local_index(uint32_t hash) const {
-    auto it = local_indices.find(hash);
-    if (it == local_indices.end())
-      return 0xFF;
-    return it->second;
+  inline uint8_t get_local_index(ScrVarCanonicalName_t hash) {
+    return add_local(hash, {}).index;
   }
 };
 
@@ -139,9 +149,10 @@ struct LineStartAddress {
 };
 
 struct emitter_state {
+  scriptInstance_t inst;
   export_entry *current_func;
   size_t current_export_index;
-  uint32_t script_namespace;
+  ScrVarCanonicalName_t script_namespace;
   std::string script_name;
   std::unordered_map<std::string, uint8_t> local_function_params;
 
@@ -151,6 +162,7 @@ struct emitter_state {
   std::vector<import_entry> imports;
 
   std::vector<std::string> includes;
+  std::vector<animtree_entry> animtrees;
 
   std::vector<export_entry> exports;
 
@@ -164,6 +176,7 @@ struct emitter_state {
   int32_t temp_var_counter;
 
   std::vector<gsc::hash_name_pair> hash_names;
+  std::unordered_set<ScrVarCanonicalName_t> function_names;
   std::vector<replacefunc_entry> replacefuncs;
 
   struct {
@@ -172,22 +185,26 @@ struct emitter_state {
   } line;
 
   void record_hash(const std::string &name, int32_t line = 0,
-                   uint8_t params = 0) {
+                   uint8_t params = 0, bool function_def = false) {
     std::string lower = name;
-    std::transform(
-        lower.begin(), lower.end(), lower.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    uint32_t h = gsc::gsc_hash(lower);
-    hash_names.push_back({h, lower, line, params});
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](uint8_t c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    ScrVarCanonicalName_t h = gsc::gsc_hash(lower);
+    gsc::hash_name_pair pair = {h, lower, line, params};
+    hash_names.push_back(pair);
+    if (function_def) {
+      function_names.insert(h);
+    }
   }
 
-  emitter_state()
-      : current_func(nullptr), current_export_index(0), script_namespace(0),
-        next_label_id(0), temp_var_counter(0) {}
+  emitter_state(scriptInstance_t inst)
+      : inst(inst), current_func(nullptr), current_export_index(0),
+        script_namespace(0), next_label_id(0), temp_var_counter(0) {}
 
   int32_t new_label() { return next_label_id++; }
 
-  void set_label(int id) {
+  void set_label(int32_t id) {
     label_positions[id] = static_cast<uint32_t>(current_func->bytecode.size());
   }
 
@@ -199,60 +216,44 @@ struct emitter_state {
       line.current = std::min(line.current + 1, val);
     }
   }
-  void emit_op(Opcode op, uint64_t line) {
+  template <typename T> void emit(T v, uint64_t line) {
     update_line_info(line);
-    write_u16(current_func->bytecode, map_opcode(op));
+
+    if constexpr (std::is_same_v<T, Opcode>) {
+      write<OP_TYPE>(current_func->bytecode, map_opcode(v));
+    } else {
+      write<T>(current_func->bytecode, v);
+    }
   }
 
-  void emit_u8(uint8_t v, uint64_t line) {
-    update_line_info(line);
-    write_u8(current_func->bytecode, v);
+  template <const size_t Align> inline size_t emit_align(uint8_t fill = 0x00) {
+    return write_align<Align>(current_func->bytecode, fill);
   }
 
-  void emit_u16_aligned(uint8_t fill = 0x00) {
-    uint32_t pos = static_cast<uint32_t>(current_func->bytecode.size());
-    uint32_t aligned = align_value(pos, 2);
-    while (current_func->bytecode.size() < aligned)
-      current_func->bytecode.push_back(fill);
+  template <typename T> inline size_t emit_align(uint8_t fill = 0x00) {
+    return emit_align<sizeof(T)>(fill);
   }
 
-  void emit_u32_aligned(uint8_t fill = 0x00) {
-    uint32_t pos = static_cast<uint32_t>(current_func->bytecode.size());
-    uint32_t aligned = align_value(pos, 4);
-    while (current_func->bytecode.size() < aligned)
-      current_func->bytecode.push_back(fill);
-  }
-
-  void emit_u16(uint16_t v, uint64_t line) {
-    update_line_info(line);
-    write_u16(current_func->bytecode, v);
-  }
-  void emit_u32(uint32_t v, uint64_t line) {
-    update_line_info(line);
-    write_u32(current_func->bytecode, v);
-  }
-  void emit_i16(int16_t v, uint64_t line) {
-    update_line_info(line);
-    write_i16(current_func->bytecode, v);
-  }
-  void emit_float(float v, uint64_t line) {
-    update_line_info(line);
-    write_float(current_func->bytecode, v);
+  template <typename T>
+  inline size_t emit_aligned(T v, uint64_t line, uint8_t fill = 0x00) {
+    const size_t aligned = emit_align<T>(fill);
+    emit<T>(v, line);
+    return aligned;
   }
 
   void emit_jump(Opcode op, int32_t target_label, uint64_t line) {
     update_line_info(line);
-    emit_op(op, line);
-    emit_u16_aligned();
-    uint32_t offset_loc = static_cast<uint32_t>(current_func->bytecode.size());
-    emit_i16(0, line); // placeholder
+    emit<Opcode>(op, line);
+    const uint32_t offset_loc = emit_aligned<int16_t>(0, line); // placeholder
     jump_fixups.push_back({offset_loc, offset_loc + 2, target_label});
   }
 
   size_t add_string(const std::string &str) {
-    auto it = string_map.find(str);
-    if (it != string_map.end())
+    const std::unordered_map<std::string, size_t>::iterator it =
+        string_map.find(str);
+    if (it != string_map.end()) {
       return it->second;
+    }
     size_t idx = strings.size();
     strings.push_back({str, 0, {}});
     string_map[str] = idx;
@@ -260,13 +261,23 @@ struct emitter_state {
   }
 
   void emit_string_ref(Opcode op, const std::string &str, uint64_t line) {
-    size_t idx = add_string(str);
-    emit_op(op, line);
-    emit_u32_aligned();
+    const size_t idx = add_string(str);
+    emit<Opcode>(op, line);
+    size_t aligned_ofs = emit_aligned<uint32_t>(0xFFFFFFFF, line);
     strings[idx].references.push_back(
-        {current_export_index,
-         static_cast<uint32_t>(current_func->bytecode.size())});
-    emit_u32(0xFFFFFFFF, line);
+        {current_export_index, static_cast<uint32_t>(aligned_ofs)});
+  }
+
+  void emit_tree_anim(const std::string &name, uint64_t line) {
+    emit<Opcode>(Opcode::GetAnimation, line);
+    const size_t name_idx = add_string(name);
+    const size_t animtree_idx = animtrees.size() - 1;
+    const size_t aligned_ofs = emit_aligned<scr_anim_t>(
+        {.index = static_cast<uint16_t>(animtrees[animtree_idx].anims.size()),
+         .tree = static_cast<uint16_t>(animtree_idx)},
+        line);
+    animtrees[animtrees.size() - 1].anims.push_back(
+        {name_idx, {current_export_index, aligned_ofs}});
   }
 
   uint64_t make_import_key(uint32_t func, uint32_t ns, uint8_t params,
@@ -282,8 +293,9 @@ struct emitter_state {
     for (size_t i = 0; i < imports.size(); i++) {
       if (imports[i].function_hash == func_hash &&
           imports[i].namespace_hash == ns_hash &&
-          imports[i].num_params == num_params && imports[i].flags == flags)
+          imports[i].num_params == num_params && imports[i].flags == flags) {
         return i;
+      }
     }
     imports.push_back({func_hash, ns_hash, num_params, flags, {}});
     return imports.size() - 1;
@@ -293,12 +305,13 @@ struct emitter_state {
                  uint8_t num_params, bool is_method, bool is_thread,
                  bool same_namespace, uint64_t line, bool builtin = false) {
 
-    if (!builtin && same_namespace) {
+    if (!builtin && ((same_namespace && !function_names.contains(func_hash)) ||
+                     ns_hash == builtin::SYS_NS_HASH)) {
       if (is_method) {
-        if (gsc::builtin_method(func_hash)) {
+        if (gsc::builtin_method(inst, func_hash)) {
           builtin = true;
         }
-      } else if (gsc::builtin_function(func_hash)) {
+      } else if (gsc::builtin_function(inst, func_hash)) {
         builtin = true;
       }
     }
@@ -333,22 +346,14 @@ struct emitter_state {
     }
 
     uint32_t opcode_pos = static_cast<uint32_t>(current_func->bytecode.size());
-    emit_op(op, line);
+    emit<Opcode>(op, line);
 
     size_t import_idx = add_import(func_hash, ns_hash, num_params, flags);
     imports[import_idx].references.push_back(
         {current_export_index, opcode_pos});
 
-    emit_u8(num_params, line);
-    // QWord align
-    {
-      uint32_t pad_pos = static_cast<uint32_t>(current_func->bytecode.size());
-      uint32_t aligned = (pad_pos + 8) & ~7u;
-      while (current_func->bytecode.size() < aligned)
-        current_func->bytecode.push_back(0);
-    }
-    emit_u32(func_hash, line);
-    emit_u32(0, line);
+    emit<uint8_t>(num_params, line);
+    emit_aligned<uint64_t>(func_hash, line);
   }
 
   void emit_call_ptr(uint8_t num_params, bool is_method, bool is_thread,
@@ -361,8 +366,8 @@ struct emitter_state {
       op = is_thread ? Opcode::ScriptThreadCallPointer
                      : Opcode::ScriptFunctionCallPointer;
 
-    emit_op(op, line);
-    emit_u16(static_cast<uint16_t>(num_params), line);
+    emit<Opcode>(op, line);
+    emit<uint16_t>(static_cast<uint16_t>(num_params), line);
   }
 
   std::string temp_var_name() {
@@ -370,100 +375,111 @@ struct emitter_state {
   }
 };
 
-void emit_expression(emitter_state &s, const ast_ptr &node);
+void emit_expression(emitter_state &s, const ast_ptr &node,
+                     bool hash_literal_strings = false,
+                     bool ref_global = false);
 void emit_statement(emitter_state &s, const ast_ptr &node);
 void emit_block(emitter_state &s, const ast_ptr &node);
-void emit_lvalue(emitter_state &s, const ast_ptr &node, bool is_ref);
+void emit_lvalue(emitter_state &s, const ast_ptr &node, bool is_ref,
+                 bool ref_global);
 
 void pre_register_temps(emitter_state &s, const ast_ptr &node) {
-  if (!node)
-    return;
+  if (node) {
+    if (node->type == node_type::n_foreach) {
+      std::string array_temp = s.temp_var_name();
+      s.current_func->add_local(gsc::gsc_hash(array_temp));
 
-  if (node->type == node_type::n_foreach) {
-    std::string array_temp = s.temp_var_name();
-    s.current_func->add_local(gsc::gsc_hash(array_temp));
-
-    std::string key_name = node->children[0]->value;
-    if (key_name.empty()) {
-      key_name = s.temp_var_name();
-      s.current_func->add_local(gsc::gsc_hash(key_name));
+      std::string key_name = node->children[0]->value;
+      if (key_name.empty()) {
+        key_name = s.temp_var_name();
+        s.current_func->add_local(gsc::gsc_hash(key_name));
+      }
+    } else if (node->type == node_type::n_switch) {
+      std::string switch_temp = s.temp_var_name();
+      s.current_func->add_local(gsc::gsc_hash(switch_temp));
     }
-  } else if (node->type == node_type::n_switch) {
-    std::string switch_temp = s.temp_var_name();
-    s.current_func->add_local(gsc::gsc_hash(switch_temp));
-  }
 
-  for (const std::shared_ptr<ast_node> &child : node->children)
-    pre_register_temps(s, child);
+    for (const std::shared_ptr<ast_node> &child : node->children) {
+      pre_register_temps(s, child);
+    }
+  }
 }
 
 void collect_locals(const ast_ptr &node, std::vector<std::string> &locals,
                     const std::vector<std::string> &params) {
-  if (!node)
-    return;
-
-  if (node->type == node_type::n_assign) {
-    if (node->children.size() > 0 &&
-        node->children[0]->type == node_type::n_identifier) {
-      const std::string &name = node->children[0]->value;
-      bool is_param =
-          std::find(params.begin(), params.end(), name) != params.end();
-      bool already =
-          std::find(locals.begin(), locals.end(), name) != locals.end();
-      if (!is_param && !already)
-        locals.push_back(name);
-    }
-  }
-
-  if (node->type == node_type::n_foreach) {
-    const std::string &val_name = node->value;
-    bool is_param =
-        std::find(params.begin(), params.end(), val_name) != params.end();
-    bool already =
-        std::find(locals.begin(), locals.end(), val_name) != locals.end();
-    if (!is_param && !already)
-      locals.push_back(val_name);
-
-    if (node->children.size() > 0 && !node->children[0]->value.empty()) {
-      const std::string &key_name = node->children[0]->value;
-      is_param =
-          std::find(params.begin(), params.end(), key_name) != params.end();
-      already =
-          std::find(locals.begin(), locals.end(), key_name) != locals.end();
-      if (!is_param && !already)
-        locals.push_back(key_name);
-    }
-  }
-
-  if (node->type == node_type::n_waittill && node->children.size() > 1) {
-    const std::shared_ptr<ast_node> &args = node->children[1]; // args block
-    for (size_t i = 1; i < args->children.size();
-         i++) // skip first (event name)
-    {
-      if (args->children[i]->type == node_type::n_identifier) {
-        const std::string &name = args->children[i]->value;
-        bool is_param =
+  if (node) {
+    if (node->type == node_type::n_assign) {
+      if (node->children.size() > 0 &&
+          node->children[0]->type == node_type::n_identifier) {
+        const std::string &name = node->children[0]->value;
+        const bool is_param =
             std::find(params.begin(), params.end(), name) != params.end();
-        bool already =
+        const bool already =
             std::find(locals.begin(), locals.end(), name) != locals.end();
-        if (!is_param && !already)
+        if (!is_param && !already) {
           locals.push_back(name);
+        }
       }
     }
-  }
 
-  for (const std::shared_ptr<ast_node> &child : node->children)
-    collect_locals(child, locals, params);
+    if (node->type == node_type::n_foreach) {
+      const std::string &val_name = node->value;
+      bool is_param =
+          std::find(params.begin(), params.end(), val_name) != params.end();
+      bool already =
+          std::find(locals.begin(), locals.end(), val_name) != locals.end();
+      if (!is_param && !already) {
+        locals.push_back(val_name);
+      }
+
+      if (node->children.size() > 0 && !node->children[0]->value.empty()) {
+        const std::string &key_name = node->children[0]->value;
+        is_param =
+            std::find(params.begin(), params.end(), key_name) != params.end();
+        already =
+            std::find(locals.begin(), locals.end(), key_name) != locals.end();
+        if (!is_param && !already)
+          locals.push_back(key_name);
+      }
+    }
+
+    if ((node->type == node_type::n_waittill ||
+         node->type == node_type::n_waittillmatch) &&
+        node->children.size() > 1) {
+      const std::shared_ptr<ast_node> &args = node->children[1]; // args block
+      for (size_t i = 1; i < args->children.size();
+           i++) // skip first (event name)
+      {
+        if (args->children[i]->type == node_type::n_identifier) {
+          const std::string &name = args->children[i]->value;
+          const bool is_param =
+              std::find(params.begin(), params.end(), name) != params.end();
+          const bool already =
+              std::find(locals.begin(), locals.end(), name) != locals.end();
+          if (!is_param && !already) {
+            locals.push_back(name);
+          }
+        }
+      }
+    }
+
+    for (const std::shared_ptr<ast_node> &child : node->children) {
+      collect_locals(child, locals, params);
+    }
+  }
 }
+
 std::string normalize_ns(const std::string &ns) {
   std::string result = ns;
-  for (char &c : result)
-    if (c == '\\')
+  for (char &c : result) {
+    if (c == '\\') {
       c = '/';
+    }
+  }
   return result;
 }
 
-bool is_path_namespace(const std::string &ns) {
+bool is_path_namespace(const std::string_view &ns) {
   return ns.find('/') != std::string::npos ||
          ns.find('\\') != std::string::npos;
 }
@@ -471,19 +487,22 @@ bool is_path_namespace(const std::string &ns) {
 void auto_include_path(emitter_state &s, const std::string &ns) {
   std::string normalized = ns;
   for (char &c : normalized) {
-    if (c == '\\')
+    if (c == '\\') {
       c = '/';
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    c = static_cast<char>(std::tolower(static_cast<uint8_t>(c)));
   }
   for (const std::string &inc : s.includes) {
     std::string norm_inc = inc;
     for (char &c : norm_inc) {
-      if (c == '\\')
+      if (c == '\\') {
         c = '/';
-      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      }
+      c = static_cast<char>(std::tolower(static_cast<uint8_t>(c)));
     }
-    if (norm_inc == normalized)
+    if (norm_inc == normalized) {
       return;
+    }
   }
   s.includes.push_back(ns);
 }
@@ -514,21 +533,20 @@ int infer_local_function_params(const emitter_state &s,
   std::string normalized_ref =
       normalize_ns(ref_ns.empty() ? s.script_name : ref_ns);
   std::string normalized_self = normalize_ns(s.script_name);
-  std::transform(
-      normalized_ref.begin(), normalized_ref.end(), normalized_ref.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  std::transform(
-      normalized_self.begin(), normalized_self.end(), normalized_self.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(normalized_ref.begin(), normalized_ref.end(),
+                 normalized_ref.begin(),
+                 [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(normalized_self.begin(), normalized_self.end(),
+                 normalized_self.begin(),
+                 [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
 
   if (normalized_ref != normalized_self) {
     return -1;
   }
 
   std::string lower_name = func_name;
-  std::transform(
-      lower_name.begin(), lower_name.end(), lower_name.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(),
+                 [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
 
   const auto it = s.local_function_params.find(lower_name);
   if (it == s.local_function_params.end()) {
@@ -540,9 +558,8 @@ int infer_local_function_params(const emitter_state &s,
 
 bool is_builtin(const std::string &name) {
   std::string lower = name;
-  std::transform(
-      lower.begin(), lower.end(), lower.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
   return lower == "isdefined" || lower == "vectorscale" || lower == "gettime" ||
          lower == "firstarraykey" || lower == "nextarraykey" ||
          lower == "getfirstarraykey" || lower == "getnextarraykey" ||
@@ -552,36 +569,35 @@ bool is_builtin(const std::string &name) {
 bool try_emit_builtin(emitter_state &s, const std::string &name,
                       uint64_t line) {
   std::string lower = name;
-  std::transform(
-      lower.begin(), lower.end(), lower.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
 
   if (lower == "isdefined") {
-    s.emit_op(Opcode::IsDefined, line);
+    s.emit<Opcode>(Opcode::IsDefined, line);
     return true;
   }
   if (lower == "vectorscale") {
-    s.emit_op(Opcode::VectorScale, line);
+    s.emit<Opcode>(Opcode::VectorScale, line);
     return true;
   }
   if (lower == "gettime") {
-    s.emit_op(Opcode::GetTime, line);
+    s.emit<Opcode>(Opcode::GetTime, line);
     return true;
   }
   if (lower == "firstarraykey") {
-    s.emit_op(Opcode::FirstArrayKey, line);
+    s.emit<Opcode>(Opcode::FirstArrayKey, line);
     return true;
   }
   if (lower == "nextarraykey") {
-    s.emit_op(Opcode::NextArrayKey, line);
+    s.emit<Opcode>(Opcode::NextArrayKey, line);
     return true;
   }
   if (lower == "getfirstarraykey") {
-    s.emit_op(Opcode::FirstArrayKey, line);
+    s.emit<Opcode>(Opcode::FirstArrayKey, line);
     return true;
   }
   if (lower == "getnextarraykey") {
-    s.emit_op(Opcode::NextArrayKey, line);
+    s.emit<Opcode>(Opcode::NextArrayKey, line);
     return true;
   }
   return false;
@@ -589,80 +605,75 @@ bool try_emit_builtin(emitter_state &s, const std::string &name,
 
 void emit_get_number(emitter_state &s, int64_t value, uint64_t line) {
   if (value == 0) {
-    s.emit_op(Opcode::GetZero, line);
-  } else if (value > 0 && value <= 255) {
-    s.emit_op(Opcode::GetByte, line);
-    s.emit_u16(static_cast<uint16_t>(value), line);
-  } else if (value < 0 && value >= -255) {
-    s.emit_op(Opcode::GetNegByte, line);
-    s.emit_u16(static_cast<uint16_t>(-value), line);
-  } else if (value > 0 && value <= 65535) {
-    s.emit_op(Opcode::GetUnsignedShort, line);
-    s.emit_u16_aligned();
-    s.emit_u16(static_cast<uint16_t>(value), line);
-  } else if (value < 0 && value >= -65535) {
-    s.emit_op(Opcode::GetNegUnsignedShort, line);
-    s.emit_u16_aligned();
-    s.emit_u16(static_cast<uint16_t>(-value), line);
+    s.emit<Opcode>(Opcode::GetZero, line);
+  } else if (value > std::numeric_limits<uint8_t>::min() &&
+             value <= std::numeric_limits<uint8_t>::max()) {
+    s.emit<Opcode>(Opcode::GetByte, line);
+    s.emit<uint16_t>(static_cast<uint16_t>(value), line);
+  } else if (value < std::numeric_limits<uint8_t>::min() &&
+             value >= -1 * static_cast<int64_t>(
+                               std::numeric_limits<uint8_t>::max())) {
+    s.emit<Opcode>(Opcode::GetNegByte, line);
+    s.emit<uint16_t>(static_cast<uint16_t>(-value), line);
+  } else if (value > std::numeric_limits<uint16_t>::min() &&
+             value <= std::numeric_limits<uint16_t>::max()) {
+    s.emit<Opcode>(Opcode::GetUnsignedShort, line);
+    s.emit_aligned<uint16_t>(static_cast<uint16_t>(value), line);
+  } else if (value < std::numeric_limits<uint16_t>::min() &&
+             value >= -1 * static_cast<int64_t>(
+                               std::numeric_limits<uint16_t>::max())) {
+    s.emit<Opcode>(Opcode::GetNegUnsignedShort, line);
+    s.emit_aligned<uint16_t>(static_cast<uint16_t>(-value), line);
   } else {
-    s.emit_op(Opcode::GetInteger, line);
-    s.emit_u32_aligned();
-    s.emit_u32(static_cast<uint32_t>(value), line);
+    s.emit<Opcode>(Opcode::GetInteger, line);
+    s.emit_aligned<uint32_t>(static_cast<uint32_t>(value), line);
   }
 }
 
-void emit_eval_local(emitter_state &s, const std::string &name, bool is_ref,
-                     uint64_t line, bool is_waittill = false) {
-  std::string lower = name;
-  std::transform(
-      lower.begin(), lower.end(), lower.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-  uint32_t hash = gsc::gsc_hash(lower);
-  uint8_t idx = s.current_func->get_local_index(hash);
-  if (idx == 0xFF) {
-    idx = s.current_func->add_local(hash);
-  }
+void emit_eval_local(emitter_state &s, const std::string_view &name,
+                     bool is_ref, uint64_t line, bool is_waittill = false) {
+  ScrVarCanonicalName_t hash = gsc::gsc_hash(name);
+  const uint8_t idx = s.current_func->get_local_index(hash);
 
   if (is_waittill) {
-    s.emit_op(Opcode::SafeSetWaittillVariableFieldCached, line);
-    s.emit_u16(static_cast<uint16_t>(idx), line);
+    s.emit<Opcode>(Opcode::SafeSetWaittillVariableFieldCached, line);
+    s.emit<uint16_t>(static_cast<uint16_t>(idx), line);
   } else if (is_ref) {
-    s.emit_op(Opcode::EvalLocalVariableRefCached, line);
-    s.emit_u16(static_cast<uint16_t>(idx), line);
+    s.emit<Opcode>(Opcode::EvalLocalVariableRefCached, line);
+    s.emit<uint16_t>(static_cast<uint16_t>(idx), line);
   } else {
-    s.emit_op(Opcode::EvalLocalVariableCached, line);
-    s.emit_u16(static_cast<uint16_t>(idx), line);
+    s.emit<Opcode>(Opcode::EvalLocalVariableCached, line);
+    s.emit<uint16_t>(static_cast<uint16_t>(idx), line);
   }
 }
 
 void emit_object(emitter_state &s, const ast_ptr &node) {
-  if (node->type == node_type::n_self)
-    s.emit_op(Opcode::GetSelfObject, node->line);
-  else if (node->type == node_type::n_level)
-    s.emit_op(Opcode::GetLevelObject, node->line);
-  else if (node->type == node_type::n_world)
-    s.emit_op(Opcode::GetWorldObject, node->line);
-  else if (node->type == node_type::n_anim)
-    s.emit_op(Opcode::GetAnimObject, node->line);
-  else {
+  if (node->type == node_type::n_self) {
+    s.emit<Opcode>(Opcode::GetSelfObject, node->line);
+  } else if (node->type == node_type::n_level) {
+    s.emit<Opcode>(Opcode::GetLevelObject, node->line);
+  } else if (node->type == node_type::n_world) {
+    s.emit<Opcode>(Opcode::GetWorldObject, node->line);
+  } else if (node->type == node_type::n_anim) {
+    s.emit<Opcode>(Opcode::GetAnimObject, node->line);
+  } else {
     emit_expression(s, node);
-    s.emit_op(Opcode::CastFieldObject, node->line);
+    s.emit<Opcode>(Opcode::CastFieldObject, node->line);
   }
 }
 
 void emit_owner(emitter_state &s, const ast_ptr &node) {
-  if (node->type == node_type::n_self)
-    s.emit_op(Opcode::GetSelf, node->line);
-  else if (node->type == node_type::n_level)
-    s.emit_op(Opcode::GetLevel, node->line);
-  else if (node->type == node_type::n_world)
-    s.emit_op(Opcode::GetWorld, node->line);
-  else if (node->type == node_type::n_anim)
-    s.emit_op(Opcode::GetAnim, node->line);
-  else if (node->type == node_type::n_game)
-    s.emit_op(Opcode::GetGame, node->line);
-  else
+  if (node->type == node_type::n_self) {
+    s.emit<Opcode>(Opcode::GetSelf, node->line);
+  } else if (node->type == node_type::n_level) {
+    s.emit<Opcode>(Opcode::GetLevel, node->line);
+  } else if (node->type == node_type::n_world) {
+    s.emit<Opcode>(Opcode::GetWorld, node->line);
+  } else if (node->type == node_type::n_anim) {
+    s.emit<Opcode>(Opcode::GetAnim, node->line);
+  } else if (node->type == node_type::n_game) {
+    s.emit<Opcode>(Opcode::GetGame, node->line);
+  } else
     emit_expression(s, node);
 }
 
@@ -678,11 +689,7 @@ bool try_get_vector_constant(const ast_ptr &node, float &value) {
     }
 
     if (node->type == node_type::n_number) {
-      const int base = node->value.size() > 2 && node->value[0] == '0' &&
-                               (node->value[1] == 'x' || node->value[1] == 'X')
-                           ? 16
-                           : 10;
-      value = static_cast<float>(std::stoll(node->value, nullptr, base));
+      value = static_cast<float>(parse_int(node->value));
       return true;
     }
 
@@ -698,99 +705,123 @@ bool try_get_vector_constant(const ast_ptr &node, float &value) {
   return false;
 }
 
-void emit_expression(emitter_state &s, const ast_ptr &node) {
+void emit_expression(emitter_state &s, const ast_ptr &node,
+                     bool hash_literal_strings, bool ref_global) {
   if (!node)
     return;
 
   switch (node->type) {
   case node_type::n_number: {
-    int64_t val = 0;
-    const std::string &v = node->value;
-    if (v.size() > 2 && v[0] == '0' && (v[1] == 'x' || v[1] == 'X'))
-      val = std::stoll(v, nullptr, 16);
-    else
-      val = std::stoll(v);
-    emit_get_number(s, val, node->line);
+    emit_get_number(s, parse_int(node->value), node->line);
     break;
   }
   case node_type::n_float_number: {
     float fval = std::stof(node->value);
-    s.emit_op(Opcode::GetFloat, node->line);
-    s.emit_u32_aligned();
-    s.emit_float(fval, node->line);
+    s.emit<Opcode>(Opcode::GetFloat, node->line);
+    s.emit_aligned<float>(fval, node->line);
     break;
   }
-  case node_type::n_string:
+  case node_type::n_string: {
+    if (hash_literal_strings) {
+      goto hash_string;
+    }
     s.emit_string_ref(Opcode::GetString, node->value, node->line);
+
     break;
+  }
+  case node_type::n_animtree: {
+    s.emit<Opcode>(Opcode::GetInteger, node->line);
+    const size_t aligned_pos = s.emit_aligned<uint32_t>(
+        static_cast<uint32_t>(s.animtrees.size() - 1), node->line);
+    s.animtrees[s.animtrees.size() - 1].references.push_back(
+        {s.current_export_index, aligned_pos});
+    break;
+  }
+  case node_type::n_tree_anim: {
+    s.emit_tree_anim(node->value, node->line);
+    break;
+  }
   case node_type::n_istring:
     s.emit_string_ref(Opcode::GetIString, node->value, node->line);
     break;
   case node_type::n_hash_string: {
-    uint32_t hash = gsc::gsc_hash(node->value);
-    s.emit_op(Opcode::GetHash, node->line);
-    s.emit_u32_aligned();
-    s.emit_u32(hash, node->line);
+  hash_string:
+    const ScrVarCanonicalName_t hash = gsc::gsc_hash(node->value);
+    s.emit<Opcode>(Opcode::GetHash, node->line);
+    s.emit_aligned<uint32_t>(hash, node->line);
     break;
   }
   case node_type::n_true_val:
     emit_get_number(s, 1, node->line);
     break;
   case node_type::n_false_val:
-    s.emit_op(Opcode::GetZero, node->line);
+    s.emit<Opcode>(Opcode::GetZero, node->line);
     break;
   case node_type::n_undefined:
-    s.emit_op(Opcode::GetUndefined, node->line);
+    s.emit<Opcode>(Opcode::GetUndefined, node->line);
     break;
   case node_type::n_self:
-    s.emit_op(Opcode::GetSelf, node->line);
+    s.emit<Opcode>(Opcode::GetSelf, node->line);
     break;
   case node_type::n_level:
-    s.emit_op(Opcode::GetLevel, node->line);
+    s.emit<Opcode>(Opcode::GetLevel, node->line);
     break;
   case node_type::n_game:
-    s.emit_op(Opcode::GetGame, node->line);
+    if (ref_global) {
+      s.emit<Opcode>(Opcode::GetGameRef, node->line);
+    } else {
+      s.emit<Opcode>(Opcode::GetGame, node->line);
+    }
     break;
   case node_type::n_anim:
-    s.emit_op(Opcode::GetAnim, node->line);
+    s.emit<Opcode>(Opcode::GetAnim, node->line);
     break;
   case node_type::n_world:
-    s.emit_op(Opcode::GetWorld, node->line);
+    s.emit<Opcode>(Opcode::GetWorld, node->line);
     break;
   case node_type::n_empty_array:
-    s.emit_op(Opcode::GetEmptyArray, node->line);
+    s.emit<Opcode>(Opcode::GetEmptyArray, node->line);
     break;
 
   case node_type::n_identifier: {
-    std::string lower = node->value;
-    std::transform(
-        lower.begin(), lower.end(), lower.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    emit_eval_local(s, lower, false, node->line);
+    emit_eval_local(s, node->value, false, node->line);
     break;
   }
 
   case node_type::n_field_access: {
-    // children[0] = object
-    emit_object(s, node->children[0]);
     uint32_t field_hash = gsc::gsc_hash(node->value);
-    s.emit_op(Opcode::EvalFieldVariable, node->line);
-    s.emit_u32_aligned();
-    s.emit_u32(field_hash, node->line);
+    switch (node->children[0]->type) {
+    case node_type::n_level: {
+      s.emit<Opcode>(Opcode::EvalLevelFieldVariable, node->line);
+
+      break;
+    }
+    case node_type::n_self: {
+      s.emit<Opcode>(Opcode::EvalSelfFieldVariable, node->line);
+      break;
+    }
+    default: {
+      // children[0] = object
+      emit_object(s, node->children[0]);
+      s.emit<Opcode>(Opcode::EvalFieldVariable, node->line);
+      break;
+    }
+    }
+    s.emit_aligned<uint32_t>(field_hash, node->line);
     break;
   }
 
   case node_type::n_array_access: {
     // children[0] = array, children[1] = key
-    emit_expression(s, node->children[1]); // key first
-    emit_expression(s, node->children[0]); // then array
-    s.emit_op(Opcode::EvalArray, node->line);
+    emit_expression(s, node->children[1]);                    // key first
+    emit_expression(s, node->children[0], false, ref_global); // then array
+    s.emit<Opcode>(Opcode::EvalArray, node->line);
     break;
   }
 
   case node_type::n_size: {
     emit_expression(s, node->children[0]);
-    s.emit_op(Opcode::SizeOf, node->line);
+    s.emit<Opcode>(Opcode::SizeOf, node->line);
     break;
   }
 
@@ -807,10 +838,10 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
         try_get_vector_constant(node->children[2], z)) {
       if (VectorConstant::can_pack(x, y, z)) {
         const VectorConstant packed = VectorConstant::pack(x, y, z);
-        s.emit_op(Opcode::VectorConstant, node->line);
-        s.emit_u8(packed, node->children[0]->line);
-        s.emit_u8(0,
-                  node->children[2]->line); // Padding byte
+        s.emit<Opcode>(Opcode::VectorConstant, node->line);
+        s.emit<uint8_t>(packed, node->children[0]->line);
+        s.emit<uint8_t>(0,
+                        node->children[2]->line); // Padding byte
 
       } else {
         /*
@@ -841,7 +872,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
            ```
            for generation of the vector `( 0.0, 0.0, 128.0 )`.
         */
-        s.emit_op(Opcode::GetVector, node->line);
+        s.emit<Opcode>(Opcode::GetVector, node->line);
 
         /*
          Everywhere that script vectors are accessed in the engine,
@@ -873,11 +904,9 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
          this compile time constant vector, we fill its alignment bytes with
          `0xFF`.
         */
-        s.emit_u32_aligned(0xFF);
-
-        s.emit_float(x, node->children[0]->line);
-        s.emit_float(y, node->children[1]->line);
-        s.emit_float(z, node->children[2]->line);
+        s.emit_aligned<float>(x, node->children[0]->line, 0xFF);
+        s.emit<float>(y, node->children[1]->line);
+        s.emit<float>(z, node->children[2]->line);
       }
       break;
     }
@@ -885,7 +914,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
     emit_expression(s, node->children[2]); // z
     emit_expression(s, node->children[1]); // y
     emit_expression(s, node->children[0]); // x
-    s.emit_op(Opcode::Vector, node->line);
+    s.emit<Opcode>(Opcode::Vector, node->line);
     break;
   }
 
@@ -924,57 +953,66 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
     emit_expression(s, node->children[1]); // right
 
     if (node->value == "+")
-      s.emit_op(Opcode::Plus, node->line);
+      s.emit<Opcode>(Opcode::Plus, node->line);
     else if (node->value == "-")
-      s.emit_op(Opcode::Minus, node->line);
+      s.emit<Opcode>(Opcode::Minus, node->line);
     else if (node->value == "*")
-      s.emit_op(Opcode::Multiply, node->line);
+      s.emit<Opcode>(Opcode::Multiply, node->line);
     else if (node->value == "/")
-      s.emit_op(Opcode::Divide, node->line);
+      s.emit<Opcode>(Opcode::Divide, node->line);
     else if (node->value == "%")
-      s.emit_op(Opcode::Modulus, node->line);
+      s.emit<Opcode>(Opcode::Modulus, node->line);
     else if (node->value == "&")
-      s.emit_op(Opcode::Bit_And, node->line);
+      s.emit<Opcode>(Opcode::Bit_And, node->line);
     else if (node->value == "|")
-      s.emit_op(Opcode::Bit_Or, node->line);
+      s.emit<Opcode>(Opcode::Bit_Or, node->line);
     else if (node->value == "^")
-      s.emit_op(Opcode::Bit_Xor, node->line);
+      s.emit<Opcode>(Opcode::Bit_Xor, node->line);
     else if (node->value == "<<")
-      s.emit_op(Opcode::ShiftLeft, node->line);
+      s.emit<Opcode>(Opcode::ShiftLeft, node->line);
     else if (node->value == ">>")
-      s.emit_op(Opcode::ShiftRight, node->line);
+      s.emit<Opcode>(Opcode::ShiftRight, node->line);
     else if (node->value == "==")
-      s.emit_op(Opcode::Equal, node->line);
+      s.emit<Opcode>(Opcode::Equal, node->line);
     else if (node->value == "!=")
-      s.emit_op(Opcode::NotEqual, node->line);
+      s.emit<Opcode>(Opcode::NotEqual, node->line);
     else if (node->value == "<")
-      s.emit_op(Opcode::LessThan, node->line);
+      s.emit<Opcode>(Opcode::LessThan, node->line);
     else if (node->value == ">")
-      s.emit_op(Opcode::GreaterThan, node->line);
+      s.emit<Opcode>(Opcode::GreaterThan, node->line);
     else if (node->value == "<=")
-      s.emit_op(Opcode::LessThanOrEqualTo, node->line);
+      s.emit<Opcode>(Opcode::LessThanOrEqualTo, node->line);
     else if (node->value == ">=")
-      s.emit_op(Opcode::GreaterThanOrEqualTo, node->line);
+      s.emit<Opcode>(Opcode::GreaterThanOrEqualTo, node->line);
     else if (node->value == "===")
-      s.emit_op(Opcode::SuperEqual, node->line);
+      s.emit<Opcode>(Opcode::SuperEqual, node->line);
     else if (node->value == "!==")
-      s.emit_op(Opcode::SuperNotEqual, node->line);
+      s.emit<Opcode>(Opcode::SuperNotEqual, node->line);
     else
       throw std::runtime_error("Unknown binary operator: " + node->value);
     break;
   }
 
   case node_type::n_unary_op: {
-    emit_expression(s, node->children[0]);
-    if (node->value == "!")
-      s.emit_op(Opcode::BoolNot, node->line);
-    else if (node->value == "~") {
+    if (node->value == "!") {
+      emit_expression(s, node->children[0]);
+      s.emit<Opcode>(Opcode::BoolNot, node->line);
+    } else if (node->value == "~") {
+      emit_expression(s, node->children[0]);
       // See note above the `BoolComplement` enumeration in the `Opcode` enum
       // definition
-      s.emit_op(Opcode::BoolComplement, node->line);
+      s.emit<Opcode>(Opcode::BoolComplement, node->line);
     } else if (node->value == "-") {
-      emit_get_number(s, -1, node->line);
-      s.emit_op(Opcode::Multiply, node->line);
+      if (node->children.size() == 1 &&
+          node->children[0]->type == node_type::n_number) {
+        emit_get_number(s, -1 * parse_int(node->children[0]->value),
+                        node->line);
+        node->children = {};
+      } else {
+        emit_expression(s, node->children[0]);
+        emit_get_number(s, -1, node->line);
+        s.emit<Opcode>(Opcode::Multiply, node->line);
+      }
     }
     break;
   }
@@ -982,60 +1020,61 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
   case node_type::n_func_ref: {
     ScrVarCanonicalName_t func_hash = gsc::gsc_hash(node->value);
     ScrVarCanonicalName_t ns_hash = s.script_namespace;
+    uint8_t flags = IMPORT_FUNC_GETFUNCTION;
+    Opcode op = Opcode::GetFunction;
+
     if (!node->children.empty() && !node->children[0]->value.empty()) {
       ns_hash = gsc::gsc_hash(normalize_ns(node->children[0]->value));
-      if (is_path_namespace(node->children[0]->value))
+      if (is_path_namespace(node->children[0]->value)) {
         auto_include_path(s, node->children[0]->value);
+      }
     }
 
-    uint8_t flags = IMPORT_FUNC_GETFUNCTION;
-    if (ns_hash == s.script_namespace)
+    const bool is_builtin = ((ns_hash == s.script_namespace &&
+                              !s.function_names.contains(func_hash)) ||
+                             ns_hash == builtin::SYS_NS_HASH) &&
+                            gsc::builtin(s.inst, func_hash);
+    if (is_builtin) {
+      ns_hash = builtin::SYS_NS_HASH;
+      op = Opcode::GetAPIFunction;
+    }
+
+    if (ns_hash == s.script_namespace || ns_hash == builtin::SYS_NS_HASH) {
+
       flags |= IMPORT_CALL_LOCAL;
+    }
 
     size_t import_idx = s.add_import(func_hash, ns_hash, 0, flags);
 
     uint32_t opcode_pos =
         static_cast<uint32_t>(s.current_func->bytecode.size());
-    s.emit_op(Opcode::GetFunction, node->line);
+    s.emit<Opcode>(op, node->line);
     s.imports[import_idx].references.push_back(
         {s.current_export_index, opcode_pos});
-    {
-      uint32_t pad_pos = static_cast<uint32_t>(s.current_func->bytecode.size());
-      uint32_t aligned = static_cast<uint32_t>(align_value64(pad_pos, 8));
-      while (s.current_func->bytecode.size() < aligned)
-        s.current_func->bytecode.push_back(0);
-    }
-    s.emit_u32(func_hash, node->line);
-    s.emit_u32(0, node->line);
+    s.emit_aligned<uint64_t>(func_hash, node->line);
     break;
   }
 
   case node_type::n_call: {
-    std::string func_name = node->value;
-    std::string lower_name = func_name;
-    std::transform(
-        lower_name.begin(), lower_name.end(), lower_name.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
     const std::shared_ptr<ast_node> &ns_node = node->children[0];
     const std::shared_ptr<ast_node> &args_node = node->children[1];
     uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
 
-    if (ns_node->value.empty() && is_builtin(lower_name)) {
+    if (ns_node->value.empty() && is_builtin(node->value)) {
       for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0;
            i--) {
         emit_expression(s, args_node->children[i]);
       }
-      try_emit_builtin(s, lower_name, node->line);
+      try_emit_builtin(s, node->value, node->line);
       break;
     }
 
-    s.emit_op(Opcode::PreScriptCall, node->line);
+    s.emit<Opcode>(Opcode::PreScriptCall, node->line);
 
     for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0; i--)
       emit_expression(s, args_node->children[i]);
 
-    ScrVarCanonicalName_t func_hash = gsc::gsc_hash(lower_name);
+    ScrVarCanonicalName_t func_hash = gsc::gsc_hash(node->value);
     bool has_explicit_ns = !ns_node->value.empty();
     ScrVarCanonicalName_t ns_hash =
         has_explicit_ns ? gsc::gsc_hash(normalize_ns(ns_node->value))
@@ -1047,7 +1086,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
 
     bool is_local = !has_explicit_ns;
 
-    s.record_hash(lower_name, node->line, num_params);
+    s.record_hash(node->value, node->line, num_params);
     s.emit_call(func_hash, ns_hash, num_params, false, false, is_local,
                 node->line);
     break;
@@ -1058,20 +1097,14 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
     const std::shared_ptr<ast_node> &args_node = node->children[1];
     uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
 
-    std::string func_name = node->value;
-    std::string lower_name = func_name;
-    std::transform(
-        lower_name.begin(), lower_name.end(), lower_name.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    s.emit_op(Opcode::PreScriptCall, node->line);
+    s.emit<Opcode>(Opcode::PreScriptCall, node->line);
 
     for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0; i--)
       emit_expression(s, args_node->children[i]);
 
     emit_expression(s, obj);
 
-    ScrVarCanonicalName_t func_hash = gsc::gsc_hash(lower_name);
+    ScrVarCanonicalName_t func_hash = gsc::gsc_hash(node->value);
     bool has_explicit_ns =
         (node->children.size() > 2 && !node->children[2]->value.empty());
     ScrVarCanonicalName_t ns_hash =
@@ -1084,7 +1117,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
 
     bool is_local = !has_explicit_ns;
 
-    s.record_hash(lower_name, node->line, num_params);
+    s.record_hash(node->value, node->line, num_params);
     s.emit_call(func_hash, ns_hash, num_params, true, false, is_local,
                 node->line);
     break;
@@ -1095,7 +1128,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
     uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
     bool has_caller = node->children[0]->type != node_type::n_undefined;
 
-    s.emit_op(Opcode::PreScriptCall, node->line);
+    s.emit<Opcode>(Opcode::PreScriptCall, node->line);
 
     for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0; i--)
       emit_expression(s, args_node->children[i]);
@@ -1115,17 +1148,12 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
       const std::shared_ptr<ast_node> &args_node = inner->children[1];
       uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
 
-      std::string lower_name = inner->value;
-      std::transform(
-          lower_name.begin(), lower_name.end(), lower_name.begin(),
-          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-      s.emit_op(Opcode::PreScriptCall, node->line);
+      s.emit<Opcode>(Opcode::PreScriptCall, node->line);
       for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0;
            i--)
         emit_expression(s, args_node->children[i]);
 
-      ScrVarCanonicalName_t func_hash = gsc::gsc_hash(lower_name);
+      ScrVarCanonicalName_t func_hash = gsc::gsc_hash(inner->value);
       bool has_explicit_ns = !ns_node->value.empty();
       ScrVarCanonicalName_t ns_hash =
           has_explicit_ns ? gsc::gsc_hash(normalize_ns(ns_node->value))
@@ -1133,7 +1161,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
       if (has_explicit_ns && is_path_namespace(ns_node->value))
         auto_include_path(s, ns_node->value);
       bool is_local = !has_explicit_ns;
-      s.record_hash(lower_name, inner->line, num_params);
+      s.record_hash(inner->value, inner->line, num_params);
       s.emit_call(func_hash, ns_hash, num_params, false, true, is_local,
                   node->line);
     } else if (inner->type == node_type::n_method_call) {
@@ -1141,19 +1169,14 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
       const std::shared_ptr<ast_node> &args_node = inner->children[1];
       uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
 
-      std::string lower_name = inner->value;
-      std::transform(
-          lower_name.begin(), lower_name.end(), lower_name.begin(),
-          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-      s.emit_op(Opcode::PreScriptCall, node->line);
+      s.emit<Opcode>(Opcode::PreScriptCall, node->line);
       for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0;
            i--)
         emit_expression(s, args_node->children[i]);
 
       emit_expression(s, obj);
 
-      ScrVarCanonicalName_t func_hash = gsc::gsc_hash(lower_name);
+      ScrVarCanonicalName_t func_hash = gsc::gsc_hash(inner->value);
       bool has_ns =
           (inner->children.size() > 2 && !inner->children[2]->value.empty());
       ScrVarCanonicalName_t ns_hash =
@@ -1162,7 +1185,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
       if (has_ns && is_path_namespace(inner->children[2]->value))
         auto_include_path(s, inner->children[2]->value);
       bool is_local = !has_ns;
-      s.record_hash(lower_name, inner->line, num_params);
+      s.record_hash(inner->value, inner->line, num_params);
       s.emit_call(func_hash, ns_hash, num_params, true, true, is_local,
                   node->line);
     } else if (inner->type == node_type::n_call_ptr) {
@@ -1170,7 +1193,7 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
       uint8_t num_params = static_cast<uint8_t>(args_node->children.size());
       bool has_caller = inner->children[0]->type != node_type::n_undefined;
 
-      s.emit_op(Opcode::PreScriptCall, node->line);
+      s.emit<Opcode>(Opcode::PreScriptCall, node->line);
       for (int i = static_cast<int>(args_node->children.size()) - 1; i >= 0;
            i--)
         emit_expression(s, args_node->children[i]);
@@ -1185,11 +1208,11 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
   }
 
   case node_type::n_inc_dec: {
-    emit_lvalue(s, node->children[0], true);
+    emit_lvalue(s, node->children[0], true, false);
     if (node->value == "post++" || node->value == "pre++")
-      s.emit_op(Opcode::Inc, node->line);
+      s.emit<Opcode>(Opcode::Inc, node->line);
     else
-      s.emit_op(Opcode::Dec, node->line);
+      s.emit<Opcode>(Opcode::Dec, node->line);
     break;
   }
 
@@ -1200,38 +1223,48 @@ void emit_expression(emitter_state &s, const ast_ptr &node) {
   }
 }
 
-void emit_lvalue(emitter_state &s, const ast_ptr &node, bool is_ref) {
+void emit_lvalue(emitter_state &s, const ast_ptr &node, bool is_ref,
+                 bool ref_global) {
   switch (node->type) {
   case node_type::n_identifier: {
-    std::string lower = node->value;
-    std::transform(
-        lower.begin(), lower.end(), lower.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    emit_eval_local(s, lower, is_ref, node->line);
+    emit_eval_local(s, node->value, is_ref, node->line);
     break;
   }
   case node_type::n_field_access: {
-    emit_object(s, node->children[0]);
-    uint32_t field_hash = gsc::gsc_hash(node->value);
-    if (is_ref) {
-      s.emit_op(Opcode::EvalFieldVariableRef, node->line);
-      s.emit_u32_aligned();
-      s.emit_u32(field_hash, node->line);
-    } else {
-      s.emit_op(Opcode::EvalFieldVariable, node->line);
-      s.emit_u32_aligned();
-      s.emit_u32(field_hash, node->line);
+    const ScrVarCanonicalName_t field_hash = gsc::gsc_hash(node->value);
+    switch (node->children[0]->type) {
+    case node_type::n_level: {
+      s.emit<Opcode>(is_ref ? Opcode::EvalLevelFieldVariableRef
+                            : Opcode::EvalLevelFieldVariable,
+                     node->line);
+      break;
     }
+    case node_type::n_self: {
+      s.emit<Opcode>(is_ref ? Opcode::EvalSelfFieldVariableRef
+                            : Opcode::EvalSelfFieldVariable,
+                     node->line);
+      break;
+    }
+    default: {
+      emit_object(s, node->children[0]);
+      s.emit<Opcode>(is_ref ? Opcode::EvalFieldVariableRef
+                            : Opcode::EvalFieldVariable,
+                     node->line);
+      break;
+    }
+    }
+
+    s.emit_aligned<uint32_t>(field_hash, node->line);
     break;
   }
   case node_type::n_array_access: {
-    emit_expression(s, node->children[1]);   // key
-    emit_lvalue(s, node->children[0], true); // array ref
-    s.emit_op(Opcode::EvalArrayRef, node->line);
+    emit_expression(s, node->children[1]);               // key
+    emit_lvalue(s, node->children[0], true, ref_global); // array ref
+    s.emit<Opcode>(Opcode::EvalArrayRef, node->line);
     break;
   }
   default:
-    emit_expression(s, node);
+    emit_expression(s, node, false, ref_global);
     break;
   }
 }
@@ -1252,7 +1285,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
       std::string call_name = std::string(expr->value.c_str());
       std::transform(
           call_name.begin(), call_name.end(), call_name.begin(),
-          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+          [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
 
       if (expr->children[0]->value.empty() && call_name == "detour") {
         const std::vector<std::shared_ptr<ast_node>> &args =
@@ -1266,15 +1299,13 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
             std::string rs =
                 normalize_ns(replace_ns.empty() ? s.script_name : replace_ns);
             std::string tfn = target_fn;
-            std::transform(tfn.begin(), tfn.end(), tfn.begin(),
-                           [](unsigned char c) {
-                             return static_cast<char>(std::tolower(c));
-                           });
+            std::transform(tfn.begin(), tfn.end(), tfn.begin(), [](uint8_t c) {
+              return static_cast<char>(std::tolower(c));
+            });
             std::string rfn = replace_fn;
-            std::transform(rfn.begin(), rfn.end(), rfn.begin(),
-                           [](unsigned char c) {
-                             return static_cast<char>(std::tolower(c));
-                           });
+            std::transform(rfn.begin(), rfn.end(), rfn.begin(), [](uint8_t c) {
+              return static_cast<char>(std::tolower(c));
+            });
 
             const std::function<std::string(std::string & script)>
                 strip_script_ext = [](std::string script) {
@@ -1308,6 +1339,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
 
     if (expr->type == node_type::n_endon || expr->type == node_type::n_notify ||
         expr->type == node_type::n_waittill ||
+        expr->type == node_type::n_waittillmatch ||
         expr->type == node_type::n_assign ||
         expr->type == node_type::n_inc_dec) {
       emit_statement(s, expr);
@@ -1318,7 +1350,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
         expr->type == node_type::n_method_call ||
         expr->type == node_type::n_call_ptr ||
         expr->type == node_type::n_thread_call) {
-      s.emit_op(Opcode::DecTop, node->line);
+      s.emit<Opcode>(Opcode::DecTop, node->line);
     }
     break;
   }
@@ -1329,69 +1361,87 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     const std::string &op = node->value;
 
     if (op == "=") {
+      if (value->type == node_type::n_undefined &&
+          target->type == node_type::n_field_access) {
+        const ScrVarCanonicalName_t field_hash = gsc::gsc_hash(target->value);
+        emit_object(s, target->children[0]);
+        s.emit<Opcode>(Opcode::ClearFieldVariable, node->line);
+        s.emit_aligned<uint32_t>(field_hash, node->line);
+        break;
+      }
+
+      if (value->type == node_type::n_undefined &&
+          target->type == node_type::n_array_access) {
+        emit_expression(s, target->children[1]);         // key
+        emit_lvalue(s, target->children[0], true, true); // array ref
+        s.emit<Opcode>(Opcode::ClearArray, node->line);
+        break;
+      }
+
       emit_expression(s, value);
+
     } else {
       emit_expression(s, target);
       emit_expression(s, value);
       if (op == "+=")
-        s.emit_op(Opcode::Plus, node->line);
+        s.emit<Opcode>(Opcode::Plus, node->line);
       else if (op == "-=")
-        s.emit_op(Opcode::Minus, node->line);
+        s.emit<Opcode>(Opcode::Minus, node->line);
       else if (op == "*=")
-        s.emit_op(Opcode::Multiply, node->line);
+        s.emit<Opcode>(Opcode::Multiply, node->line);
       else if (op == "/=")
-        s.emit_op(Opcode::Divide, node->line);
+        s.emit<Opcode>(Opcode::Divide, node->line);
       else if (op == "%=")
-        s.emit_op(Opcode::Modulus, node->line);
+        s.emit<Opcode>(Opcode::Modulus, node->line);
       else if (op == "&=")
-        s.emit_op(Opcode::Bit_And, node->line);
+        s.emit<Opcode>(Opcode::Bit_And, node->line);
       else if (op == "|=")
-        s.emit_op(Opcode::Bit_Or, node->line);
+        s.emit<Opcode>(Opcode::Bit_Or, node->line);
       else if (op == "^=")
-        s.emit_op(Opcode::Bit_Xor, node->line);
+        s.emit<Opcode>(Opcode::Bit_Xor, node->line);
       else if (op == "<<=")
-        s.emit_op(Opcode::ShiftLeft, node->line);
+        s.emit<Opcode>(Opcode::ShiftLeft, node->line);
       else if (op == ">>=")
-        s.emit_op(Opcode::ShiftRight, node->line);
+        s.emit<Opcode>(Opcode::ShiftRight, node->line);
     }
 
-    emit_lvalue(s, target, true);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    emit_lvalue(s, target, true, true);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
     break;
   }
 
   case node_type::n_inc_dec: {
-    emit_lvalue(s, node->children[0], true);
+    emit_lvalue(s, node->children[0], true, false);
     if (node->value == "post++" || node->value == "pre++")
-      s.emit_op(Opcode::Inc, node->line);
+      s.emit<Opcode>(Opcode::Inc, node->line);
     else
-      s.emit_op(Opcode::Dec, node->line);
+      s.emit<Opcode>(Opcode::Dec, node->line);
     break;
   }
 
   case node_type::n_return: {
     if (!node->children.empty()) {
       emit_expression(s, node->children[0]);
-      s.emit_op(Opcode::Return, node->line);
+      s.emit<Opcode>(Opcode::Return, node->line);
     } else {
-      s.emit_op(Opcode::End, node->line);
+      s.emit<Opcode>(Opcode::End, node->line);
     }
     break;
   }
 
   case node_type::n_wait: {
     emit_expression(s, node->children[0]);
-    s.emit_op(Opcode::Wait, node->line);
+    s.emit<Opcode>(Opcode::Wait, node->line);
     break;
   }
 
   case node_type::n_waittillframeend:
-    s.emit_op(Opcode::WaitTillFrameEnd, node->line);
+    s.emit<Opcode>(Opcode::WaitTillFrameEnd, node->line);
     break;
 
   case node_type::n_waitrealtime: {
     emit_expression(s, node->children[0]);
-    s.emit_op(Opcode::WaitRealTime, node->line);
+    s.emit<Opcode>(Opcode::WaitRealTime, node->line);
     break;
   }
 
@@ -1399,8 +1449,15 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     int32_t else_label = s.new_label();
     int32_t end_label = s.new_label();
 
-    emit_expression(s, node->children[0]); // condition
-    s.emit_jump(Opcode::JumpOnFalse, else_label, node->line);
+    // `if (!! (...))` == `if (...)`
+    if (node->children[0]->type == node_type::n_unary_op &&
+        node->children[0]->value == "!") {
+      emit_expression(s, node->children[0]->children[0]);
+      s.emit_jump(Opcode::JumpOnTrue, else_label, node->line);
+    } else {
+      emit_expression(s, node->children[0]); // condition
+      s.emit_jump(Opcode::JumpOnFalse, else_label, node->line);
+    }
 
     emit_statement(s, node->children[1]); // if body
 
@@ -1499,13 +1556,13 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     // array_temp = <array_expr>
     emit_expression(s, node->children[1]);
     emit_eval_local(s, array_temp, true, node->line);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
 
     // key = firstArrayKey(array_temp)
     emit_eval_local(s, array_temp, false, node->line);
-    s.emit_op(Opcode::FirstArrayKey, node->line);
+    s.emit<Opcode>(Opcode::FirstArrayKey, node->line);
     emit_eval_local(s, key_name, true, node->line);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
 
     int32_t loop_start = s.new_label();
     int32_t loop_end = s.new_label();
@@ -1517,15 +1574,15 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
 
     // if (!isDefined(key)) break
     emit_eval_local(s, key_name, false, node->line);
-    s.emit_op(Opcode::IsDefined, node->line);
+    s.emit<Opcode>(Opcode::IsDefined, node->line);
     s.emit_jump(Opcode::JumpOnFalse, loop_end, node->line);
 
     // val = array_temp[key]
     emit_eval_local(s, key_name, false, node->line);
     emit_eval_local(s, array_temp, false, node->line);
-    s.emit_op(Opcode::EvalArray, node->line);
+    s.emit<Opcode>(Opcode::EvalArray, node->line);
     emit_eval_local(s, val_name, true, node->line);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
 
     emit_statement(s, node->children[2]);
 
@@ -1534,9 +1591,9 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     // key = nextArrayKey(array_temp, key)
     emit_eval_local(s, key_name, false, node->line);
     emit_eval_local(s, array_temp, false, node->line);
-    s.emit_op(Opcode::NextArrayKey, node->line);
+    s.emit<Opcode>(Opcode::NextArrayKey, node->line);
     emit_eval_local(s, key_name, true, node->line);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
 
     s.emit_jump(Opcode::Jump, loop_start, node->line);
     s.set_label(loop_end);
@@ -1552,7 +1609,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
 
     emit_expression(s, node->children[0]);
     emit_eval_local(s, switch_temp, true, node->line);
-    s.emit_op(Opcode::SetVariableField, node->line);
+    s.emit<Opcode>(Opcode::SetVariableField, node->line);
 
     int32_t switch_end = s.new_label();
     s.loop_stack.push_back({switch_end, -1}); // break goes to switch_end
@@ -1572,7 +1629,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
         // Compare switch_temp == case_value
         emit_expression(s, case_node->children[0]);
         emit_eval_local(s, switch_temp, false, node->line);
-        s.emit_op(Opcode::Equal, node->line);
+        s.emit<Opcode>(Opcode::Equal, node->line);
         s.emit_jump(Opcode::JumpOnTrue, label, node->line);
       }
     }
@@ -1617,7 +1674,8 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     break;
   }
 
-  case node_type::n_waittill: {
+  case node_type::n_waittill:
+  case node_type::n_waittillmatch: {
     // children[0] = object, children[1] = args (first is event name, rest are
     // vars)
     const std::shared_ptr<ast_node> &obj = node->children[0];
@@ -1628,16 +1686,31 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
           "waittill requires at least an event name at line " +
           std::to_string(node->line));
 
-    emit_expression(s, args->children[0]); // event name
+    emit_expression(s, args->children[0], true); // event name
     emit_owner(s, obj); // object (uses GetLevel, not GetLevelObject)
-    s.emit_op(Opcode::WaitTill, node->line);
+    /*
+      In the VM opcode handlers, `WaitTillMatch` == `WaitTill`; `WaitTill`'s
+      handler defers to `WaitTillMatch`.
+
+      However, script thread wake and notification also explicitly checks the
+      currently executed opcode and behaves differently depending on whether
+      WaitTillMatch` is the currently executed opcode.
+
+      `WaitTillMatch` also increments the executed bytecode position in its
+      error handler, while `WaitTill` does not.
+
+      As such, we must use the opcode specified by the script's implementation.
+    */
+    s.emit<Opcode>(node->type == node_type::n_waittill ? Opcode::WaitTill
+                                                       : Opcode::WaitTillMatch,
+                   node->line);
 
     for (size_t i = 1; i < args->children.size(); ++i) {
       if (args->children[i]->type == node_type::n_identifier) {
         emit_eval_local(s, args->children[i]->value, node->line, false, true);
       }
     }
-    s.emit_op(Opcode::ClearParams, node->line);
+    s.emit<Opcode>(Opcode::ClearParams, node->line);
     break;
   }
 
@@ -1647,14 +1720,14 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     const std::shared_ptr<ast_node> &obj = node->children[0];
     const std::shared_ptr<ast_node> &args = node->children[1];
 
-    s.emit_op(Opcode::PreScriptCall, node->line);
+    s.emit<Opcode>(Opcode::PreScriptCall, node->line);
 
     for (int i = static_cast<int>(args->children.size()) - 1; i >= 0; --i) {
-      emit_expression(s, args->children[i]);
+      emit_expression(s, args->children[i], i == 0);
     }
 
     emit_owner(s, obj);
-    s.emit_op(Opcode::Notify, node->line);
+    s.emit<Opcode>(Opcode::Notify, node->line);
     break;
   }
 
@@ -1664,9 +1737,9 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
     const std::shared_ptr<ast_node> &args = node->children[1];
 
     if (!args->children.empty())
-      emit_expression(s, args->children[0]); // event name
+      emit_expression(s, args->children[0], true); // event name
     emit_owner(s, obj);
-    s.emit_op(Opcode::EndOn, node->line);
+    s.emit<Opcode>(Opcode::EndOn, node->line);
     break;
   }
 
@@ -1675,7 +1748,7 @@ void emit_statement(emitter_state &s, const ast_ptr &node) {
   case node_type::n_call_ptr:
   case node_type::n_thread_call:
     emit_expression(s, node);
-    s.emit_op(Opcode::DecTop, node->line);
+    s.emit<Opcode>(Opcode::DecTop, node->line);
     break;
 
   default:
@@ -1692,18 +1765,14 @@ void emit_block(emitter_state &s, const ast_ptr &node) {
 }
 
 void emit_function(emitter_state &s, const ast_ptr &node) {
-  std::string func_name = node->value;
-  std::string lower_name = func_name;
-  std::transform(
-      lower_name.begin(), lower_name.end(), lower_name.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  const std::string &func_name = node->value;
 
   const std::shared_ptr<ast_node> &flags_node = node->children[0];
   const std::shared_ptr<ast_node> &params_node = node->children[1];
   const std::shared_ptr<ast_node> &body_node = node->children[2];
 
   export_entry exp{};
-  exp.function_hash = gsc::gsc_hash(lower_name);
+  exp.function_hash = gsc::gsc_hash(func_name);
   exp.namespace_hash = s.script_namespace;
   exp.num_params = static_cast<uint8_t>(params_node->children.size());
   exp.flags = EXPORT_NONE;
@@ -1723,11 +1792,28 @@ void emit_function(emitter_state &s, const ast_ptr &node) {
 
   std::vector<std::string> param_names;
   for (const std::shared_ptr<ast_node> &param : params_node->children) {
-    std::string pname = param->value;
-    std::transform(
-        pname.begin(), pname.end(), pname.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    s.current_func->add_local(gsc::gsc_hash(pname));
+    ParamPassMode pass = {};
+    std::string pname;
+    switch (param->type) {
+    case node_type::n_variadic_param: {
+      pass.variadic = true;
+      pname = "vararg";
+      break;
+    }
+    case node_type::n_ref_param: {
+      pass.reference = true;
+      pname = param->children[0]->value;
+      break;
+    }
+    default: {
+      pname = param->value;
+      break;
+    }
+    }
+    std::transform(pname.begin(), pname.end(), pname.begin(), [](uint8_t c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    s.current_func->add_local(gsc::gsc_hash(pname), pass);
     param_names.push_back(pname);
   }
 
@@ -1735,72 +1821,82 @@ void emit_function(emitter_state &s, const ast_ptr &node) {
   collect_locals(body_node, locals, param_names);
 
   for (const std::string &local : locals) {
-    std::string lower = local;
-    std::transform(
-        lower.begin(), lower.end(), lower.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    s.current_func->add_local(gsc::gsc_hash(lower));
+    s.current_func->add_local(gsc::gsc_hash(local));
   }
 
   int32_t saved_temp = s.temp_var_counter;
   pre_register_temps(s, body_node);
   s.temp_var_counter = saved_temp;
 
-  if (s.current_func->local_hashes.empty()) {
-    s.emit_op(Opcode::CheckClearParams, node->line);
+  if (s.current_func->locals.empty()) {
+    s.emit<Opcode>(Opcode::CheckClearParams, node->line);
   } else {
-    s.emit_op(Opcode::SafeCreateLocalVariables, node->line);
-    s.emit_u8(static_cast<uint8_t>(s.current_func->local_hashes.size()),
-              node->line);
-    for (size_t vi = 0; vi < s.current_func->local_hashes.size(); vi++) {
-      s.emit_u32_aligned();
-      s.emit_u32(s.current_func->local_hashes[vi], node->line); // hash
-      s.emit_u8(0, node->line); // null terminator after each hash
+    s.emit<Opcode>(Opcode::SafeCreateLocalVariables, node->line);
+    s.emit<uint8_t>(static_cast<uint8_t>(s.current_func->locals.size()),
+                    node->line);
+    for (ScrVarCanonicalName_t name : s.current_func->local_names) {
+      s.emit_aligned<uint32_t>(name, node->line); // hash
+      s.emit<uint8_t>(s.current_func->locals[name].pass, node->line);
     }
-    s.emit_u8(0, node->line); // final null byte (no CheckClearParams!)
+    s.emit<uint8_t>(0, node->line); // final null byte (no CheckClearParams!)
 
     // Reverse variable indices (last declared = index 0)
-    uint8_t N = static_cast<uint8_t>(s.current_func->local_hashes.size());
-    for (auto &[hash, idx] : s.current_func->local_indices)
-      idx = N - 1 - idx;
+    const uint8_t N = static_cast<uint8_t>(s.current_func->locals.size());
+    for (ScrVarCanonicalName_t name : s.current_func->local_names) {
+      Local &local = s.current_func->locals[name];
+      local.index = N - 1 - local.index;
+    }
   }
 
   // this will allow default values in params
   for (const std::shared_ptr<ast_node> &param : params_node->children) {
-    if (param->children.empty())
-      continue; // no default value
-    std::string pname = param->value;
-    std::transform(
-        pname.begin(), pname.end(), pname.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    ast_ptr inner_param;
 
-    int32_t skip_label = s.new_label();
+    switch (param->type) {
+    case node_type::n_ref_param:
+      inner_param = param->children[0];
+      break;
+    case node_type::n_variadic_param:
+      continue;
+    default:
+      inner_param = param;
+      break;
+    }
 
-    emit_eval_local(s, pname, false, node->line);            // push param value
-    s.emit_op(Opcode::IsDefined, node->line);                // isdefined check
-    s.emit_jump(Opcode::JumpOnTrue, skip_label, node->line); // skip if defined
+    if (!inner_param->children.empty()) {
+      const int32_t skip_label = s.new_label();
 
-    emit_expression(s, param->children[0]);          // push default value
-    emit_eval_local(s, pname, true, node->line);     // push param ref
-    s.emit_op(Opcode::SetVariableField, node->line); // assign
+      emit_eval_local(s, inner_param->value, false,
+                      node->line);                   // push param value
+      s.emit<Opcode>(Opcode::IsDefined, node->line); // isdefined check
+      s.emit_jump(Opcode::JumpOnTrue, skip_label,
+                  node->line); // skip if defined
 
-    s.set_label(skip_label);
+      emit_expression(s, inner_param->children[0]); // push default value
+      emit_eval_local(s, inner_param->value, true,
+                      node->line);                          // push param ref
+      s.emit<Opcode>(Opcode::SetVariableField, node->line); // assign
+
+      s.set_label(skip_label);
+    }
   }
 
   emit_block(s, body_node);
 
-  s.emit_op(Opcode::End, node->line);
+  s.emit<Opcode>(Opcode::End, node->line);
 
   for (const jump_fixup &fixup : s.jump_fixups) {
-    auto it = s.label_positions.find(fixup.target_label);
+    const std::unordered_map<int, uint32_t>::iterator it =
+        s.label_positions.find(fixup.target_label);
     if (it == s.label_positions.end()) {
       throw std::runtime_error("Unresolved jump label in function '" +
                                func_name + "'");
     }
 
-    int16_t offset = static_cast<int16_t>(static_cast<int32_t>(it->second) -
-                                          static_cast<int32_t>(fixup.jump_end));
-    write_at_i16(s.current_func->bytecode, fixup.offset_location, offset);
+    const int16_t offset =
+        static_cast<int16_t>(static_cast<int32_t>(it->second) -
+                             static_cast<int32_t>(fixup.jump_end));
+    write_at<int16_t>(s.current_func->bytecode, fixup.offset_location, offset);
   }
 }
 
@@ -1808,8 +1904,9 @@ uint32_t crc32_calc(const uint8_t *data, size_t len) {
   uint32_t crc = 0xFFFFFFFF;
   for (size_t i = 0; i < len; i++) {
     crc ^= data[i];
-    for (int j = 0; j < 8; j++)
+    for (int j = 0; j < 8; j++) {
       crc = (crc >> 1) ^ (0xEDB88320 & (0u - (crc & 1)));
+    }
   }
   return ~crc;
 }
@@ -1830,114 +1927,132 @@ std::vector<uint8_t> assemble(emitter_state &s) {
   for (const std::string &inc_path : s.includes) {
     std::string normalized = inc_path;
     for (char &c : normalized) {
-      if (c == '\\')
+      if (c == '\\') {
         c = '/';
-      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      }
+      c = static_cast<char>(std::tolower(static_cast<uint8_t>(c)));
     }
     include_string_offsets.push_back(static_cast<uint32_t>(output.size()));
-    for (char c : normalized)
+    for (char c : normalized) {
       output.push_back(static_cast<uint8_t>(c));
+    }
     output.push_back(0);
   }
 
   // Script name
-  uint32_t name_offset = static_cast<uint32_t>(output.size());
-  for (char c : s.script_name)
+  const uint32_t name_offset = static_cast<uint32_t>(output.size());
+  for (char c : s.script_name) {
     output.push_back(static_cast<uint8_t>(c));
+  }
   output.push_back(0);
 
   // Code strings
   for (string_entry &str : s.strings) {
     str.offset = static_cast<uint32_t>(output.size());
-    for (char c : str.value)
+    for (char c : str.value) {
       output.push_back(static_cast<uint8_t>(c));
+    }
     output.push_back(0);
   }
 
   // Include table (reversed)
-  uint32_t include_offset = static_cast<uint32_t>(output.size());
-  for (int i = static_cast<int>(include_string_offsets.size()) - 1; i >= 0; i--)
-    write_u32(output, include_string_offsets[i]);
+  const uint32_t include_offset = static_cast<uint32_t>(output.size());
+  for (int32_t i = static_cast<int>(include_string_offsets.size()) - 1; i >= 0;
+       i--) {
+    write<uint32_t>(output, include_string_offsets[i]);
+  }
 
   // Code section
-  uint32_t bytecode_start = static_cast<uint32_t>(output.size());
+  const uint32_t bytecode_start = static_cast<uint32_t>(output.size());
 
   for (size_t i = 0; i < s.exports.size(); i++) {
     export_entry &exp = s.exports[i];
 
     // Double QWord align before each function
-    {
-      uint32_t pos = static_cast<uint32_t>(output.size());
-      uint32_t a1 = (pos + 8) & ~7u;
-      output.resize(a1, 0);
-      uint32_t a2 = (a1 + 8) & ~7u;
-      output.resize(a2, 0);
-    }
-
-    exp.bytecode_offset = static_cast<uint32_t>(output.size());
+    exp.bytecode_offset = write_align<uint128_t>(output);
 
     output.insert(output.end(), exp.bytecode.begin(), exp.bytecode.end());
   }
 
   // bytecode_size covers the full code section with alignment
-  uint32_t bytecode_end = static_cast<uint32_t>(output.size());
-  uint32_t total_bytecode_size = bytecode_end - bytecode_start;
+  const uint32_t bytecode_end = static_cast<uint32_t>(output.size());
+  const uint32_t total_bytecode_size = bytecode_end - bytecode_start;
 
   // Patch string placeholders with actual offsets
-
   for (const string_entry &str : s.strings) {
     for (const std::pair<size_t, uint32_t> &ref : str.references) {
       uint32_t abs_offset = resolve_ref(s, ref);
-      write_at_u32(output, abs_offset, str.offset);
+      write_at<uint32_t>(output, abs_offset, str.offset);
     }
   }
 
   // Export table
-  uint32_t export_offset = static_cast<uint32_t>(output.size());
+  const uint32_t export_offset = static_cast<uint32_t>(output.size());
 
   for (size_t i = 0; i < s.exports.size(); i++) {
     const export_entry &exp = s.exports[i];
     uint32_t crc =
         crc32_calc(output.data() + exp.bytecode_offset, exp.bytecode.size());
 
-    write_u32(output, crc);
-    write_u32(output, exp.bytecode_offset);
-    write_u32(output, exp.function_hash);
-    write_u32(output, exp.namespace_hash);
-    write_u8(output, exp.num_params);
-    write_u8(output, exp.flags);
-    write_u16(output, 0); // Unknown, always 0
+    write<uint32_t>(output, crc);
+    write<uint32_t>(output, exp.bytecode_offset);
+    write<uint32_t>(output, exp.function_hash);
+    write<uint32_t>(output, exp.namespace_hash);
+    write<uint8_t>(output, exp.num_params);
+    write<uint8_t>(output, exp.flags);
+    write<uint16_t>(output, 0); // Unknown, always 0
   }
 
   // Import table
-  uint32_t import_offset = static_cast<uint32_t>(output.size());
+  const uint32_t import_offset = static_cast<uint32_t>(output.size());
   for (const import_entry &imp : s.imports) {
-    write_u32(output, imp.function_hash);
-    write_u32(output, imp.namespace_hash);
-    write_u16(output, static_cast<uint16_t>(imp.references.size()));
-    write_u8(output, imp.num_params);
-    write_u8(output, imp.flags);
+    write<uint32_t>(output, imp.function_hash);
+    write<uint32_t>(output, imp.namespace_hash);
+    write<uint16_t>(output, static_cast<uint16_t>(imp.references.size()));
+    write<uint8_t>(output, imp.num_params);
+    write<uint8_t>(output, imp.flags);
 
-    for (const std::pair<size_t, uint32_t> &ref : imp.references)
-      write_u32(output, resolve_ref(s, ref));
+    for (const std::pair<size_t, uint32_t> &ref : imp.references) {
+      write<uint32_t>(output, resolve_ref(s, ref));
+    }
   }
 
-  // AnimTree section (empty)
-  uint32_t animtree_offset = static_cast<uint32_t>(output.size());
+  const uint32_t animtree_offset = static_cast<uint32_t>(output.size());
+  for (const animtree_entry &animtree : s.animtrees) {
+    write<GSC_ANIMTREE_ITEM>(
+        output,
+        {
+            .name = s.strings[animtree.name_str_index].offset,
+            .num_tree_address =
+                static_cast<uint16_t>(animtree.references.size()),
+            .num_node_address = static_cast<uint16_t>(animtree.anims.size()),
+        });
+
+    for (const std::pair<size_t, uint32_t> &ref : animtree.references) {
+      write<uint32_t>(output, resolve_ref(s, ref));
+    }
+
+    for (const animation_ref &anim_ref : animtree.anims) {
+      write<GSC_ANIMNODE_ITEM>(
+          output, {.name = s.strings[anim_ref.name_str_index].offset,
+                   .address = resolve_ref(s, anim_ref.reference)});
+    }
+  }
 
   // String fixup table: u32 string_ptr | u32 num_refs | u32 refs[N]
-  uint32_t string_fixup_offset = static_cast<uint32_t>(output.size());
+  const uint32_t string_fixup_offset = static_cast<uint32_t>(output.size());
   uint16_t string_count = 0;
   for (const string_entry &str : s.strings) {
-    if (str.references.empty())
-      continue;
-    string_count++;
+    if (!str.references.empty()) {
+      string_count++;
 
-    write_u32(output, str.offset);
-    write_u32(output, static_cast<uint32_t>(str.references.size()));
+      write<uint32_t>(output, str.offset);
+      write<uint32_t>(output, static_cast<uint32_t>(str.references.size()));
 
-    for (size_t j = 0; j < str.references.size(); j++)
-      write_u32(output, resolve_ref(s, str.references[j]));
+      for (size_t j = 0; j < str.references.size(); j++) {
+        write<uint32_t>(output, resolve_ref(s, str.references[j]));
+      }
+    }
   }
 
   uint32_t file_size = static_cast<uint32_t>(output.size());
@@ -1966,7 +2081,7 @@ std::vector<uint8_t> assemble(emitter_state &s) {
   header->profile_count = 0;
   header->devblock_stringtablefixup_count = 0;
   header->include_count = static_cast<uint8_t>(s.includes.size());
-  header->animtree_count = 0;
+  header->animtree_count = static_cast<uint8_t>(s.animtrees.size());
   header->flags = 0;
 
   return output;
@@ -1983,17 +2098,15 @@ std::vector<uint8_t> build_gdb(emitter_state &s, const GSC_OBJ *obj) {
   }
 
   const uint32_t stringtable_offset = output.size();
-  uint16_t string_count = 0;
-  for (const string_entry &str : s.strings) {
-    if (!str.references.empty()) {
-      string_count++;
-
-      write_u32(output, str.offset);
-      write_u32(output, static_cast<uint32_t>(str.references.size()));
-
-      for (size_t j = 0; j < str.references.size(); j++) {
-        write_u32(output, resolve_ref(s, str.references[j]));
-      }
+  uint32_t string_count = 0;
+  std::unordered_set<std::string> canonical_names;
+  for (const gsc::hash_name_pair &entry : s.hash_names) {
+    if (!entry.name.empty() &&
+        !gsc::try_parse_raw_hash(entry.name).has_value() &&
+        canonical_names.insert(entry.name).second) {
+      output.insert(output.end(), entry.name.begin(), entry.name.end());
+      output.push_back('\0');
+      ++string_count;
     }
   }
 
@@ -2014,42 +2127,42 @@ std::vector<uint8_t> build_gdb(emitter_state &s, const GSC_OBJ *obj) {
 }
 } // namespace
 
-emitter_result emit(const ast_ptr &root, const std::string &script_name) {
+emitter_result emit(scriptInstance_t inst, const ast_ptr &root,
+                    const std::string &script_name) {
   emitter_result result{};
-  emitter_state state;
+  emitter_state state(inst);
   state.script_name = script_name;
 
   {
     std::string ns_fallback = script_name;
-    size_t slash = ns_fallback.find_last_of("/\\");
-    if (slash != std::string::npos)
+    const size_t slash = ns_fallback.find_last_of("/\\");
+    if (slash != std::string::npos) {
       ns_fallback = ns_fallback.substr(slash + 1);
-    size_t dot = ns_fallback.find_last_of('.');
-    if (dot != std::string::npos)
+    }
+    const size_t dot = ns_fallback.find_last_of('.');
+    if (dot != std::string::npos) {
       ns_fallback = ns_fallback.substr(0, dot);
-    std::transform(
-        ns_fallback.begin(), ns_fallback.end(), ns_fallback.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    }
     state.script_namespace = gsc::gsc_hash(ns_fallback);
   }
-  uint32_t default_namespace = state.script_namespace;
+  const uint32_t default_namespace = state.script_namespace;
 
   try {
     // First pass: collect namespace and local function hashes
     for (std::shared_ptr<ast_node> &child : root->children) {
-      if (child->type == node_type::n_namespace)
+      if (child->type == node_type::n_namespace) {
         state.script_namespace = gsc::gsc_hash(child->value);
-      else if (child->type == node_type::n_function_def) {
+      } else if (child->type == node_type::n_function_def) {
         std::string lower = child->value;
         std::transform(
             lower.begin(), lower.end(), lower.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
         const uint8_t param_count =
             child->children.size() > 1
                 ? static_cast<uint8_t>(child->children[1]->children.size())
                 : 0;
         state.local_function_params[lower] = param_count;
-        state.record_hash(lower, child->line, param_count);
+        state.record_hash(lower, child->line, param_count, true);
       }
     }
 
@@ -2062,39 +2175,46 @@ emitter_result emit(const ast_ptr &root, const std::string &script_name) {
         state.script_namespace = gsc::gsc_hash(child->value);
       } else if (child->type == node_type::n_include) {
         state.includes.push_back(child->value);
+      } else if (child->type == node_type::n_using_animtree) {
+        const size_t idx = state.add_string(child->value);
+        state.animtrees.push_back({.name_str_index = static_cast<uint32_t>(idx),
+                                   .references = {},
+                                   .anims = {}});
+
       } else if (child->type == node_type::n_function_def) {
         if (child->children.size() == 4 &&
             child->children[3]->type == node_type::n_func_ref) {
           emit_function(state, child);
           auto [target_ns, target_fn] = extract_func_ref(child->children[3]);
           if (!target_fn.empty()) {
-            std::string replace_ns = state.script_name;
+            const std::string replace_ns = state.script_name;
             std::string replace_fn = child->value;
             const int32_t param_count =
                 child->children.size() > 1
                     ? static_cast<int>(child->children[1]->children.size())
                     : -1;
-            std::transform(replace_fn.begin(), replace_fn.end(),
-                           replace_fn.begin(), [](unsigned char c) {
-                             return static_cast<char>(std::tolower(c));
-                           });
+            std::transform(
+                replace_fn.begin(), replace_fn.end(), replace_fn.begin(),
+                [](uint8_t c) { return static_cast<char>(std::tolower(c)); });
             std::string ts =
                 normalize_ns(target_ns.empty() ? state.script_name : target_ns);
             std::string rs = normalize_ns(replace_ns);
             std::string tfn = target_fn;
-            std::transform(tfn.begin(), tfn.end(), tfn.begin(),
-                           [](unsigned char c) {
-                             return static_cast<char>(std::tolower(c));
-                           });
+            std::transform(tfn.begin(), tfn.end(), tfn.begin(), [](uint8_t c) {
+              return static_cast<char>(std::tolower(c));
+            });
             std::function<std::string(std::string script)> strip_script_ext =
                 [](std::string script) -> std::string {
-              for (char &c : script)
-                if (c == '\\')
+              for (char &c : script) {
+                if (c == '\\') {
                   c = '/';
+                }
+              }
               if (script.size() >= 4 &&
                   (script.substr(script.size() - 4) == ".gsc" ||
-                   script.substr(script.size() - 4) == ".csc"))
+                   script.substr(script.size() - 4) == ".csc")) {
                 script = script.substr(0, script.size() - 4);
+              }
               return script;
             };
             std::string target_script = strip_script_ext(ts);
@@ -2110,9 +2230,10 @@ emitter_result emit(const ast_ptr &root, const std::string &script_name) {
     }
 
     result.data = assemble(state);
-    for (const gsc::hash_name_pair &hn : state.hash_names)
+    for (const gsc::hash_name_pair &hn : state.hash_names) {
       result.hash_names.push_back(
           {hn.hash, std::move(hn.name), hn.line, hn.params});
+    }
     result.replacefuncs = std::move(state.replacefuncs);
     result.gdb =
         build_gdb(state, reinterpret_cast<const GSC_OBJ *>(result.data.data()));

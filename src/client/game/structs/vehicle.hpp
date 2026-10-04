@@ -1,18 +1,19 @@
 #pragma once
 
-#include "asm.hpp"
 #include "ai.hpp"
+#include "asm.hpp"
+#include "cm.hpp"
+#include "core.hpp"
+#include "db/xasset/xmodel.hpp"
+#include "gfx/gfx.hpp"
+#include "hk/ai.hpp"
 #include "math.hpp"
+#include "move.hpp"
 #include "phys/core.hpp"
 #include "snd/snd.hpp"
-#include "gfx/gfx.hpp"
-#include "core.hpp"
 #include "user.hpp"
-#include "hk/ai.hpp"
-#include "cm.hpp"
-#include "move.hpp"
-#include <game/symbols/macros.hpp>
 #include <game/symbol.hpp>
+#include <game/symbols/macros.hpp>
 
 namespace game {
 namespace level {
@@ -241,9 +242,6 @@ PACKED(struct VehicleEngineSound {
 });
 ASSERT_SIZE(VehicleEngineSound, 0x28);
 
-struct XModel; // TODO
-typedef XModel *XModelPtr;
-
 PACKED(struct VehicleEngine {
   bool simpleEngine;
   uint8_t _padding01[3];
@@ -384,6 +382,7 @@ PACKED(struct VehicleSoundDef {
   AircraftSound aircraftSounds[20];
   VehicleSurfaceSound surfaceSounds[40];
 });
+// Verified
 ASSERT_SIZE(VehicleSoundDef, 0x1000);
 
 typedef VehicleSoundDef *VehicleSoundDefPtr;
@@ -401,10 +400,13 @@ PACKED(struct VehicleFxDef {
   const char *name;
   char *csvInclude;
   VehicleFxDefType type;
+  uint8_t _padding14[4];
   db::xasset::FxEffectDefHandle treadFx[40];
   db::xasset::FxEffectDefHandle peelFx[40];
   db::xasset::FxEffectDefHandle skidFx[40];
 });
+// Verified
+ASSERT_SIZE(VehicleFxDef, 0x3D8);
 
 typedef VehicleFxDef *VehicleFxDefPtr;
 
@@ -670,9 +672,9 @@ PACKED(struct VehicleDef {
   float rotorArmFlapInfluence[8];
   scr::ScrString_t driverHideTag;
   scr::ScrString_t driverOtherHideTags[4];
-  XModelPtr attachmentModels[4];
+  db::xasset::xmodel::XModelPtr attachmentModels[4];
   scr::ScrString_t attachmentTags[4];
-  XModelPtr deathAttachmentModels[4];
+  db::xasset::xmodel::XModelPtr deathAttachmentModels[4];
   scr::ScrString_t deathAttachmentTags[4];
   uint32_t targetingImmunePerk;
   scr::ScrString_t targetTags[4];
@@ -680,10 +682,10 @@ PACKED(struct VehicleDef {
   vec3_t aimAssistMaxs;
   float tracerOffset[2];
   uint8_t _padding504[4];
-  XModelPtr model;
-  XModelPtr viewModel;
-  XModelPtr deathModel;
-  XModelPtr enemyModel;
+  db::xasset::xmodel::XModelPtr model;
+  db::xasset::xmodel::XModelPtr viewModel;
+  db::xasset::xmodel::XModelPtr deathModel;
+  db::xasset::xmodel::XModelPtr enemyModel;
   float modelSwapDelay;
   uint8_t _padding52C[4];
   db::xasset::FxEffectDefHandle exhaustFx;
@@ -857,13 +859,14 @@ PACKED(struct VehicleDef {
   qboolean customBool2;
   snd::SurfaceSoundDefPtr vehicleFootstepTable;
   db::xasset::SurfaceFXTableDefPtr vehicleFootstepFXTable;
-  phys::DestructibleDefPtr destructibleDef;
+  db::xasset::destructible::DestructibleDefPtr destructibleDef;
   gfx::GfxImage *tacticalModeIcon;
   float tacticalModeHeight;
   uint8_t _paddingAA4[4];
 });
 ASSERT_OFFSET(VehicleDef, useHeliBoneControllers, 0x188);
 ASSERT_OFFSET(VehicleDef, isSentient, 0x9D0);
+// Verified
 ASSERT_SIZE(VehicleDef, 0xAA8);
 
 PACKED(struct VehicleStun {
@@ -1001,64 +1004,64 @@ ASSERT_SIZE(minspec_mutex, 0x4);
 PACKED(struct NitrousVehicle {
   struct syms {
     static constexpr symbol<thiscall_t<void(NitrousVehicle *, float throttle)>>
-        set_throttle{0x141BBD4D0, 0x140321840};
+        set_throttle{0x141BB1100, 0x141BBD4D0, 0x140321840};
     static constexpr symbol<thiscall_t<float(NitrousVehicle *, double delta_t)>>
-        get_stuck_accel_factor{0x142383B30, 0x1405C2030};
+        get_stuck_accel_factor{0x14230A9C0, 0x142383B30, 0x1405C2030};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, LocalClientNum_t localClientNum)>>
-        setup_wheels{0x142383C80, 0x1405C2180};
+        setup_wheels{0x14230AB10, 0x142383C80, 0x1405C2180};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const double delta_t)>>
-        update_boost{0x1423841D0, 0x1405C26D0};
+        update_boost{0x14230B060, 0x1423841D0, 0x1405C26D0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, float inTq, float spinVel0,
                         float spinVel1, float *outTq0, float *outTq1)>>
-        update_differential{0x1423842C0, 0x1405C27C0};
+        update_differential{0x14230B150, 0x1423842C0, 0x1405C27C0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const double delta_t)>>
-        update_fakey_stuff{0x1423843C0, 0x1405C2AA0};
+        update_fakey_stuff{0x14230B250, 0x1423843C0, 0x1405C2AA0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const double delta_t)>>
-        update_gravity{0x1423849B0, 0x1405C3090};
+        update_gravity{0x14230B840, 0x1423849B0, 0x1405C3090};
     static constexpr symbol<thiscall_t<void(NitrousVehicle *)>>
-        update_orientation_constraint{0x142385640, 0x1405C3D20};
+        update_orientation_constraint{0x14230C4D0, 0x142385640, 0x1405C3D20};
     static constexpr symbol<thiscall_t<void(NitrousVehicle *)>> update_pause{
-        0x142385810, 0x1405C3EF0};
+        0x14230C6A0, 0x142385810, 0x1405C3EF0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const double delta_t)>>
-        update_prolog{0x142385970, 0x1405C4050};
+        update_prolog{0x14230C800, 0x142385970, 0x1405C4050};
     static constexpr symbol<fastcall_t<NitrousVehicle *(int32_t id)>>
-        add_vehicle{0x142385E30, 0x1405C4510};
+        add_vehicle{0x14230CCC0, 0x142385E30, 0x1405C4510};
     static constexpr symbol<fastcall_t<void(double delta_t)>>
-        frame_Epilog_All_Systems{0x142386EC0, 0x1405C55A0};
+        frame_Epilog_All_Systems{0x14230DD50, 0x142386EC0, 0x1405C55A0};
     static constexpr symbol<fastcall_t<void(const double delta_t)>>
-        frame_prolog_all_systems{0x142387100, 0x1405C5610};
+        frame_prolog_all_systems{0x14230DF90, 0x142387100, 0x1405C5610};
     static constexpr symbol<thiscall_t<float(const NitrousVehicle *)>>
-        get_throttle{0x142387390, 0x1405C58B0};
+        get_throttle{0x14230E220, 0x142387390, 0x1405C58B0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, level::gentity_t *owner,
                         const VehicleParameter *parameter)>>
-        init{0x142387480, 0x1405C5980};
+        init{0x14230E310, 0x142387480, 0x1405C5980};
     static constexpr symbol<thiscall_t<bool(NitrousVehicle *)>> is_path_moving{
-        0x142387860, 0x1405C5D60};
+        0x14230E6F0, 0x142387860, 0x1405C5D60};
     static constexpr symbol<thiscall_t<void(NitrousVehicle *, bool shutdown)>>
-        pause_physics{0x14238AA20, 0x1405C5EF0};
+        pause_physics{0x1423118B0, 0x14238AA20, 0x1405C5EF0};
     static constexpr symbol<thiscall_t<void(const NitrousVehicle *v)>>
-        remove_vehicle{0x14238AD70, 0x1405C6240};
+        remove_vehicle{0x142311C00, 0x14238AD70, 0x1405C6240};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, int32_t attach_mode)>>
-        start_path{0x14238B150, 0x1405C6470};
+        start_path{0x142311FE0, 0x14238B150, 0x1405C6470};
     static constexpr symbol<thiscall_t<void(NitrousVehicle *)>> unpause_physics{
-        0x14238B2D0, 0x1405C65F0};
+        0x142312160, 0x14238B2D0, 0x1405C65F0};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const float desired_speed_factor)>>
-        update_braking_and_acceleration{0x14238EB00, 0x1405C69D0};
+        update_braking_and_acceleration{0x142315990, 0x14238EB00, 0x1405C69D0};
     static constexpr symbol<thiscall_t<void(
         NitrousVehicle *, const VehicleDef *vehicleDef, bool initialization)>>
-        update_parms{0x14238F990, 0x1405C7860};
+        update_parms{0x142316820, 0x14238F990, 0x1405C7860};
     static constexpr symbol<
         thiscall_t<void(NitrousVehicle *, const float acceleration_factor)>>
-        update_steering{0x142390370, 0x1405C82B0};
+        update_steering{0x142317200, 0x142390370, 0x1405C82B0};
   };
 
   inline void set_throttle(float throttle) {
@@ -1154,7 +1157,7 @@ PACKED(struct NitrousVehicle {
   int32_t m_entnum;
   uint8_t _padding2D4[4];
   const VehicleDef *m_vehicle_def;
-  db::xasset::XModel *m_xmodel;
+  db::xasset::xmodel::XModel *m_xmodel;
   phys::rigid_body_constraint_custom_orientation *m_orientation_constraint;
   phys::rigid_body_constraint_custom_path *m_vpc;
   VehicleFlags m_flags;
@@ -1810,8 +1813,8 @@ typedef fastcallPtr_t<vehicle_proximity_data_t *(
 
 typedef fastcallPtr_t<qboolean(const move::pmove_t *pm, int, vec3_t *)>
     get_wheel;
-typedef fastcallPtr_t<const cm::PhysGeomList *(LocalClientNum_t localClientNum,
-                                               const int)>
+typedef fastcallPtr_t<const db::xasset::phys::PhysGeomList *(
+    LocalClientNum_t localClientNum, const int)>
     get_vehicle_collmap;
 
 typedef fastcallPtr_t<void(LocalClientNum_t localClientNum, const int,

@@ -1,13 +1,14 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include <game/game.hpp>
 
-#include <utils/hook.hpp>
-#include <utils/string.hpp>
 #include "auth.hpp"
 #include <mmeapi.h>
 #include <str.hpp>
+#include <utils/hook.hpp>
+#include <utils/string.hpp>
 
 namespace game {
 namespace live {
@@ -144,7 +145,6 @@ void LobbyActiveList_SetClientInfo_ActivateAllContent(
 }
 } // namespace active
 } // namespace lobby
-namespace ui {
 namespace lua {
 template <const hks::lua_Integer Value>
 void Lua_SetTableInt_Always(const char *key,
@@ -159,7 +159,6 @@ void Lua_SetTableBool_Always(const char *key, [[maybe_unused]] bool value,
 }
 } // namespace lua
 
-} // namespace ui
 } // namespace game
 
 namespace live {
@@ -189,6 +188,10 @@ utils::hook::detour LiveAntiCheat_ConsoleDetailsReported_hook;
 utils::hook::detour LiveSteam_NotVacBanned_hook;
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "live"; }
+#endif
+
 public:
   void post_unpack() override {
     LiveUser_UserGetName_hook.create(

@@ -2,10 +2,35 @@
 #define GAME_STRUCTS_DB_XASSETS_HPP
 
 #include <cstdint>
-#include "../../quake/core.hpp"
-#include "../../gfx/gfx.hpp"
+#ifndef NDEBUG
+#include <format>
+#include <game/ptr.hpp>
+#include <string>
+#endif
+#include <game/structs/gfx/gfx.hpp>
 
 namespace game {
+
+namespace weapon {
+struct WeaponVariantDef;
+}
+
+namespace vehicle {
+struct VehicleDef;
+struct VehicleFxDef;
+struct VehicleSoundDef;
+} // namespace vehicle
+
+namespace ddl {
+struct DDLDef;
+struct StringTable;
+} // namespace ddl
+
+namespace bg {
+namespace cache {
+struct BGCacheInfo;
+}
+} // namespace bg
 
 namespace scr {
 typedef uint32_t ScrString_t;
@@ -13,11 +38,6 @@ struct ScriptParseTree;
 } // namespace scr
 
 namespace snd {
-/*
-  Must #include <structs/structs.hpp> or <structs/snd.hpp> directly
-  to use full structures - we need to only use forward declarations here to
-  avoid circular dependencies between header files.
-*/
 struct SndBank;
 struct SndPatch;
 struct SndDriverGlobals;
@@ -25,8 +45,52 @@ struct SndDriverGlobals;
 typedef uint32_t SndAliasId;
 
 } // namespace snd
+
+namespace cm {
+struct clipMap_t;
+}
+
 namespace db {
 namespace xasset {
+
+namespace ttf {
+struct TTFDef;
+}
+
+namespace destructible {
+struct DestructibleDef;
+typedef DestructibleDef *DestructibleDefPtr;
+} // namespace destructible
+
+namespace xmodel {
+struct XModel;
+typedef XModel *XModelPtr;
+
+struct XModelMesh;
+typedef XModelMesh *XModelMeshPtr;
+
+struct XModelAlias;
+typedef XModelAlias *XModelAliasPtr;
+
+} // namespace xmodel
+
+namespace font {
+struct FontIcon;
+struct Font_s;
+typedef Font_s Font;
+} // namespace font
+
+namespace phys {
+struct PhysPreset;
+struct PhysGeomList;
+struct PhysConstraints;
+} // namespace phys
+
+namespace world {
+struct GameWorld;
+struct GfxWorld;
+struct ComWorld;
+} // namespace world
 
 struct RumbleInfo;
 typedef RumbleInfo *RumbleInfoPtr;
@@ -34,39 +98,12 @@ typedef RumbleInfo *RumbleInfoPtr;
 struct ShellshockParams;
 typedef ShellshockParams *ShellshockParamsPtr;
 
-struct DestructibleDef;
-typedef DestructibleDef *DestructibleDefPtr;
-
 struct StreamerHint;
 typedef StreamerHint *StreamerHintPtr;
 
 namespace maptable {
 struct MapTable;
 }
-
-/*
- For future reference, some known-correct asset struct sizes as per
- `DB_GetXAssetTypeSize`:
-  - PHYSPRESET: 120 or 0x78
-  - XMODELMESH: 120 or 0x78
-  - PHYSCONSTRAINTS: 1680 or 0x690
-  - DESTRUCTIBLEDEF: 48 or 0x30
-  - XANIMPARTS: 248 or 0xF8
-  - XMODEL: 392 or 0x188
-  - MATERIAL: 672 or 0x2A0
-  - COMPUTE_SHADER_SET: 24 or 0x18
-  - SOUND_PATCH: 24 or 0x18
-  - TECHNIQUE_SET: 112 or 0x70
-  - IMAGE: 264 or 0x108
-  - SOUND: 139440 or 0x220B0
-  - CLIPMAP: 720 or 0x2D0
-  - COMWORLD: 136 or 0x88
-  - GAMEWORLD: 80 or 0x50
-  - MAP_ENTS: 72 or 0x48
-  - GFXWORLD: 8256 or 0x2040
-  - LIGHT_DEF: 40 or 0x28
-  - LENSFLARE_DEF: 536 or 0x218
-*/
 
 enum class XAssetType : int32_t {
   PHYSPRESET = 0x0,
@@ -93,8 +130,12 @@ enum class XAssetType : int32_t {
   FONTICON = 0x15,
   LOCALIZE_ENTRY = 0x16,
   WEAPON = 0x17,
+  // Probably `WeaponDef`
   WEAPONDEF = 0x18,
+  // Probably `WeaponVariantDef`, but unsure, as `WeaponVariantDef` is
+  // verified to be the type used for `Weapon` `XAsset` types.
   WEAPON_VARIANT = 0x19,
+  // Probably `WeaponFullDef`
   WEAPON_FULL = 0x1A,
   CGMEDIA = 0x1B,
   PLAYERSOUNDS = 0x1C,
@@ -179,89 +220,44 @@ enum class XAssetType : int32_t {
   DEPEND = 0x68,
   FULL_COUNT = 0x6C,
 };
+IMPL_ENUM_OPERATORS(XAssetType);
 
-struct AssetLink;
-struct AssetLink {
-  AssetLink *next;
-};
-
-struct XAssetPool {
-  void *pool;
-  uint32_t itemSize;
-  int32_t itemCount;
-  qboolean isSingleton;
-  int32_t itemAllocCount;
-  AssetLink *freeHead;
-
-  inline bool contains(uintptr_t ptr) const noexcept {
-    const uintptr_t pool_ptr = reinterpret_cast<uintptr_t>(pool);
-    return ptr >= pool_ptr && ptr < pool_ptr + itemSize * itemCount;
-  }
-
-  template <typename P> inline bool contains(const P *ptr) const noexcept {
-    return contains(reinterpret_cast<uintptr_t>(ptr));
-  }
-};
-
-template <typename T> struct TypedXAssetPool {
-  T *pool;
-  uint32_t itemSize;
-  int32_t itemCount;
-  qboolean isSingleton;
-  int32_t itemAllocCount;
-  AssetLink *freeHead;
-
-  inline bool contains(uintptr_t ptr) const noexcept {
-    const uintptr_t pool_ptr = reinterpret_cast<uintptr_t>(pool);
-    return ptr >= pool_ptr && ptr < pool_ptr + itemSize * itemCount;
-  }
-
-  template <typename P> inline bool contains(const P *ptr) const noexcept {
-    return contains(reinterpret_cast<uintptr_t>(ptr));
-  }
-};
-
-ASSERT_SIZE(XAssetPool, 0x20);
-#pragma pack(push, 1)
-// sizeof=x10
-struct ScriptStringList {
-  int count;
-  uint8_t _padding04[4];
-  const char **strings;
-};
-ASSERT_SIZE(ScriptStringList, 0x10);
-#pragma pack(pop)
+template <IntegralLike<std::underlying_type_t<XAssetType>> Value>
+inline constexpr bool valid_xassettype(Value val_arg) {
+  const std::underlying_type_t<XAssetType> val =
+      static_cast<std::underlying_type_t<XAssetType>>(val_arg);
+  return val >= +XAssetType::PHYSPRESET && val < +XAssetType::COUNT;
+}
 
 /*
   All XAssets union members have first field `const char * name;`
   The engine uses this shared field to use shared utility functions to access
-  name of the asset Prior to REing and verifying all XAsset union member
+  name of the asset. Prior to REing and verifying all XAsset union member
   structures, we can start with using the known-shared field only - name.
   Later we can define each of the XAsset structs with `: NamedXAsset` and
-  declare the shared util function symbols using type signature `*NamedXAsset`
+  declare the shared util function symbols using type signature `NamedXAsset *`
   to more succintly type what is being passed to the function.
 */
-#pragma pack(push, 1)
-struct NamedXAsset {
-  const char *name;
-};
+PACKED(struct NamedXAsset { const char *name; });
 ASSERT_SIZE(NamedXAsset, 0x8);
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-struct RawFile : NamedXAsset {
-  uint64_t len;
-  const uint8_t *buffer;
-};
+PACKED(struct RawFile : NamedXAsset {
+  size_t len;
+  uint8_t *buffer;
+
+#ifndef NDEBUG
+  inline constexpr std::string serialize() const noexcept {
+    return std::format(
+        "RawFile {{ \"name\": \"{}\", \"len\": 0x{:X}, \"buffer\": {:p} }}",
+        game::readable_ptr(name) ? name : "NULL", len,
+        static_cast<const void *>(buffer));
+  }
+#endif
+});
 ASSERT_SIZE(RawFile, 0x18);
-#pragma pack(pop)
 
 struct MaterialTechniqueSet;
 typedef MaterialTechniqueSet *MaterialTechniqueSetPtr;
-
-// TODO
-struct XModel;
-typedef XModel *XModelPtr;
 
 typedef const char *XString;
 
@@ -280,12 +276,12 @@ struct FxFloatRange {
   float amplitude;
 };
 
-typedef int FxElemDefFlags;
-typedef int FxElemDefExtraFlags;
+typedef int32_t FxElemDefFlags;
+typedef int32_t FxElemDefExtraFlags;
 
 struct FxIntRange {
-  int base;
-  int amplitude;
+  int32_t base;
+  int32_t amplitude;
 };
 
 // sizeof=0x10
@@ -321,7 +317,7 @@ struct __attribute__((aligned(8))) MaterialInfo {
   uint8_t textureAtlasColumnCount;
   gfx::GfxSortKey drawSurf;
   uint32_t bindlessMaterialSortIndex;
-  int surfaceFlags;
+  int32_t surfaceFlags;
   contents_t contents;
 };
 
@@ -336,7 +332,6 @@ struct FxElemInheritStateSample;
 struct FxElemVelStateSample;
 struct FxEffectDef;
 struct Material;
-struct XModel;
 
 typedef Material *MaterialHandle;
 
@@ -366,7 +361,7 @@ typedef Material FxMaterial;
 typedef FxMaterial *FxMaterialHandle;
 typedef MaterialHandle MaterialDeferredHandle;
 
-typedef XModel *FxModelHandle;
+typedef xmodel::XModel *FxModelHandle;
 
 typedef const FxEffectDef *FxEffectDefHandleRaw;
 
@@ -516,7 +511,7 @@ struct FxElemDef {
 };
 ASSERT_SIZE(FxElemDef, 0x260);
 
-typedef int FxEffectDefFlags;
+typedef int32_t FxEffectDefFlags;
 typedef const FxEffectDef *FxEffectDefHandle;
 typedef uint8_t FxNormalsShape;
 
@@ -702,9 +697,6 @@ enum class MapType : uint8_t {
 struct ScriptBundle;
 typedef ScriptBundle *ScriptBundlePtr;
 
-struct XModel;
-typedef XModel *XModelPtr;
-
 struct PlayerFXTable;
 typedef PlayerFXTable *PlayerFXTablePtr;
 
@@ -736,36 +728,137 @@ struct XAnimTree;
 
 struct LocalizeEntry;
 
+// TODO
+struct PlayerRoleTemplate;
+typedef PlayerRoleTemplate *PlayerRoleTemplatePtr;
+PACKED(struct PlayerRoleLevels {
+  bool enabled;
+  uint8_t _padding01[3];
+  uint32_t numLevels;
+  PlayerRoleTemplatePtr *levels;
+});
+
+// TODO
+struct CharacterHead;
+
+typedef PlayerRoleLevels *PlayerRoleLevelsPtr;
+// Verified
+PACKED(struct CustomizationTable {
+  const char *name;
+  uint32_t numPlayerRoles;
+  uint8_t _padding0C[4];
+  PlayerRoleLevelsPtr *playerRoles;
+  uint32_t numHeads;
+  uint8_t _padding1C[4];
+  CharacterHead *heads;
+});
+ASSERT_SIZE(CustomizationTable, 0x28);
+
+struct CamoBaseMaterial {
+  MaterialHandle material;
+  gfx::GfxImage *mask;
+};
+
+struct CamoMaterial {
+  uint16_t replaceFlags;
+  uint16_t numBaseMaterials;
+  CamoBaseMaterial *baseMaterials;
+  MaterialHandle camoMaterial;
+  float translationX;
+  float translationY;
+  float scaleX;
+  float scaleY;
+  float rotation;
+  float normalBlend;
+  float glossBlend;
+  gfx::GfxColor albedoTint;
+  vec2_t glossRange;
+  vec_t specColor;
+  vec_t specOffset;
+};
+
+struct CharacterBodyType_FrontendImages {
+  gfx::GfxImageHandle background;
+  gfx::GfxImageHandle backgroundWithCharacter;
+  gfx::GfxImageHandle lockedImage;
+  gfx::GfxImageHandle personalizeRender;
+  gfx::GfxImageHandle frozenMomentRender;
+  gfx::GfxImageHandle frozenMomentOverlay;
+  gfx::GfxImage *equippedLoadoutIcons[2];
+  gfx::GfxImage *unequippedLoadoutIcons[2];
+  gfx::GfxImageHandle cardBackIcon;
+  gfx::GfxImageHandle weaponCardBackIcon;
+  gfx::GfxImageHandle weaponCardBackSubIcon;
+  gfx::GfxImageHandle abilityCardBackIcon;
+  gfx::GfxImageHandle abilityCardBackSubIcon;
+};
+
+// Verified
+struct CustomizationTable_FEImages {
+  const char *name;
+  uint32_t numBodyTypes;
+  CharacterBodyType_FrontendImages *bodyTypes;
+};
+ASSERT_SIZE(CustomizationTable_FEImages, 0x18);
+
+// Verified
+struct CustomizationColorInfo {
+  const char *name;
+  XString displayName;
+  gfx::GfxColor uiColor;
+  gfx::GfxImage *icon;
+  uint32_t numCamoMaterials;
+  CamoMaterial *camoMaterials;
+};
+ASSERT_SIZE(CustomizationColorInfo, 0x30);
+
+struct XSurface;
+typedef int32_t XPartBits[12];
+
+struct KeyValuePair {
+  int32_t keyHash;
+  const char *value;
+};
+
+// Verified
+struct KeyValuePairs {
+  const char *name;
+  int32_t numVariables;
+  KeyValuePair *keyValuePairs;
+};
+ASSERT_SIZE(KeyValuePairs, 0x18);
+
 union XAssetHeader {
   NamedXAsset *named;
-  // PhysPreset *physPreset;
-  // PhysConstraints *physConstraints;
-  // DestructibleDef *destructibleDef;
+  phys::PhysPreset *physPreset;
+  phys::PhysConstraints *physConstraints;
+  destructible::DestructibleDef *destructibleDef;
   // XAnimParts *parts;
-  // XModel *model;
-  // XModelMesh *modelMesh;
+  xmodel::XModel *model;
+  xmodel::XModelMesh *modelMesh;
   // Material *material;
   // MaterialComputeShaderSet *computeShaderSet;
   MaterialTechniqueSet *techniqueSet;
   gfx::GfxImage *image;
   snd::SndBank *sound;
   snd::SndPatch *soundPatch;
-  // clipMap_t *clipMap;
-  // ComWorld *comWorld;
-  // GameWorld *gameWorld;
+  cm::clipMap_t *clipMap;
+  world::ComWorld *comWorld;
+  world::GameWorld *gameWorld;
   // MapEnts *mapEnts;
-  // GfxWorld *gfxWorld;
-  // GfxLightDef *lightDef;
-  // GfxLensFlareDef *lensFlareDef;
-  // Font *font;
-  // FontIcon *fontIcon;
+  world::GfxWorld *gfxWorld;
+  gfx::GfxLightDef *lightDef;
+  // gfx::GfxLensFlareDef *lensFlareDef;
+  font::Font *font;
+  font::FontIcon *fontIcon;
   LocalizeEntry *localize;
-  // WeaponVariantDef *weapon;
+  weapon::WeaponVariantDef *weapon;
   // WeaponAttachment *attachment;
   // WeaponAttachmentUnique *attachmentUnique;
   // WeaponCamo *weaponCamo;
-  // CustomizationTable *customizationTable;
-  // CustomizationColorInfo *customizationColorInfo;
+  CustomizationTable *customizationTable;
+  CustomizationTable_FEImages *customizationTable_feimages;
+  CustomizationColorInfo *customizationColorInfo;
   snd::SndDriverGlobals *sndDriverGlobals;
   // FxEffectDefHandleRaw fx;
   // TagFxSet *tagFX;
@@ -780,15 +873,15 @@ union XAssetHeader {
   // E.g. compiled lua scripts, game CFGs,
   // some DDL files, vision and anim scripts
   RawFile *rawfile;
-  // StringTable *stringTable;
+  ddl::StringTable *stringTable;
   // StructuredTable *structuredTable;
   // LeaderboardDef *leaderboardDef;
-  // DDLRoot *ddlRoot;
+  ddl::DDLDef *ddl;
   // Glasses *glasses;
   // TextureList *textureList;
   scr::ScriptParseTree *scriptParseTree;
-  // KeyValuePairs *keyValuePairs;
-  // VehicleDef *vehicleDef;
+  KeyValuePairs *keyValuePairs;
+  vehicle::VehicleDef *vehicleDef;
   // AddonMapEnts *addonMapEnts;
   // TracerDef *tracerDef;
   // Qdb *qdb;
@@ -799,8 +892,8 @@ union XAssetHeader {
   // EntitySoundImpacts *entitySoundImpacts;
   // EntityFxImpacts *entityFxImpacts;
   // ZBarrierDef *zbarrierDef;
-  // VehicleFxDef *vehicleFxDef;
-  // VehicleSoundDef *vehicleSoundDef;
+  vehicle::VehicleFxDef *vehicleFxDef;
+  vehicle::VehicleSoundDef *vehicleSoundDef;
   // ArchiveTypeInfoArray *typeInfo;
   // ScriptBundle *scriptBundle;
   // ScriptBundleList *scriptBundleList;
@@ -808,7 +901,7 @@ union XAssetHeader {
   // BulletPenetrationTable *bulletPenetration;
   // LocDmgTable *locDmgTable;
   // AimTable *aimTable;
-  // XModelAlias *xModelAlias;
+  xmodel::XModelAlias *xModelAlias;
   // Character *character;
   // AIType *aiType;
   // PlayerCharacter *player_character;
@@ -817,12 +910,12 @@ union XAssetHeader {
   // AnimStateMachine *animStateMachine;
   // BehaviorTree *behaviorTree;
   // BehaviorStateMachine *behaviorStateMachine;
-  // TTFDef *ttfDef;
+  ttf::TTFDef *ttfDef;
   // GfxSiegeAnim *sanim;
   // GfxLightDescription *lightDescription;
   // ShellshockParams *shellshock;
   // XCam *xcam;
-  // BGCacheInfo *bgCache;
+  bg::cache::BGCacheInfo *bgCache;
   // TextureCombo *textureCombo;
   // FlameTable *flameTable;
   // Bitfield *bitfield;
@@ -840,7 +933,7 @@ union XAssetHeader {
   // StreamerHint *streamerHint;
   void *data;
 };
-ASSERT_SIZE(XAssetHeader, 0x8);
+ASSERT_SIZE(XAssetHeader, sizeof(void *));
 
 // sizeof=0x10
 #pragma pack(push, 1)
@@ -855,19 +948,24 @@ ASSERT_SIZE(XAsset, 0x10);
 using XAssetEnum = void(XAssetHeader, void *);
 
 #pragma pack(push, 1)
-// sizeof=0x20
+
+PACKED(struct ScriptStringList {
+  int32_t count;
+  uint8_t _padding04[4];
+  const char **strings;
+});
+ASSERT_SIZE(ScriptStringList, 0x10);
+
 struct XAssetList {
   ScriptStringList stringList;
-  int assetCount;
+  int32_t assetCount;
   uint8_t _padding14[4];
   XAsset *assets;
 };
 ASSERT_SIZE(XAssetList, 0x20);
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-// sizeof=0x20
-struct XAssetEntry {
+PACKED(struct XAssetEntry {
   XAsset asset;
   uint8_t zoneIndex;
   bool inuse;
@@ -875,156 +973,9 @@ struct XAssetEntry {
   uint32_t nextHash;
   uint32_t nextType;
   uint32_t nextOverride;
-};
+});
 ASSERT_SIZE(XAssetEntry, 0x20);
 typedef XAssetEntry *XAssetEntryPtr;
-#pragma pack(pop)
-
-union XAssetEntryPoolEntry;
-union XAssetEntryPoolEntry {
-  XAssetEntry entry;
-  XAssetEntryPoolEntry *next;
-};
-ASSERT_SIZE(XAssetEntryPoolEntry, 0x20);
-constexpr std::size_t XASSET_ENTRY_POOL_LENGTH = 156671;
-
-#pragma pack(push, 1)
-struct XAssetEntryPool {
-  XAssetEntryPoolEntry pool[XASSET_ENTRY_POOL_LENGTH];
-};
-
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-
-struct TypedXAssetPools {
-  XAssetPool physpreset;
-  XAssetPool physconstraints;
-  XAssetPool destructibledef;
-  XAssetPool xanimparts;
-  XAssetPool xmodel;
-  XAssetPool xmodelmesh;
-  XAssetPool material;
-  XAssetPool compute_shader_set;
-  XAssetPool technique_set;
-  TypedXAssetPool<gfx::GfxImage> image;
-  TypedXAssetPool<snd::SndBank> sound;
-  TypedXAssetPool<snd::SndPatch> sound_patch;
-  XAssetPool clipmap;
-  XAssetPool comworld;
-  XAssetPool gameworld;
-  XAssetPool map_ents;
-  XAssetPool gfxworld;
-  XAssetPool light_def;
-  XAssetPool lensflare_def;
-  XAssetPool ui_map;
-  XAssetPool font;
-  XAssetPool fonticon;
-  XAssetPool localize_entry;
-  XAssetPool weapon;
-  XAssetPool weapondef;
-  XAssetPool weapon_variant;
-  XAssetPool weapon_full;
-  XAssetPool cgmedia;
-  XAssetPool playersounds;
-  XAssetPool playerfx;
-  XAssetPool sharedweaponsounds;
-  XAssetPool attachment;
-  XAssetPool attachment_unique;
-  XAssetPool weapon_camo;
-  XAssetPool customization_table;
-  XAssetPool customization_table_fe_images;
-  XAssetPool customization_table_color;
-  TypedXAssetPool<snd::SndDriverGlobals> snddriver_globals;
-  XAssetPool fx;
-  XAssetPool tagfx;
-  XAssetPool new_lensflare_def;
-  XAssetPool impact_fx;
-  XAssetPool impact_sound;
-  XAssetPool player_character;
-  XAssetPool aitype;
-  XAssetPool character;
-  XAssetPool xmodelalias;
-  TypedXAssetPool<RawFile> rawfile;
-  XAssetPool stringtable;
-  XAssetPool structured_table;
-  XAssetPool leaderboard;
-  XAssetPool ddl;
-  XAssetPool glasses;
-  XAssetPool texturelist;
-  TypedXAssetPool<scr::ScriptParseTree> scriptparsetree;
-  XAssetPool keyvaluepairs;
-  XAssetPool vehicledef;
-  XAssetPool addon_map_ents;
-  XAssetPool tracer;
-  XAssetPool slug;
-  XAssetPool surfacefx_table;
-  XAssetPool surfacesounddef;
-  XAssetPool footstep_table;
-  XAssetPool entityfximpacts;
-  XAssetPool entitysoundimpacts;
-  XAssetPool zbarrier;
-  XAssetPool vehiclefxdef;
-  XAssetPool vehiclesounddef;
-  XAssetPool typeinfo;
-  XAssetPool scriptbundle;
-  XAssetPool scriptbundlelist;
-  XAssetPool rumble;
-  XAssetPool bulletpenetration;
-  XAssetPool locdmgtable;
-  XAssetPool aimtable;
-  XAssetPool animselectortableset;
-  XAssetPool animmappingtable;
-  XAssetPool animstatemachine;
-  XAssetPool behaviortree;
-  XAssetPool behaviorstatemachine;
-  XAssetPool ttf;
-  XAssetPool sanim;
-  XAssetPool light_description;
-  XAssetPool shellshock;
-  XAssetPool xcam;
-  XAssetPool bg_cache;
-  XAssetPool texture_combo;
-  XAssetPool flametable;
-  XAssetPool bitfield;
-  XAssetPool attachment_cosmetic_variant;
-  TypedXAssetPool<maptable::MapTable> maptable;
-  XAssetPool maptable_loading_images;
-  XAssetPool medal;
-  XAssetPool medaltable;
-  XAssetPool objective;
-  XAssetPool objective_list;
-  XAssetPool umbra_tome;
-  XAssetPool navmesh;
-  XAssetPool navvolume;
-  XAssetPool binaryhtml;
-  XAssetPool laser;
-  XAssetPool beam;
-  XAssetPool streamer_hint;
-};
-
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-
-union XAssetPools {
-  XAssetPool pools[static_cast<int>(XAssetType::COUNT)];
-  TypedXAssetPools typed;
-
-  inline bool contains(uintptr_t ptr) const noexcept {
-    const uintptr_t this_ptr = reinterpret_cast<uintptr_t>(this);
-    return ptr >= this_ptr && ptr < (this_ptr + sizeof(XAssetPools));
-  }
-
-  template <typename P> inline bool contains(const P *ptr) const noexcept {
-    return contains(reinterpret_cast<uintptr_t>(ptr));
-  }
-};
-static_assert(sizeof(XAssetPools) ==
-                  sizeof(XAssetPool) * static_cast<int>(XAssetType::COUNT),
-              "sizeof(XAssetPools) must be sizeof(XAssetPool) * COUNT");
-ASSERT_SIZE(XAssetPools, sizeof(TypedXAssetPools));
-#pragma pack(pop)
 
 struct ManagedNotetrack_t {
   scr::ScrString_t elemType;
@@ -1069,18 +1020,11 @@ struct XSurfaceShared {
 };
 #pragma pack(pop)
 
-struct XModelAlias {
-  const char *name;
-  db::xasset::XModelPtr model[50];
-};
-
-typedef XModelAlias *XModelAliasPtr;
-
 PACKED(struct LocalizeEntry {
   const char *value;
   const char *name;
 });
-ASSERT_SIZE(LocalizeEntry, 16);
+ASSERT_SIZE(LocalizeEntry, 0x10);
 
 struct accoladeCache {
   uint8_t accoladeIndex;
@@ -1100,6 +1044,11 @@ PACKED(struct mapTableCache {
   uint8_t _padding1801[7];
 });
 ASSERT_SIZE(mapTableCache, 0x1808);
+
+struct __declspec(align(8)) Collmap {
+  phys::PhysGeomList *geomList;
+  BoneIndex boneIndex;
+};
 
 } // namespace xasset
 } // namespace db

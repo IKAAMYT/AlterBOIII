@@ -1,19 +1,21 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
 
-#include "command.hpp"
-#include "scheduler.hpp"
+#include <game/game.hpp>
+
+#include <component/command.hpp>
+#include <component/getinfo.hpp>
+#include <component/scheduler.hpp>
+#include <loader/component_loader.hpp>
 
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
 
-#include <game/game.hpp>
-#include "getinfo.hpp"
+#include <str.hpp>
 
 namespace bots {
 namespace {
-constexpr auto *bot_format_string =
+constexpr const char bot_format_string[] =
     "connect "
     "\"\\invited\\1\\cg_predictItems\\1\\cl_"
     "anonymous\\0\\color\\4\\head\\default\\model\\multi\\snaps\\20\\rate\\"
@@ -21,79 +23,93 @@ constexpr auto *bot_format_string =
     "s\\natType\\2\\protocol\\%d\\netfieldchk\\%d\\sessionmode\\%s\\qport\\%"
     "d\"";
 
-using bot_name = std::pair<std::string, std::string>;
+struct BotName {
+  game::playerName_t name;
+  game::clanAbbrev_t clan_abbrev;
+};
 
-std::vector<bot_name> load_bots_names() {
-  std::vector<bot_name> bot_names = {
-      {"AlterNeon", "AlterBOIII"},
-      {"AlterCOD", "AlterBOIII"},
+std::vector<BotName> load_bots_names() {
+  // AlterBO3 (IKAAM) : noms de bots personnalises.
+  // ATTENTION : le tag de clan est un tampon fixe de 8 octets
+  // (game::clanAbbrev_t), donc 7 caracteres maximum. "AlterBOIII" (10) ne
+  // compile plus depuis la refonte d'Ezz -> "AlterBO".
+  constexpr const BotName DEFAULT_BOT_NAMES[] = {
+      {"AlterNeon", "AlterBO"},
+      {"AlterCOD", "AlterBO"},
       {"Skwll", "PP"},
-      {"AlterByte", "AlterBOIII"},
-      {"AlterHellcat", "AlterBOIII"},
+      {"AlterByte", "AlterBO"},
+      {"AlterHellcat", "AlterBO"},
       {"Ava", "<3"},
-      {"IKAAMONTOP", "AlterBOIII"},
-      {"AlterBot", "AlterBOIII"},
-      {"AlterZyrow", "AlterBOIII"},
-      {"AlterZACK", "AlterBOIII"},
-      {"AlterAranella", "AlterBOIII"},
+      {"IKAAMONTOP", "AlterBO"},
+      {"AlterBot", "AlterBO"},
+      {"AlterZyrow", "AlterBO"},
+      {"AlterZACK", "AlterBO"},
+      {"AlterAranella", "AlterBO"},
       {"IKAAM", "GOAT"},
-      {"AlterClyde", "AlterBOIII"},
-      {"AlterMisty", "AlterBOIII"},
+      {"AlterClyde", "AlterBO"},
+      {"AlterMisty", "AlterBO"},
       {"Richtofen", "ZMB"},
       {"Dempsy", "ZMB"},
       {"Samantha", "ZMB"},
       {"Takeo", "ZMB"},
-      {"AlterBoot", "AlterBOIII"},
+      {"AlterBoot", "AlterBO"},
       {"ShadowMan", "ZMB"},
       {"Aimbot.exe", "EXE"},
       {"Wallhack.exe", "EXE"},
       {"NotAScammer.exe", "EXE"},
       {"ThunderCockKiller12", "TF"},
-      {"AlterAlenski", "AlterBOIII"},
+      {"AlterAlenski", "AlterBO"},
       {"1stPlaceBtw", "YUH"},
       {"NoIamFirstPlace", "FR"},
       {"IDied", "LOL"},
-      {"AlterPrime", "AlterBOIII"},
-      {"AlterSabino", "AlterBOIII"},
-      {"AlterKST", "AlterBOIII"},
-      {"AlterFaisal", "AlterBOIII"},
+      {"AlterPrime", "AlterBO"},
+      {"AlterSabino", "AlterBO"},
+      {"AlterKST", "AlterBO"},
+      {"AlterFaisal", "AlterBO"},
   };
 
   std::string buffer;
   if (!utils::io::read_file("boiii/bots.txt", &buffer) || buffer.empty()) {
-    return bot_names;
+    return std::vector(std::begin(DEFAULT_BOT_NAMES),
+                       std::end(DEFAULT_BOT_NAMES));
   }
 
-  auto data = utils::string::split(buffer, '\n');
-  for (auto &entry : data) {
+  std::vector<BotName> bot_names;
+  std::vector<std::string> data = utils::string::split(buffer, '\n');
+  for (std::string &entry : data) {
     utils::string::replace(entry, "\r", "");
     utils::string::trim(entry);
 
-    if (entry.empty()) {
-      continue;
-    }
+    if (!entry.empty()) {
+      std::string clan_abbrev;
+      // Check if there is a clan tag
+      const size_t pos = entry.find(',');
+      if (pos != std::string::npos) {
+        // Only start copying over from non-null characters (otherwise it can be
+        // "<=")
+        if ((pos + 1) < entry.size()) {
+          clan_abbrev = entry.substr(pos + 1);
+        }
 
-    std::string clan_abbrev;
-    // Check if there is a clan tag
-    if (const auto pos = entry.find(','); pos != std::string::npos) {
-      // Only start copying over from non-null characters (otherwise it can be
-      // "<=")
-      if ((pos + 1) < entry.size()) {
-        clan_abbrev = entry.substr(pos + 1);
+        entry = entry.substr(0, pos);
       }
 
-      entry = entry.substr(0, pos);
-    }
+      BotName name;
+      strscpy(name.name, entry);
+      strscpy(name.clan_abbrev, clan_abbrev);
 
-    bot_names.emplace_back(entry, clan_abbrev);
+      bot_names.emplace_back(name);
+    }
   }
 
-  return bot_names;
+  return bot_names.empty() ? std::vector(std::begin(DEFAULT_BOT_NAMES),
+                                         std::end(DEFAULT_BOT_NAMES))
+                           : bot_names;
 }
 
-const std::vector<bot_name> &get_bot_names() {
-  static const auto bot_names = [] {
-    auto names = load_bots_names();
+const std::vector<BotName> &get_bot_names() {
+  static const std::vector<BotName> bot_names = [] {
+    std::vector<BotName> names = load_bots_names();
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -106,25 +122,25 @@ const std::vector<bot_name> &get_bot_names() {
 
 const char *get_bot_name() {
   static size_t current = 0;
-  const auto &names = get_bot_names();
+  const std::vector<BotName> &names = get_bot_names();
 
   current = (current + 1) % names.size();
-  return names.at(current).first.data();
+  return names.at(current).name;
+}
+const char *find_clan_name(const std::string &needle) {
+  for (const BotName &entry : get_bot_names()) {
+    if (entry.name == needle) {
+      return entry.clan_abbrev;
+    }
+  }
+
+  return "3arc";
 }
 
 int format_bot_string(char *buffer, [[maybe_unused]] const char *format,
                       const char *name, const char *xuid, const char *xnaddr,
                       int protocol, int net_field_chk, const char *session_mode,
                       int qport) {
-  const auto find_clan_name = [](const std::string &needle) -> const char * {
-    for (const auto &entry : get_bot_names()) {
-      if (entry.first == needle) {
-        return entry.second.data();
-      }
-    }
-
-    return "3arc";
-  };
 
   return sprintf_s(buffer, 1024, bot_format_string, name, find_clan_name(name),
                    xuid, xnaddr, protocol, net_field_chk, session_mode, qport);
@@ -132,14 +148,19 @@ int format_bot_string(char *buffer, [[maybe_unused]] const char *format,
 } // namespace
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "bots"; }
+#endif
 
   void post_unpack() override {
-    utils::hook::jump(game::select(0x141653B70, 0x1402732E0), get_bot_name);
-    utils::hook::call(game::select(0x142249097, 0x14052E53A),
+    utils::hook::jump(game::select(0x141653B90, 0x141653B70, 0x1402732E0),
+                      get_bot_name);
+    utils::hook::call(game::select(0x1421EC547, 0x142249097, 0x14052E53A),
                       format_bot_string);
 
-    if (!game::is_server()) {
-      utils::hook::jump(0x141654280_g, get_bot_name); // SV_ZombieNameRandom
+    if (game::is_client()) {
+      utils::hook::jump(game::select(0x1416542A0, 0x141654280, 0x0),
+                        get_bot_name); // SV_ZombieNameRandom
     }
 
     command::add("spawnBot", [](const command::params &params) {

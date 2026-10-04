@@ -1,13 +1,14 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include <game/game.hpp>
 #include "scheduler.hpp"
+#include <game/game.hpp>
 
+#include <atomic>
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
-#include <atomic>
 
 namespace dvars {
 namespace {
@@ -22,7 +23,7 @@ void dvar_for_each_name_stub(void (*callback)(const char *debugName)) {
 
     if (dvar.debugName() && !dvar.flags().sessionmode &&
         (!game::com::Com_SessionMode_IsMode(game::eModes::COUNT) ||
-         !game::Dvar_IsSessionModeBaseDvar(dvar))) {
+         dvar.type() != game::dvarType_t::SESSIONMODE_BASE_DVAR)) {
       callback(dvar.debugName());
     }
   }
@@ -39,7 +40,7 @@ void dvar_for_each_name_client_num_stub(
 
     if (dvar.debugName() && !dvar.flags().sessionmode &&
         (!game::com::Com_SessionMode_IsMode(game::eModes::COUNT) ||
-         !game::Dvar_IsSessionModeBaseDvar(dvar))) {
+         dvar.type() != game::dvarType_t::SESSIONMODE_BASE_DVAR)) {
       callback(localClientNum, dvar.debugName());
     }
   }
@@ -158,7 +159,8 @@ void read_archive_dvars() {
   std::string filedata;
   utils::io::read_file(path, &filedata);
 
-  game::cbuf::Cbuf_ExecuteBuffer(0, game::ControllerIndex_t::CONTROLLER_INDEX_0,
+  game::cbuf::Cbuf_ExecuteBuffer(game::LOCAL_CLIENT_0,
+                                 game::ControllerIndex_t::CONTROLLER_INDEX_0,
                                  filedata.c_str());
   initial_config_read = true;
   scheduler::execute(scheduler::pipeline::dvars_loaded);
@@ -166,28 +168,39 @@ void read_archive_dvars() {
 } // namespace
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "dvars"; }
+#endif
+
 public:
   void post_unpack() override {
-    if (!game::is_server()) {
+    if (game::is_client()) {
       scheduler::once(read_archive_dvars,
                       scheduler::pipeline::dvars_flags_patched);
-      dvar_set_variant_hook.create(0x1422C9030_g, dvar_set_variant_stub);
+      // TODO: this should be a symbol
+      dvar_set_variant_hook.create(game::select(0x14226C510, 0x1422C9030, 0x0),
+                                   dvar_set_variant_stub);
 
       // Show all known dvars in console
-      utils::hook::jump(0x1422BCE30_g, dvar_for_each_name_stub);
-      utils::hook::jump(0x1422BCD80_g, dvar_for_each_name_client_num_stub);
+      // TODO: this should be a symbol
+      utils::hook::jump(game::select(0x142260310, 0x1422BCE30, 0x0),
+                        dvar_for_each_name_stub);
+      // TODO: this should be a symbol
+      utils::hook::jump(game::select(0x142260260, 0x1422BCD80, 0x0),
+                        dvar_for_each_name_client_num_stub);
     }
 
     scheduler::once(copy_dvar_names_to_pool, scheduler::pipeline::main);
 
     // All dvars are recognized as command
-    utils::hook::nop(game::select(0x142151F1A, 0x14050949A), 2);
+    utils::hook::nop(game::select(0x1420F945A, 0x142151F1A, 0x14050949A), 2);
     // Show all dvars in dvarlist command
-    utils::hook::nop(game::select(0x142152227, 0x140509797), 6);
+    utils::hook::nop(game::select(0x1420F9767, 0x142152227, 0x140509797), 6);
     // Show all dvars in dvardump command
-    utils::hook::nop(game::select(0x142151BF9, 0x140509179), 6);
+    utils::hook::nop(game::select(0x1420F9139, 0x142151BF9, 0x140509179), 6);
     // Stops game from deleting debug names from archive dvars
-    utils::hook::set<uint8_t>(game::select(0x1422C5DE0, 0x1405786D0), 0xC3);
+    utils::hook::set<uint8_t>(
+        game::select(0x1422692C0, 0x1422C5DE0, 0x1405786D0), 0xC3);
   }
 };
 } // namespace dvars

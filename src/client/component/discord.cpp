@@ -1,11 +1,13 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
-#include <game/game.hpp>
-#include <game/utils.hpp>
-#include "scheduler.hpp"
 #include "discord.hpp"
 #include "party.hpp"
+#include "scheduler.hpp"
+#include <component/lua/lua_state.hpp>
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 #include <discord_rpc.h>
 
@@ -462,24 +464,63 @@ void set_player_score(const int score) { s_player_score = score; }
 void set_enemy_score(const int score) { s_enemy_score = score; }
 void set_rounds_played(const int round) { s_rounds_played = round; }
 
-class component final : public client_component {
+namespace lua {
+using namespace game;
+using namespace game::lua;
+using namespace game::lua::hks;
+
+luaReturnCount_e lua_returntrue(lua_State *s) {
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e lua_return_empty_string(lua_State *s) {
+  lua_pushstring(s, "");
+  return luaReturnCount_e::ONE;
+}
+void register_lua_libs() {
+  // All functions stubbed - lua discord RPC control by mods is disabled.
+  static constexpr const luaL_Reg DiscordRPC_Library[] = {
+      lua_state::luaL_LoggedReg<"DiscordRPC", "ClearPresence",
+                                lua_returntrue>(),
+      lua_state::luaL_LoggedReg<"DiscordRPC", "Enable", lua_returntrue>(),
+      lua_state::luaL_LoggedReg<"DiscordRPC", "GetJoinSecret",
+                                lua_returntrue>(),
+      lua_state::luaL_LoggedReg<"DiscordRPC", "IsAvailable", lua_returntrue>(),
+      lua_state::luaL_LoggedReg<"DiscordRPC", "OpenInvitePlayers",
+                                lua_returntrue>(),
+      lua_state::luaL_LoggedReg<"DiscordRPC", "Shutdown", lua_returntrue>(),
+      {nullptr, nullptr},
+  };
+  lua_state::register_library("DiscordRPC", DiscordRPC_Library);
+}
+} // namespace lua
+
+class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "discord"; }
+#endif
+
 public:
   void post_load() override {
-    start_time = time(nullptr);
+    if (game::is_client()) {
+      start_time = time(nullptr);
 
-    DiscordEventHandlers handlers{};
-    ZeroMemory(&handlers, sizeof(handlers));
-    handlers.ready = ready;
-    handlers.errored = errored;
-    handlers.disconnected = errored;
+      DiscordEventHandlers handlers{};
+      ZeroMemory(&handlers, sizeof(handlers));
+      handlers.ready = ready;
+      handlers.errored = errored;
+      handlers.disconnected = errored;
 
-    const char *app_id = get_discord_app_id();
-    printf("Discord: App ID %s\n", app_id);
-    Discord_Initialize(app_id, &handlers, 1, nullptr);
+      const char *app_id = get_discord_app_id();
+      printf("Discord: App ID %s\n", app_id);
+      Discord_Initialize(app_id, &handlers, 1, nullptr);
 
-    scheduler::loop(Discord_RunCallbacks, scheduler::pipeline::async, 1s);
-    scheduler::loop(update_discord, scheduler::pipeline::main, 5s);
+      scheduler::loop(Discord_RunCallbacks, scheduler::pipeline::async, 1s);
+      scheduler::loop(update_discord, scheduler::pipeline::main, 5s);
+    }
   }
+  void post_unpack() override { lua::register_lua_libs(); }
 
   void pre_destroy() override { Discord_Shutdown(); }
 };

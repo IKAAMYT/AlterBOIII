@@ -1,22 +1,25 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
+#include "component/path.hpp"
 #include "scheduler.hpp"
+#include <loader/component_loader.hpp>
 
 #include <game/game.hpp>
 #include <game/utils.hpp>
 
+#include <game/impl/game/game.hpp>
 #include <string>
 #include <utils/hook.hpp>
-#include <game/impl/game/game.hpp>
 
 #ifndef NDEBUG
 #include <game/impl/snd/snd.hpp>
 #endif
+#include <component/gsc/gsc.hpp>
 
 namespace script {
 std::string resolve_hash(uint32_t hash);
-int resolve_hash_line(uint32_t hash, int num_params = -1);
-std::string get_source_line(const std::string &file, int line_num);
+int resolve_hash_line(uint32_t hash, int32_t num_params = -1);
+std::string get_source_line(const std::string &file, int32_t line_num);
 } // namespace script
 
 namespace patches {
@@ -119,9 +122,10 @@ void Sys_Error_LogCaller(const char *fmt, ...) {
   fprintf(stderr, "[Sys_Error] Called from 0x%p with message: \"%s\"",
           game::derelocate(callerAddr), msg);
   fflush(stderr);
-  game::trace("[Sys_Error] Called from 0x%p with message: \"%s\"",
+  game::trace("[Sys_Error] Called from {:p} with message: \"{}\"",
               game::derelocate(callerAddr), msg);
-  game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT,
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT,
                         "[Sys_Error] Called from 0x%p with message: \"%s\"",
                         game::derelocate(callerAddr), msg);
   if (game::is_server() && server_restart::restart_pending.load()) {
@@ -136,7 +140,7 @@ void Sys_Error_LogCaller(const char *fmt, ...) {
 #define MINUTE 60 * SECOND
 #define HOUR 60 * MINUTE
 
-void com_error_stub(const char *file, int line, game::errorParm code,
+void com_error_stub(const char *file, int32_t line, game::errorParm code,
                     const char *fmt, ...) {
   void *callerAddr = _ReturnAddress();
   va_list ap;
@@ -151,16 +155,14 @@ void com_error_stub(const char *file, int line, game::errorParm code,
   if (msg == nullptr || msg[0] == '\0') {
     msg = "No message provided!";
   }
-  fprintf(stderr,
-          "[Com_Error] Called from 0x%p with message: \"%s\", code: %d\n",
-          game::derelocate(callerAddr), msg, static_cast<int32_t>(code));
-  fflush(stderr);
-  game::trace("[Com_Error] Called from 0x%p with message: \"%s\", code: %d\n",
-              game::derelocate(callerAddr), msg, static_cast<int32_t>(code));
-  game::com::Com_Printf(
-      0, game::consoleLabel_e::DEFAULT,
-      "ComError called from 0x%p with message: \"%s\", code: %d\n",
+  const char *log = utils::string::va(
+      "[Com_Error] Called from 0x%p with message: \"%s\", code: %d\n",
       game::derelocate(callerAddr), msg, static_cast<int32_t>(code));
+  fprintf(stderr, "%s\n", log);
+  fflush(stderr);
+  game::trace("{}", log);
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "%s\n", log);
   static bool suppress_next_lua_error = false;
   static bool client_script_error_pending = false;
 
@@ -252,18 +254,11 @@ void com_error_stub(const char *file, int line, game::errorParm code,
           if (!resolved_name.empty())
             func = resolved_name;
         } else {
-          // func was already resolved to a name - hash it back
-          uint32_t h = 0x4B9ACE2F;
-          for (char c : func)
-            h = (static_cast<uint32_t>(
-                     std::tolower(static_cast<unsigned char>(c))) ^
-                 h) *
-                0x1000193;
-          h *= 0x1000193;
-          func_hash = h;
+          func_hash = gsc::gsc_hash(func);
         }
-        int num_params_int = params.empty() ? -1 : std::atoi(params.c_str());
-        int src_line = script::resolve_hash_line(func_hash, num_params_int);
+        int32_t num_params_int =
+            params.empty() ? -1 : std::atoi(params.c_str());
+        int32_t src_line = script::resolve_hash_line(func_hash, num_params_int);
 
         printf("^1  Function:  ^5%s^1(%s)\n", func.c_str(), params.c_str());
         printf("^1  Reason:    ^1Unresolved external (function not found)\n");
@@ -314,11 +309,12 @@ void com_error_stub(const char *file, int line, game::errorParm code,
           [deferred_error]() {
             client_script_error_pending = false;
             if (game::com::Com_IsInGame())
-              game::cbuf::Cbuf_AddText(0, "disconnect\n");
+              game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, "disconnect\n");
             scheduler::once(
                 [deferred_error]() {
                   game::ui::UI_OpenErrorPopupWithMessage(
-                      0, game::errorCode::NONE, deferred_error.c_str());
+                      game::LOCAL_CLIENT_0, game::errorCode::NONE,
+                      deferred_error.c_str());
                 },
                 scheduler::pipeline::main, 500ms);
           },
@@ -332,22 +328,12 @@ void com_error_stub(const char *file, int line, game::errorParm code,
            buffer);
   }
 
-  // Suppress Clientfield Mismatch errors - convert to a recoverable ERR_DROP
-  if (strstr(buffer, "Clientfield Mismatch")) {
-    printf("[Com_Error] Suppressing Clientfield Mismatch error, converting to "
-           "ERR_DROP\n");
-    com_error_hook.invoke<void>(file, line, game::errorParm::DROP,
-                                "Mod compatibility issue: %s\nThis mod may "
-                                "require additional patches for boiii.",
-                                buffer);
-    return;
-  }
-
   if (!game::is_server() && code == game::errorParm::DROP) {
     std::string deferred_error = std::string(buffer);
     scheduler::once(
         [deferred_error]() {
-          game::ui::UI_OpenErrorPopupWithMessage(0, game::errorCode::NONE,
+          game::ui::UI_OpenErrorPopupWithMessage(game::LOCAL_CLIENT_0,
+                                                 game::errorCode::NONE,
                                                  deferred_error.c_str());
         },
         scheduler::pipeline::main, 500ms);
@@ -365,8 +351,8 @@ void com_error_stub(const char *file, int line, game::errorParm code,
 
     scheduler::once(
         [msg]() {
-          game::ui::UI_OpenErrorPopupWithMessage(0, game::errorCode::NONE,
-                                                 msg.c_str());
+          game::ui::UI_OpenErrorPopupWithMessage(
+              game::LOCAL_CLIENT_0, game::errorCode::NONE, msg.c_str());
         },
         scheduler::pipeline::main, 500ms);
 
@@ -435,9 +421,9 @@ void PhysPrint_AllOutputs(const char *fmt, ...) {
   fprintf(stdout, "%s\n", formatted_msg);
   fflush(stdout);
 
-  game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT, "%s\n",
-                        formatted_msg);
-  game::trace("%s", formatted_msg);
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "%s\n", formatted_msg);
+  game::trace("{}", formatted_msg);
 }
 #endif
 
@@ -446,9 +432,103 @@ utils::hook::detour G_RegisterSoundWait_hook;
 utils::hook::detour SND_HashName_hook;
 #endif
 
-struct component final : generic_component {
-  void post_unpack() override {
+utils::hook::detour tlAtomicMutex_Lock_hook;
 
+utils::hook::detour fsopen_hook;
+FILE *fsopen_adjustpath(const char *FileName, const char *Mode,
+                        int32_t ShFlag) {
+  if (!FileName) {
+    return nullptr;
+  }
+  std::filesystem::path path = FileName;
+  path = path::normalize(path);
+  const std::string path_str = path.generic_string();
+  return fsopen_hook.invoke<FILE *>(path_str.c_str(), Mode, ShFlag);
+}
+
+utils::hook::detour wfsopen_hook;
+FILE *wfsopen_adjustpath(const wchar_t *FileName, const wchar_t *Mode,
+                         int32_t ShFlag) {
+  if (!FileName) {
+    return nullptr;
+  }
+  std::filesystem::path path = FileName;
+  path = path::normalize(path);
+  const std::wstring path_str = path.native();
+  return wfsopen_hook.invoke<FILE *>(path_str.data(), Mode, ShFlag);
+}
+
+utils::hook::detour mkdir_hook;
+int64_t mkdir_adjustpath(const wchar_t *path) {
+  if (path) {
+    const std::filesystem::path adjusted =
+        path::normalize(std::filesystem::path(path));
+    const std::wstring adjusted_str = adjusted.native();
+    return mkdir_hook.invoke<int64_t>(adjusted_str.c_str());
+  }
+
+  return mkdir_hook.invoke<int64_t>(path);
+}
+
+utils::hook::detour stat64_hook;
+int32_t stat64_adjustpath(const char *fileName, struct _stat64 *stat) {
+  if (fileName) {
+    const std::filesystem::path adjusted = path::normalize(fileName);
+    const std::string adjusted_str = adjusted.generic_string();
+    return stat64_hook.invoke<int32_t>(adjusted_str.c_str(), stat);
+  }
+
+  return stat64_hook.invoke<int32_t>(fileName, stat);
+}
+
+utils::hook::detour stat64i32_hook;
+int32_t stat64i32_adjustpath(const char *fileName, struct _stat64i32 *stat) {
+  if (fileName) {
+    const std::filesystem::path adjusted = path::normalize(fileName);
+    const std::string adjusted_str = adjusted.generic_string();
+    return stat64i32_hook.invoke<int32_t>(adjusted_str.c_str(), stat);
+  }
+
+  return stat64i32_hook.invoke<int32_t>(fileName, stat);
+}
+
+inline void patch_os_fs_apis() {
+  fsopen_hook.create(game::fs::fsopen, fsopen_adjustpath);
+  wfsopen_hook.create(game::fs::wfsopen, wfsopen_adjustpath);
+  mkdir_hook.create(game::fs::__mkdir, mkdir_adjustpath);
+  stat64_hook.create(game::fs::stat64, stat64_adjustpath);
+  stat64i32_hook.create(game::fs::stat64i32, stat64i32_adjustpath);
+}
+
+constexpr size_t PATH_BUFFER_LEN = 0x100;
+utils::hook::detour FS_BuildOSPath_hook;
+void FS_BuildOSPath_adjustpath(const char *base, const char *game,
+                               const char *qpath, char *ospath) {
+  FS_BuildOSPath_hook.invoke(base, game, qpath, ospath);
+
+  if (ospath) {
+    const std::filesystem::path adjusted = path::normalize(ospath);
+    const std::string adjusted_str = adjusted.generic_string();
+    strscpy(ospath, adjusted_str.c_str(), PATH_BUFFER_LEN);
+  }
+}
+
+inline void patch_sys_path_builders() {
+  FS_BuildOSPath_hook.create(game::fs::FS_BuildOSPath,
+                             FS_BuildOSPath_adjustpath);
+}
+
+inline void patch_fs_functions() {
+  patch_os_fs_apis();
+  patch_sys_path_builders();
+}
+
+struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "patches"; }
+#endif
+
+  void post_unpack() override {
     G_RegisterSoundWait_hook.create(game::G_RegisterSoundWait.get(),
                                     game::G_RegisterSoundWait_Impl);
 #ifndef NDEBUG
@@ -458,6 +538,9 @@ struct component final : generic_component {
     // Clientfield Mismatch -> recoverable ERR_DROP
     com_error_hook.create(game::com::Com_Error_, com_error_stub);
     Sys_Error_hook.create(game::sys::Sys_Error, Sys_Error_LogCaller);
+
+    tlAtomicMutex_Lock_hook.create(game::tlAtomicMutex::syms::Lock.get(),
+                                   game::tlAtomicMutex::Lock);
 
     /*
        Fix memory access exception in Sys_WaitForSingleObject during mapswitch.
@@ -469,22 +552,28 @@ struct component final : generic_component {
         game::sys::Sys_WaitForSingleObject.get(), Sys_WaitForSingleObject_Safe);
 
     // print hexadecimal xuids in chat game log command
-    utils::hook::set<char>(game::select(0x142FD9362, 0x140E16FA2), 'x');
+    utils::hook::set<char>(game::select(0x142F5A332, 0x142FD9362, 0x140E16FA2),
+                           'x');
 
     // change 4 character min name limit to 3 characters
-    utils::hook::set<uint8_t>(game::select(0x14224DA53, 0x140531143), 3);
-    utils::hook::set<uint8_t>(game::select(0x14224DBB4, 0x1405312A8), 3);
-    utils::hook::set<uint8_t>(game::select(0x14224DF8C, 0x1405316DC), 3);
+    utils::hook::set<uint8_t>(
+        game::select(0x1421f0f23, 0x14224DA53, 0x140531143), 3);
+    utils::hook::set<uint8_t>(
+        game::select(0x1421f1084, 0x14224DBB4, 0x1405312A8), 3);
+    utils::hook::set<uint8_t>(
+        game::select(0x1421f145c, 0x14224DF8C, 0x1405316DC), 3);
 
     // make sure reliableAck is not negative or too big
-    utils::hook::call(game::select(0x14225489C, 0x140537C4C),
+    utils::hook::call(game::select(0x1421F7D6C, 0x14225489C, 0x140537C4C),
                       sv_execute_client_messages_stub);
 
     lobby_min_players = game::register_dvar_int("lobby_min_players", 0, 0, 8,
                                                 game::DVAR_NONE, "");
 
-    utils::hook::jump(game::select(0x141A7BCF0, 0x1402CB900),
+    utils::hook::jump(game::select(0x141A6F920, 0x141A7BCF0, 0x1402CB900),
                       scr_get_num_expected_players, true);
+
+    patch_fs_functions();
 
 #ifndef NDEBUG
     PhysPrint_hook.create(game::phys::PhysPrint, PhysPrint_AllOutputs);

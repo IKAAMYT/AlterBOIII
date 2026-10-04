@@ -1,18 +1,18 @@
 #include <std_include.hpp>
 
+#include "file_updater.hpp"
 #include "updater.hpp"
 #include "updater_ui.hpp"
-#include "file_updater.hpp"
 
 #include <game/game.hpp>
+#include <utils/compression.hpp>
 #include <utils/cryptography.hpp>
 #include <utils/flags.hpp>
 #include <utils/http.hpp>
 #include <utils/io.hpp>
 #include <utils/progress_ui.hpp>
-#include <utils/compression.hpp>
-#include <utils/string.hpp>
 #include <utils/properties.hpp>
+#include <utils/string.hpp>
 
 #define UPDATE_SERVER "https://r2.ezz.lol/"
 
@@ -26,15 +26,25 @@
 
 namespace updater {
 namespace {
+bool is_dedicated_server();
+
 std::string get_selected_version() {
-  const auto val = utils::properties::load("selectedVersion");
+  if (utils::flags::has_flag("beta") && is_dedicated_server()) {
+    return "beta";
+  }
+
+  const std::optional<std::string> val =
+      utils::properties::load("selectedVersion");
   if (val) {
     return *val;
   }
   return "latest";
 }
 
-bool should_skip_host_update() { return get_selected_version() != "latest"; }
+bool should_skip_host_update() {
+  return get_selected_version() != "latest" &&
+         !(utils::flags::has_flag("beta") && is_dedicated_server());
+}
 
 std::string get_update_file() {
   if (get_selected_version() == "beta") {
@@ -118,8 +128,9 @@ size_t get_optimal_concurrent_download_count(const size_t file_count) {
 
 bool is_inside_folder(const std::filesystem::path &file,
                       const std::filesystem::path &folder) {
-  const auto relative = std::filesystem::relative(file, folder);
-  const auto start = relative.begin();
+  const std::filesystem::path relative =
+      std::filesystem::relative(file, folder);
+  const std::filesystem::path::iterator start = relative.begin();
   return start != relative.end() && start->string() != "..";
 }
 
@@ -179,7 +190,7 @@ void file_updater::create_config_file_if_not_exists() const {
 void file_updater::run() const {
   this->create_config_file_if_not_exists();
 
-  const auto files = get_file_infos();
+  const std::vector<file_info> files = get_file_infos();
 
   OutputDebugStringA(
       ("Found " + std::to_string(files.size()) + " files in update manifest\n")
@@ -189,24 +200,25 @@ void file_updater::run() const {
     this->cleanup_directories(files);
   }
 
-  const auto outdated_files = this->get_outdated_files(files);
+  const std::vector<file_info> outdated_files = this->get_outdated_files(files);
 
   OutputDebugStringA(
       ("Found " + std::to_string(outdated_files.size()) + " outdated files\n")
           .c_str());
 
-  for (const auto &file : outdated_files) {
+  for (const file_info &file : outdated_files) {
     OutputDebugStringA(("  - " + file.name + "\n").c_str());
   }
 
 #ifndef NDEBUG
-  const auto *host_file =
+  const file_info *host_file =
       should_skip_host_update() ? nullptr : find_host_file_info(files);
   if (host_file) {
     std::string data{};
-    const auto drive_name = this->get_drive_filename(*host_file);
+    const std::filesystem::path drive_name =
+        this->get_drive_filename(*host_file);
     if (utils::io::read_file(drive_name, &data)) {
-      const auto hash = get_hash(data);
+      const std::string hash = get_hash(data);
       if (hash != host_file->hash) {
         if (!utils::flags::has_flag("update")) {
           OutputDebugStringA("WARNING: Host binary is outdated but not "
@@ -227,7 +239,7 @@ void file_updater::run() const {
 
   std::vector<file_info> remaining_files;
   remaining_files.reserve(outdated_files.size());
-  for (const auto &file : outdated_files) {
+  for (const file_info &file : outdated_files) {
     if (file.name != UPDATE_HOST_BINARY) {
       remaining_files.emplace_back(file);
     }
@@ -596,9 +608,11 @@ void file_updater::cleanup_directories(
 
 void file_updater::cleanup_root_directory(
     const std::vector<file_info> &files) const {
-  const auto existing_files = utils::io::list_files(this->base_);
+  const std::vector<std::filesystem::path> existing_files =
+      utils::io::list_files(this->base_);
   for (const auto &file : existing_files) {
-    const auto entry = std::filesystem::relative(file, this->base_);
+    const std::filesystem::path entry =
+        std::filesystem::relative(file, this->base_);
     if ((entry.string() == "user" || entry.string() == "data") &&
         utils::io::directory_exists(file)) {
       continue;

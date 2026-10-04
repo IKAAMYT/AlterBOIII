@@ -1,7 +1,8 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
 #include <game/utils.hpp>
+#include <loader/component_loader.hpp>
 
 #if __has_include("version.hpp")
 #include "version.hpp"
@@ -11,9 +12,9 @@
 #endif
 #endif
 
-#include <component/scheduler.hpp>
-#include <component/getinfo.hpp>
 #include <component/console.hpp>
+#include <component/getinfo.hpp>
+#include <component/scheduler.hpp>
 
 #include <string>
 #include <utils/string.hpp>
@@ -28,15 +29,15 @@ void set_server_info_in_console_title() {
   const char *clean_server_name = game::I_CleanStr(server_name.data());
 
   if (!sv_running) {
-    console::set_title(utils::string::va("BOIII V%s - %s - not running",
-                                         SHORTVERSION, clean_server_name));
+    console::set_title(utils::string::va("%s - BOIII V%s - not running",
+                                         clean_server_name, SHORTVERSION));
     return;
   }
 
   const std::string_view mapname = game::get_mapname().value_or("");
 
   const std::string window_text = utils::string::va(
-      "BOIII V%s - %s on %s [%zu/%zu] (%zu)", SHORTVERSION, clean_server_name,
+      "%s - BOIII V%s on %s [%zu/%zu] (%zu)", clean_server_name, SHORTVERSION,
       mapname.data(), getinfo::get_client_count(), game::get_max_client_count(),
       getinfo::get_bot_count());
 
@@ -45,6 +46,10 @@ void set_server_info_in_console_title() {
 } // namespace
 
 class component final : public server_component {
+#ifndef NDEBUG
+  std::string name() override { return "info"; }
+#endif
+
 public:
   void post_unpack() override {
     scheduler::loop(set_server_info_in_console_title, scheduler::pipeline::main,

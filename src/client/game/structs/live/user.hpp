@@ -1,9 +1,10 @@
 #pragma once
 
+#include <game/structs/core.hpp>
+#include <game/structs/dw/dw.hpp>
+#include <game/structs/quake/core.hpp>
+
 #include <cstdint>
-#include "../core.hpp"
-#include "../quake/core.hpp"
-#include "../dw/dw.hpp"
 
 namespace game {
 namespace live {

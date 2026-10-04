@@ -1,10 +1,10 @@
 #pragma once
-#include <game/game.hpp>
-#include "types.hpp"
 #include "script_value.hpp"
+#include "types.hpp"
+#include <game/game.hpp>
 
 namespace ui_scripting {
-using namespace game::ui::lua::hks;
+using namespace game::lua::hks;
 void push_value(const script_value &value);
 void push_value(const HksObject &value);
 

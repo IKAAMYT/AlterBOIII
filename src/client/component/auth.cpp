@@ -1,25 +1,26 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include "auth.hpp"
-#include "party.hpp"
 #include "command.hpp"
 #include "network.hpp"
-#include "scheduler.hpp"
+#include "party.hpp"
 #include "profile_infos.hpp"
+#include "scheduler.hpp"
 
 #include <game/utils.hpp>
 
-#include <utils/hook.hpp>
-#include <utils/string.hpp>
-#include <utils/smbios.hpp>
 #include <utils/byte_buffer.hpp>
-#include <utils/info_string.hpp>
 #include <utils/cryptography.hpp>
-#include <utils/io.hpp>
 #include <utils/flags.hpp>
+#include <utils/hook.hpp>
+#include <utils/info_string.hpp>
+#include <utils/io.hpp>
 #include <utils/named_mutex.hpp>
 #include <utils/properties.hpp>
+#include <utils/smbios.hpp>
+#include <utils/string.hpp>
 
 #include <game/fragment_handler.hpp>
 
@@ -316,12 +317,15 @@ void handle_new_player(const game::net::netadr_t &target) {
 
   if (params.size() > 1) {
     const utils::info_string info_string(params[1]);
-    const game::XUID xuid =
-        ([](){
-                  errno = 0;
-                  uint64_t xuid = strtoull(info_string.get("xuid").data(), nullptr, 16);
-                  return (errno == 0) ? xuid : 0;
-                }());
+    // SECURITY FIX : rejette une valeur hors plage (errno == ERANGE).
+    // La lambda doit capturer info_string : sans capture ([]) ca ne compile
+    // pas.
+    const game::XUID xuid = [&info_string]() -> game::XUID {
+      errno = 0;
+      const uint64_t value =
+          strtoull(info_string.get("xuid").data(), nullptr, 16);
+      return (errno == 0) ? value : 0;
+    }();
 
     size_t player_index = 18;
     game::first_connected_client(
@@ -388,10 +392,12 @@ static concurrent_hash_map<game::net::netadr_t, IssuedChallenge>
 
 thread_local challenge_t challenge_buf = {0};
 const challenge_t &get_challenge(const game::net::netadr_t &target) {
-  while (issued_challenges.try_emplace_l(target, [](auto &v) {
-    v.second.refresh();
-    memcpy(challenge_buf, &v.second.challenge, std::size(challenge_buf));
-  })) {
+  while (issued_challenges.try_emplace_l(
+      target, [](concurrent_hash_map<game::net::netadr_t,
+                                     IssuedChallenge>::value_type &v) {
+        v.second.refresh();
+        memcpy(challenge_buf, &v.second.challenge, std::size(challenge_buf));
+      })) {
   }
   return challenge_buf;
 }
@@ -416,8 +422,9 @@ void send_challenge(const game::net::netadr_t &addr,
 #ifndef NDEBUG
   const std::string hex_challenge_resp = utils::string::hexdump(
       challenge_response_buf, std::size(challenge_response_buf));
-  game::trace("[Auth][Challenge] sending challenge to %s: \"%s\"",
-              addr.toString(), hex_challenge_resp.c_str());
+  game::net::netadr_str_t addrBuf = {0};
+  game::trace("[Auth][Challenge] sending challenge to {}: \"{}\"",
+              addr.toString(addrBuf).buf, hex_challenge_resp.c_str());
 #endif
 
   memcpy(&challenge_response_buf[std::size(CHALLENGE_RESPONSE_COMMAND_PREFIX)],
@@ -474,11 +481,13 @@ void dispatch_connect_packet(const game::net::netadr_t &target,
       profile_infos::acquire_profile_lock();
 
   const utils::info_string info_string(params[1]);
-  const game::XUID xuid = ([](){
-                  errno = 0;
-                  uint64_t xuid = strtoull(info_string.get("xuid").data(), nullptr, 16);
-                  return (errno == 0) ? xuid : 0;
-                }());
+  // SECURITY FIX : rejette une valeur hors plage (errno == ERANGE).
+  const game::XUID xuid = [&info_string]() -> game::XUID {
+    errno = 0;
+    const uint64_t value =
+        strtoull(info_string.get("xuid").data(), nullptr, 16);
+    return (errno == 0) ? value : 0;
+  }();
   if (xuid != key.get_hash()) {
     network::send(target, "error", "Bad XUID");
     return;
@@ -625,18 +634,23 @@ void CL_Disconnect_ClearStoredChallenge(game::LocalClientNum_t localClientNum,
 utils::hook::detour LiveUser_GetXuid_hook;
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "auth"; }
+#endif
+
   void post_unpack() override {
     scheduler::loop(evict_stale_challenges, scheduler::pipeline::async, 5min);
 
     // Skip connect handler
-    utils::hook::set<uint8_t>(game::select(0x142253EFA, 0x14053714A), 0xEB);
+    utils::hook::set<uint8_t>(
+        game::select(0x1421F73CA, 0x142253EFA, 0x14053714A), 0xEB);
     network::on("connect", handle_connect_packet_fragment);
     network::on("playerXuid", handle_player_xuid_packet);
     network::on("getChallengeResponse", set_challenge);
     network::on("getchallenge", send_challenge);
 
     // Intercept SV_DirectConnect in SV_AddTestClient
-    utils::hook::call(game::select(0x1422490DC, 0x14052E582),
+    utils::hook::call(game::select(0x1421EC58C, 0x1422490DC, 0x14052E582),
                       direct_connect_bots_stub);
 
     scheduler::once(
@@ -647,8 +661,8 @@ struct component final : generic_component {
         scheduler::pipeline::main);
 
     // Patch steam id bit check
-    std::vector<std::pair<size_t, size_t>> patches{};
-    const auto p = [&patches](const size_t a, const size_t b) {
+    std::vector<std::pair<uintptr_t, uintptr_t>> patches{};
+    const auto p = [&patches](const uintptr_t a, const uintptr_t b) {
       patches.emplace_back(a, b);
     };
 
@@ -665,27 +679,67 @@ struct component final : generic_component {
       p(0x140475672_g, 0x1404756B5_g);
       p(0x140477322_g, 0x140477365_g); // ?
     } else {
-      p(0x141E19CED_g, 0x141E19D3B_g);
-      p(0x141EB2C76_g, 0x141EB2CB6_g);
-      p(0x141EB2DAD_g, 0x141EB2DF2_g);
-      p(0x141EB3C35_g, 0x141EB3C76_g);
-      p(0x141E19AD0_g, 0x141E19B26_g);
-      //
-      p(0x141EB0EE8_g, 0x141EB0F29_g);
-      p(0x141EB0FA8_g, 0x141EB0FE9_g);
-      p(0x141EB2525_g, 0x141EB2573_g);
-      p(0x141EB264D_g, 0x141EB26A3_g);
-      p(0x141EB277D_g, 0x141EB27C7_g);
+      p(game::live::metplayer::LiveMetPlayer_AddRecent.offset(0xFD),
+        game::live::metplayer::LiveMetPlayer_AddRecent.offset(0x14B));
+      p(game::live::steam::lobby::LiveSteam_Lobby_RequestJoin.offset(0x16),
+        game::live::steam::lobby::LiveSteam_Lobby_RequestJoin.offset(0x56));
+      p(game::live::steam::lobby::LiveSteamLobby_Pump.offset(0x7D),
+        game::live::steam::lobby::LiveSteamLobby_Pump.offset(0xC2));
+      // LiveSteamLobby_GameLobbyJoinRequested_Handle
+      p(game::live::steam::lobby::LiveSteamLobby_GameLobbyJoinRequested_Handle
+            .offset(0x85),
+        game::live::steam::lobby::LiveSteamLobby_GameLobbyJoinRequested_Handle
+            .offset(0xC6));
+      // XUID_Valid
+      p(game::XUID_Valid.offset(0x0), game::XUID_Valid.offset(0x56));
+      // LiveSteam_Friend_AddByID
+      p(game::live::steam::friends::LiveSteam_Friend_AddByID.offset(0x28),
+        game::live::steam::friends::LiveSteam_Friend_AddByID.offset(0x69));
+      // LiveSteam_Friend_Overlay_ShowFriendByID
+      p(game::live::steam::friends::overlay::
+            LiveSteam_Friend_Overlay_ShowFriendByID.offset(0x28),
+        game::live::steam::friends::overlay::
+            LiveSteam_Friend_Overlay_ShowFriendByID.offset(0x69));
+      // LiveSteamLobby_GetLobbyData_WithCallback
+      p(game::live::steam::lobby::LiveSteamLobby_GetLobbyData_WithCallback
+            .offset(0x65),
+        game::live::steam::lobby::LiveSteamLobby_GetLobbyData_WithCallback
+            .offset(0xB3));
+      // LiveSteamLobby_GetLobbyDataByIndex_WithCallback
+      p(game::live::steam::lobby::
+            LiveSteamLobby_GetLobbyDataByIndex_WithCallback.offset(0x6D),
+        game::live::steam::lobby::
+            LiveSteamLobby_GetLobbyDataByIndex_WithCallback.offset(0xC3));
+      // LiveSteamLobby_GetLobbyDataCount_WithCallback
+      p(game::live::steam::lobby::LiveSteamLobby_GetLobbyDataCount_WithCallback
+            .offset(0x5D),
+        game::live::steam::lobby::LiveSteamLobby_GetLobbyDataCount_WithCallback
+            .offset(0xA7));
 
-      p(0x141EB2AEA_g, 0x141EB2AFA_g);
-      p(0x141EB2B01_g, 0x141EB2B33_g);
+      p(game::live::steam::auth::LiveSteamAuth_Pump.offset(0x2A),
+        game::live::steam::auth::LiveSteamAuth_Pump.offset(0x3A));
+      p(game::live::steam::auth::LiveSteamAuth_Pump.offset(0x41),
+        game::live::steam::auth::LiveSteamAuth_Pump.offset(0x73));
 
-      p(0x141EB3137_g, 0x141EB3147_g);
-      p(0x141EB314E_g, 0x141EB317F_g);
+      p(game::live::steam::lobby::LiveSteamLobby_GetAndValidateID.offset(0x27),
+        game::live::steam::lobby::LiveSteamLobby_GetAndValidateID.offset(0x37));
+      p(game::live::steam::lobby::LiveSteamLobby_GetAndValidateID.offset(0x3E),
+        game::live::steam::lobby::LiveSteamLobby_GetAndValidateID.offset(0x6F));
 
-      p(0x141EB5377_g, 0x141EB53BF_g); // ?
-      p(0x141EB5992_g, 0x141EB59D5_g);
-      p(0x141EB74D2_g, 0x141EB7515_g); // ?
+      // LiveSteamServer_GetAuthDataById
+      p(game::live::steam::server::LiveSteamServer_GetAuthDataById.offset(0x37),
+        game::live::steam::server::LiveSteamServer_GetAuthDataById.offset(
+            0x7F)); // ?
+      // LiveSteamServer_EndAllClientAuthSessions
+      p(game::live::steam::server::LiveSteamServer_EndAllClientAuthSessions
+            .offset(0x42),
+        game::live::steam::server::LiveSteamServer_EndAllClientAuthSessions
+            .offset(0x85));
+      // LiveSteamServer_SteamServersDisconnected_Handle
+      p(game::live::steam::server::
+            LiveSteamServer_SteamServersDisconnected_Handle.offset(0x42),
+        game::live::steam::server::
+            LiveSteamServer_SteamServersDisconnected_Handle.offset(0x85)); // ?
 
       LiveUser_UserGetXuid_hook.create(
           game::live::user::LiveUser_UserGetXuid.get(),
@@ -698,7 +752,7 @@ struct component final : generic_component {
                                 CL_Disconnect_ClearStoredChallenge);
     }
 
-    for (const auto &patch : patches) {
+    for (const std::pair<uintptr_t, uintptr_t> &patch : patches) {
       utils::hook::jump(patch.first, patch.second);
     }
   }

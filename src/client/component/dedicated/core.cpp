@@ -1,6 +1,7 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
+#include <loader/component_loader.hpp>
 
 #include <utils/flags.hpp>
 #include <utils/hook.hpp>
@@ -74,6 +75,10 @@ template <const uint8_t Count> inline void set_max_name_characters() {
 } // namespace
 
 struct component final : server_component {
+#ifndef NDEBUG
+  std::string name() override { return "core"; }
+#endif
+
   void post_unpack() override {
     // Fix infinite loop
     utils::hook::jump(0x1402E86B0_g, scr_are_textures_loaded_stub);

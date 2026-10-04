@@ -1,31 +1,18 @@
 #include <std_include.hpp>
+
 #include "flags.hpp"
 
 namespace game {
 
-static std::once_flag extract_flag;
-static bool extract;
-
-void set_extract_assets() {
-  extract = utils::flags::has_flag("extract-assets");
-}
-
 bool extract_assets() {
-  std::call_once(extract_flag, set_extract_assets);
-  return extract;
-}
-
-static std::once_flag pattern_flag;
-static std::regex pattern;
-
-void set_extract_pattern() {
-  pattern = std::regex(
-      utils::flags::get<std::string>("extract-assets").value_or("^.*$"));
+  static const bool result = utils::flags::has_flag("extract-assets");
+  return result;
 }
 
 std::regex extract_pattern() {
-  std::call_once(pattern_flag, set_extract_pattern);
-  return pattern;
+  static const std::regex result = std::regex(
+      utils::flags::get<std::string>("extract-assets").value_or("^.*$"));
+  return result;
 }
 
 static std::filesystem::path output;
@@ -66,29 +53,50 @@ void set_tracing() {
               (game::is_client() ? "debug.log" : "debug-server.log");
   }
 }
-std::filesystem::path tracing_logfile() {
+std::filesystem::path tracing_logfile_path() {
   std::call_once(tracing_flag, set_tracing);
   return tracing;
 }
+
+static std::ofstream logfile;
+static std::once_flag tracing_logfile_flag;
+void set_tracing_logfile() {
+  logfile = std::ofstream(tracing_logfile_path(), std::ios::app);
+}
+
+std::ofstream &tracing_logfile() {
+  std::call_once(tracing_logfile_flag, set_tracing_logfile);
+  return logfile;
+}
 #endif
 
-static bool ultrawide_enabled;
-static std::once_flag ultrawide_flag;
-void set_ultrawide() {
-  ultrawide_enabled = utils::flags::has_flag("ultrawide");
-}
-
 bool ultrawide() {
-  std::call_once(ultrawide_flag, set_ultrawide);
-  return ultrawide_enabled;
+  static const bool result = utils::flags::has_flag("ultrawide");
+  return result;
 }
-
-static bool cheats_enabled;
-static std::once_flag cheats_flag;
-void set_cheats() { cheats_enabled = utils::flags::has_flag("cheats"); }
 
 bool cheats() {
-  std::call_once(cheats_flag, set_cheats);
-  return cheats_enabled;
+  static const bool result = utils::flags::has_flag("cheats");
+  return result;
+}
+
+bool disable_loadlib() {
+  static const bool result = utils::flags::has_flag("disable-loadlib");
+  return result;
+}
+
+bool quiet_crash() {
+  static const bool quiet_crash = utils::flags::has_flag("quiet-crash");
+  return quiet_crash;
+}
+
+bool alias() {
+  static const bool alias = utils::flags::has_flag("alias");
+  return alias;
+}
+
+bool is_headless() {
+  static const bool headless = utils::flags::has_flag("headless");
+  return headless;
 }
 } // namespace game

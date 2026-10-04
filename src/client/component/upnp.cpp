@@ -1,4 +1,5 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include "scheduler.hpp"
@@ -128,6 +129,10 @@ std::string external_endpoint() {
 }
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "upnp"; }
+#endif
+
 public:
   void pre_destroy() override { close_port(); }
 };

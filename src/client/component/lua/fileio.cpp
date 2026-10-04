@@ -1,0 +1,450 @@
+#include <filesystem>
+#include <std_include.hpp>
+
+#include <game/game.hpp>
+
+#include <loader/component_loader.hpp>
+
+#include <component/lua/lua_state.hpp>
+#include <component/path.hpp>
+
+#include <utils/io.hpp>
+
+namespace fileio {
+using namespace game::lua::hks;
+using namespace game::lua;
+
+bool SetClipboardText(const std::string_view &text) {
+  if (!OpenClipboard(nullptr)) {
+    return false;
+  }
+
+  if (!EmptyClipboard()) {
+    CloseClipboard();
+    return false;
+  }
+
+  size_t size = text.length() + 1;
+  HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+  if (!hMem) {
+    CloseClipboard();
+    return false;
+  }
+
+  char *pMem = static_cast<char *>(GlobalLock(hMem));
+  if (pMem) {
+    memcpy(pMem, text.data(), size);
+    GlobalUnlock(hMem);
+  } else {
+    GlobalFree(hMem);
+    CloseClipboard();
+    return false;
+  }
+
+  if (!SetClipboardData(CF_TEXT, hMem)) {
+    GlobalFree(hMem);
+    CloseClipboard();
+    return false;
+  }
+
+  CloseClipboard();
+  return true;
+}
+
+std::wstring GetClipboardText() {
+  if (!OpenClipboard(nullptr)) {
+    return L"";
+  }
+
+  if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+    CloseClipboard();
+    return L"";
+  }
+
+  HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+  if (hData == nullptr) {
+    CloseClipboard();
+    return L"";
+  }
+
+  const wchar_t *pszText = static_cast<const wchar_t *>(GlobalLock(hData));
+  if (pszText == nullptr) {
+    CloseClipboard();
+    return L"";
+  }
+
+  std::wstring result(pszText);
+
+  GlobalUnlock(hData);
+  CloseClipboard();
+
+  return result;
+}
+
+std::string WideToNarrow(const std::wstring_view &wstr) {
+  // Set the locale to the system's default to handle multibyte characters
+  // properly
+  std::setlocale(LC_CTYPE, "");
+
+  std::mbstate_t state = std::mbstate_t();
+  const wchar_t *src = wstr.data();
+
+  // Get the required size of the destination narrow string buffer
+  size_t len = std::wcsrtombs(nullptr, &src, 0, &state);
+  if (len == static_cast<size_t>(-1)) {
+    return ""; // Conversion failed (invalid wide character encountered)
+  }
+
+  // Allocate space and perform the actual conversion
+  std::vector<char> buffer(len + 1);
+  src = wstr.data(); // Reset source pointer
+  std::wcsrtombs(buffer.data(), &src, buffer.size(), &state);
+
+  return std::string(buffer.data());
+}
+
+luaReturnCount_e clipboard_get(lua_State *s) {
+  std::string contents = "";
+  try {
+    const std::wstring wide_contents = GetClipboardText();
+    contents = WideToNarrow(wide_contents);
+  } catch (...) {
+  }
+  lua_pushstring(s, contents.c_str());
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e clipboard_set(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+      SetClipboardText(lua_tostring(s, 1));
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e copy(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 1 && lua_isstring(s, 1) && lua_isstring(s, 2)) {
+      const char *src_path_arg = lua_tostring(s, 1);
+      const char *dest_path_arg = lua_tostring(s, 2);
+      // Third arg is boolean, and can take boolean-like string ("true"). Not
+      // sure what it is for.
+      if (src_path_arg && dest_path_arg) {
+        const std::filesystem::path src_path = path::normalize(src_path_arg);
+        const std::filesystem::path dest_path = path::normalize(dest_path_arg);
+        if (std::filesystem::is_regular_file(src_path)) {
+          const std::filesystem::path dest_parent = dest_path.parent_path();
+          if (!std::filesystem::exists(dest_parent) ||
+              std::filesystem::is_directory(dest_parent)) {
+            std::filesystem::create_directories(dest_parent);
+            std::filesystem::copy_file(src_path, dest_path);
+
+            lua_pushboolean(s, htrue);
+            return luaReturnCount_e::ONE;
+          }
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e move(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 1 && lua_isstring(s, 1) && lua_isstring(s, 2)) {
+      const char *src_path_arg = lua_tostring(s, 1);
+      const char *dest_path_arg = lua_tostring(s, 2);
+      // Third arg is boolean, and can take boolean-like string ("true"). Not
+      // sure what it is for.
+      if (src_path_arg && dest_path_arg) {
+        const std::filesystem::path src_path = path::normalize(src_path_arg);
+        const std::filesystem::path dest_path = path::normalize(dest_path_arg);
+        const std::filesystem::path dest_parent = dest_path.parent_path();
+        if (!std::filesystem::exists(dest_parent) ||
+            std::filesystem::is_directory(dest_parent)) {
+          std::filesystem::create_directories(dest_parent);
+          if (std::filesystem::exists(dest_path)) {
+            std::filesystem::remove_all(dest_path);
+          }
+          std::filesystem::rename(src_path, dest_path);
+
+          lua_pushboolean(s, htrue);
+          return luaReturnCount_e::ONE;
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e hard_link(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 1 && lua_isstring(s, 1) && lua_isstring(s, 2)) {
+      const char *src_path_arg = lua_tostring(s, 1);
+      const char *dest_path_arg = lua_tostring(s, 2);
+      // Third arg is boolean, and can take boolean-like string ("true"). Not
+      // sure what it is for.
+      if (src_path_arg && dest_path_arg) {
+        const std::filesystem::path src_path = path::normalize(src_path_arg);
+        const std::filesystem::path dest_path = path::normalize(dest_path_arg);
+        if (std::filesystem::is_regular_file(src_path)) {
+          const std::filesystem::path dest_parent = dest_path.parent_path();
+          if ((!std::filesystem::exists(dest_parent) ||
+               std::filesystem::is_directory(dest_parent)) &&
+              !std::filesystem::exists(dest_path)) {
+            std::filesystem::create_directories(dest_parent);
+            std::filesystem::create_hard_link(src_path, dest_path);
+
+            lua_pushboolean(s, htrue);
+            return luaReturnCount_e::ONE;
+          }
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e copy_directory(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 1 && lua_isstring(s, 1) && lua_isstring(s, 2)) {
+      const char *src_path_arg = lua_tostring(s, 1);
+      const char *dest_path_arg = lua_tostring(s, 2);
+      // Third arg is boolean, and can take boolean-like string ("true"). Not
+      // sure what it is for.
+      if (src_path_arg && dest_path_arg) {
+        const std::filesystem::path src_path = path::normalize(src_path_arg);
+        const std::filesystem::path dest_path = path::normalize(dest_path_arg);
+        if (std::filesystem::is_directory(src_path)) {
+          const std::filesystem::path dest_parent = dest_path.parent_path();
+          if (!std::filesystem::exists(dest_parent) ||
+              std::filesystem::is_directory(dest_parent)) {
+            std::filesystem::create_directories(dest_parent);
+            std::filesystem::copy(
+                src_path, dest_path,
+                std::filesystem::copy_options::overwrite_existing |
+                    std::filesystem::copy_options::recursive);
+
+            lua_pushboolean(s, htrue);
+            return luaReturnCount_e::ONE;
+          }
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e mkdir(lua_State *s) {
+  try {
+    if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+      const char *arg_path = lua_tostring(s, 1);
+      if (arg_path) {
+        const std::filesystem::path path = path::normalize(arg_path);
+        // In case path is regular file or symlink
+        if (!std::filesystem::exists(path)) {
+          std::filesystem::create_directories(path);
+        }
+        lua_pushboolean(s, htrue);
+        return luaReturnCount_e::ONE;
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e directory_exists(lua_State *s) {
+  if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+    const char *arg_path = lua_tostring(s, 1);
+    lua_pushboolean(s, arg_path && std::filesystem::is_directory(
+                                       path::normalize(arg_path)));
+  } else {
+    lua_pushboolean(s, hfalse);
+  }
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e file_exists(lua_State *s) {
+  if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+    const char *arg_path = lua_tostring(s, 1);
+    lua_pushboolean(s, arg_path && std::filesystem::is_regular_file(
+                                       path::normalize(arg_path)));
+  } else {
+    lua_pushboolean(s, hfalse);
+  }
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e file_size(lua_State *s) {
+  size_t result = 0;
+  if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+    const char *arg_path = lua_tostring(s, 1);
+    if (arg_path) {
+      const std::filesystem::path path = path::normalize(arg_path);
+      if (std::filesystem::is_regular_file(path)) {
+        result = std::filesystem::file_size(path);
+      }
+    }
+  }
+  lua_pushinteger(s, result);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e read_file(lua_State *s) {
+  std::string result = "";
+  try {
+    if (lua_gettop(s) > 0 && lua_isstring(s, 1)) {
+      const char *arg_path = lua_tostring(s, 1);
+      if (arg_path) {
+        const std::filesystem::path path = path::normalize(arg_path);
+        if (std::filesystem::is_regular_file(path)) {
+          result = utils::io::read_file(path);
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushstring(s, result.c_str());
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e write_file(lua_State *s) {
+  std::string result = "";
+  try {
+    if (lua_gettop(s) > 1 && lua_isstring(s, 1) && lua_isstring(s, 2)) {
+      const char *arg_path = lua_tostring(s, 1);
+      const char *data = lua_tostring(s, 2);
+
+      const bool append = lua_gettop(s) > 2 && lua_isboolean_like(s, 3)
+                              ? lua_toboolean(s, 3)
+                              : false;
+      if (arg_path && data) {
+        const std::filesystem::path path = path::normalize(arg_path);
+        if (std::filesystem::is_directory(path.parent_path()) &&
+            !std::filesystem::is_directory(path)) {
+          lua_pushboolean(s, utils::io::write_file(path, data, append));
+          return luaReturnCount_e::ONE;
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pushboolean(s, hfalse);
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e wine(lua_State *luaVM) {
+  lua_pushboolean(luaVM, utils::nt::is_wine());
+  return luaReturnCount_e::ONE;
+}
+
+luaReturnCount_e t7_patch_loaded(lua_State *luaVM) {
+  lua_pushboolean(luaVM, htrue);
+  return luaReturnCount_e::ONE;
+}
+
+/*
+   Note: for T7Recharged compatibility, this is implemented incorrectly.
+
+   T7Recharged seems to instead return a space-delimited list of paths as one
+   string here. This breaks parsing of paths that contain a space, making this
+   function essentially useless.
+
+   It also is a poor API choice - users will have to always manually split
+   returned paths into separate items for any usage (iteration, global storage).
+
+   This is likely the reason why there are no known, published mods currently
+   using this function.
+
+   As such, we likely do not need to maintain compatibility for the poorly
+   designed API used in T7Recharged for `ListFiles`, and both could and should
+   improve on it here.
+*/
+
+luaReturnCount_e list_files(lua_State *luaVM) {
+  std::vector<std::filesystem::path> entries;
+  try {
+    if (lua_gettop(luaVM) > 0 && lua_isstring(luaVM, 1)) {
+      // Argument path is either first argument or default to PWD
+      const char *arg_path =
+          lua_gettop(luaVM) > 0 && lua_isstring(luaVM, 1)
+              ? lua_tostring(luaVM, 1)
+              : nullptr; /* This allows us to cleanly handle both missing
+                          argument or nullptr stack value below */
+      const std::filesystem::path path =
+          arg_path ? path::normalize(arg_path) : path::cwd();
+      if (std::filesystem::is_directory(path)) {
+        for (const std::filesystem::directory_entry &entry :
+             std::filesystem::recursive_directory_iterator(path)) {
+          entries.push_back(entry);
+        }
+      }
+    }
+  } catch (...) {
+  }
+  lua_pusharray(luaVM, entries);
+  return luaReturnCount_e::ONE;
+}
+
+class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "fileio"; }
+#endif
+
+public:
+  void post_unpack() override {
+    static constexpr const luaL_Reg FileIOLibrary[] = {
+        lua_state::luaL_LoggedReg<"FileIO", "ClipboardGet",
+                                  lua_state::unsafe_function<clipboard_get>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "ClipboardSet",
+                                  lua_state::unsafe_function<clipboard_set>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "Copy",
+                                  lua_state::unsafe_function<copy>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "CopyDirectory",
+                                  lua_state::unsafe_function<copy_directory>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "CreateDirectory",
+                                  lua_state::unsafe_function<mkdir>>(),
+        lua_state::luaL_LoggedReg<
+            "FileIO", "DirectoryExists",
+            lua_state::unsafe_function<directory_exists>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "FileExists",
+                                  lua_state::unsafe_function<file_exists>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "FileSize",
+                                  lua_state::unsafe_function<file_size>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "HardLink",
+                                  lua_state::unsafe_function<hard_link>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "ListFiles",
+                                  lua_state::unsafe_function<list_files>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "Move",
+                                  lua_state::unsafe_function<move>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "ReadFile",
+                                  lua_state::unsafe_function<read_file>>(),
+        lua_state::luaL_LoggedReg<
+            "FileIO", "T7PatchLoaded",
+            lua_state::unsafe_function<t7_patch_loaded>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "Wine",
+                                  lua_state::unsafe_function<wine>>(),
+        lua_state::luaL_LoggedReg<"FileIO", "WriteFile",
+                                  lua_state::unsafe_function<write_file>>(),
+
+        {nullptr, nullptr},
+    };
+    lua_state::register_library("FileIO", FileIOLibrary);
+  }
+};
+} // namespace fileio
+
+REGISTER_COMPONENT(fileio::component)

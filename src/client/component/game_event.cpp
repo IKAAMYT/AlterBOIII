@@ -1,6 +1,7 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include <game/game.hpp>
+#include <loader/component_loader.hpp>
 
 #include "game_event.hpp"
 
@@ -46,11 +47,15 @@ void on_g_shutdown_game(const game_event_cb callback) {
 }
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "game_event"; }
+#endif
+
 public:
   void post_unpack() override {
-    utils::hook::call(game::select(0x1419DD6EC, 0x1402ABC1B),
+    utils::hook::call(game::select(0x1419D15F9, 0x1419DD6EC, 0x1402ABC1B),
                       rope_init_ropes_stub);
-    utils::hook::call(game::select(0x141A02AAD, 0x1402ADF1D),
+    utils::hook::call(game::select(0x1419F66DD, 0x141A02AAD, 0x1402ADF1D),
                       mantle_shutdown_anims_stub);
   }
 };

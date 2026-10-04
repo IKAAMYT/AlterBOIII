@@ -1,17 +1,18 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include <game/game.hpp>
 #include <steam/steam.hpp>
 
-#include "network.hpp"
 #include "auth.hpp"
+#include "network.hpp"
 #include "network_password.hpp"
-#include "workshop.hpp"
 #include "scheduler.hpp"
+#include "workshop.hpp"
 
-#include <utils/string.hpp>
 #include <utils/info_string.hpp>
+#include <utils/string.hpp>
 
 // In case of clangd compilation
 #if __has_include("version.hpp")
@@ -64,11 +65,13 @@ size_t get_bot_count() {
   return count;
 }
 
-int get_assigned_team() { return (rand() % 2) + 1; }
-
 bool is_host() { return game::server_running(); }
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "getinfo"; }
+#endif
+
   void post_unpack() override {
 
     game::sv_wwwDownload = game::register_dvar_bool(
@@ -87,9 +90,6 @@ struct component final : generic_component {
               "or loaded usermap otherwise.");
         },
         scheduler::pipeline::main);
-
-    // utils::hook::jump(game::select(0x142254EF0, 0x140537730),
-    // get_assigned_team);
 
     network::on("getInfo", [](const game::net::netadr_t &target,
                               const network::data_view &data,

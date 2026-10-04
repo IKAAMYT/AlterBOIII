@@ -1,6 +1,7 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include "chat.hpp"
+#include <loader/component_loader.hpp>
 
 #include <game/game.hpp>
 #include <game/utils.hpp>
@@ -10,42 +11,107 @@
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
 
-#include "command.hpp"
 #include "client_command.hpp"
+#include "command.hpp"
+#include "console_command.hpp"
 #include "scheduler.hpp"
+#include "sv.hpp"
+
+#include <atomic>
+#include <charconv>
 
 namespace chat {
 namespace {
 game::EngineDependentDvar g_deadChat;
 game::EngineDependentDvar sv_sayname;
+game::lobby::AtomicLobbyClientPool<bool> muted_clients{};
 
-void cmd_say_f(game::level::gentity_s *ent, const command::params_sv &params) {
-  if (params.size() < 2) {
+std::optional<game::ClientNum_t> parse_client_num(const char *value) {
+  const std::string_view text(value);
+  std::underlying_type_t<game::ClientNum_t> client_num;
+  const auto [ptr, error] =
+      std::from_chars(text.data(), text.data() + text.size(), client_num);
+
+  return game::valid_client_num(static_cast<game::ClientNum_t>(client_num)) &&
+                 error == std::errc() && ptr == text.data() + text.size()
+             ? std::optional(static_cast<game::ClientNum_t>(client_num))
+             : std::nullopt;
+}
+
+bool is_muted(const game::level::gentity_s *ent) {
+  if (!ent) {
+    return false;
+  }
+
+  const game::ClientNum_t client_num =
+      static_cast<game::ClientNum_t>(ent->s.number);
+  return game::valid_client_num(client_num) &&
+         muted_clients[client_num].load(std::memory_order_relaxed);
+}
+
+template <const bool Toggle> void toggle_mute(const command::params &params) {
+  constexpr const char *command_name = Toggle ? "muteclient" : "unmuteclient";
+  constexpr const char *status_str = Toggle ? "muted" : "unmuted";
+  if (params.size() != 2) {
+    printf("Usage: %s <client number>\n", command_name);
     return;
   }
 
-  int mode = 0;
+  const std::optional<game::ClientNum_t> client_num =
+      parse_client_num(params[1]);
+  if (!client_num.has_value() || !game::valid_client_num(client_num.value())) {
+    printf("Invalid client number. Expected a value from 0 to %d.\n",
+           game::CLIENT_INDEX_COUNT - 1);
+    return;
+  }
+
+  if constexpr (Toggle) {
+    if (!game::access_connected_client(*client_num,
+                                       [](game::sv::client_s &) {})) {
+      printf("Client %d is not connected.\n", *client_num);
+      return;
+    }
+  }
+
+  muted_clients[*client_num].store(Toggle, std::memory_order_relaxed);
+  printf("Client %d is now %s.\n", *client_num, status_str);
+}
+
+void cmd_say_f(game::level::gentity_s *ent, const command::params_sv &params) {
+  if (params.size() <= 1) {
+    return;
+  }
+
+  int32_t mode = 0;
   if (params[0] == "say_team"s) {
     mode = 1;
   }
 
-  const auto p = params.join(1);
-  game::scr::Scr_AddString(game::scr::SCRIPTINSTANCE_SERVER,
-                           p.data() + 1); // Skip special char
-  game::scr::Scr_Notify_Canon(ent, game::CanonHash(params[0]), 1);
+  const std::string p = params.join(1);
+  const char *notify_text = p.data();
+  if (!p.empty() && static_cast<unsigned char>(p.front()) < 0x20) {
+    ++notify_text;
+  }
+  game::scr::Scr_AddString(game::scr::SCRIPTINSTANCE_SERVER, notify_text);
+  game::scr::Scr_Notify_Canon(ent, game::CanonHash("chat"), 1);
 
-  game::G_Say(ent, nullptr, mode, p.data());
+  if (!is_muted(ent)) {
+    const std::string chat_message = std::to_string(mode) + " " + p;
+    game::G_Chat(ent, chat_message.data());
+  }
 }
 
 void cmd_chat_f(game::level::gentity_s *ent, const command::params_sv &params) {
-  auto p = params.join(1);
+  const std::string p = params.join(1);
 
   // Not a mistake! + 2 is necessary for the GSC script to receive only the
   // actual chat text
   game::scr::Scr_AddString(game::scr::SCRIPTINSTANCE_SERVER, p.data() + 2);
   game::scr::Scr_Notify_Canon(ent, game::CanonHash(params[0]), 1);
 
-  utils::hook::invoke<void>(0x140298E70_g, ent, p.data());
+  if (!is_muted(ent)) {
+    game::G_Chat(ent, p.data());
+  }
 }
 
 uint64_t *
@@ -64,25 +130,25 @@ void send_chat_message(game::ClientNum_t client_num, const std::string &text) {
 
 // This function has probably a different name
 void g_say_to_stub(utils::hook::assembler &a) {
-  const auto no_dead_chat = a.newLabel();
+  const asmjit::Label no_dead_chat = a.get().new_label();
 
   // game's code
-  a.mov(rax, qword_ptr(rbx));
+  a.get().mov(rax, qword_ptr(rbx));
 
-  a.push(rax);
+  a.get().push(rax);
 
-  a.mov(rax, qword_ptr(reinterpret_cast<std::uintptr_t>(&g_deadChat)));
-  a.mov(al, byte_ptr(rax, 0x28)); // dvar_t.current.value.enabled
-  a.test(al, al);
+  a.get().mov(rax, qword_ptr(reinterpret_cast<std::uintptr_t>(&g_deadChat)));
+  a.get().mov(al, byte_ptr(rax, 0x28)); // dvar_t.current.value.enabled
+  a.get().test(al, al);
 
-  a.pop(rax);
+  a.get().pop(rax);
 
-  a.je(no_dead_chat);
+  a.get().je(no_dead_chat);
 
   a.jmp(0x140299061_g);
 
-  a.bind(no_dead_chat);
-  a.cmp(dword_ptr(rax, 0x16AE0), 0x0); // game's code
+  a.get().bind(no_dead_chat);
+  a.get().cmp(dword_ptr(rax, 0x16AE0), 0x0); // game's code
   a.jmp(0x14029905B_g);
 }
 
@@ -92,18 +158,14 @@ void cl_handle_chat(char *dest, size_t dest_size, const char *src) {
 }
 
 inline const char *sv_sayname_val() {
-  if (sv_sayname) {
-    return sv_sayname.get_cstring();
-  }
-
-  return nullptr;
+  return sv_sayname ? sv_sayname.get_cstring() : nullptr;
 }
 } // namespace
 
 const char *get_client_name(const uint64_t xuid) {
-  if (xuid == 0xFFFFFFFF || xuid == 0xFFFFFFFFFFFFFFFF) {
+  if (xuid == 0 || xuid == 0xFFFFFFFF || xuid == 0xFFFFFFFFFFFFFFFF) {
     const char *val = sv_sayname_val();
-    return val ? val : "Server";
+    return val && *val ? val : "Server";
   }
 
   if (xuid > 0 && xuid < 19 && !game::is_server()) {
@@ -111,27 +173,30 @@ const char *get_client_name(const uint64_t xuid) {
     game::cl::CL_GetClientName(game::LOCAL_CLIENT_0, static_cast<int>(xuid - 1),
                                buffer, sizeof(buffer), true);
     std::string name(buffer);
-    auto pipe = name.find('|');
+    const size_t pipe = name.find('|');
     if (pipe != std::string::npos)
       name = name.substr(0, pipe);
     return utils::string::va("%s", name.c_str());
   }
 
-  return "Unknown Soldier";
+  return "Server";
 }
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "chat"; }
+#endif
+
 public:
   void post_unpack() override {
-    utils::hook::call(game::select(0x141974B04, 0x14029908A),
+    utils::hook::call(game::select(0x141974B24, 0x141974B04, 0x14029908A),
                       divert_xuid_to_client_num_stub);
 
+    client_command::register_handler("say", cmd_say_f);
+    client_command::register_handler("say_team", cmd_say_f);
+    client_command::register_handler("chat", cmd_chat_f);
+
     if (game::is_server()) {
-      client_command::add("say", cmd_say_f);
-      client_command::add("say_team", cmd_say_f);
-
-      client_command::add("chat", cmd_chat_f);
-
       // Overwrite say command
       utils::hook::jump(
           0x14052A6C0_g, +[] {
@@ -146,7 +211,7 @@ public:
             send_chat_message(game::INVALID_CLIENT_INDEX, text);
 
             const char *val = sv_sayname_val();
-            const char *say_prefix = val ? val : "Server";
+            const char *say_prefix = val ?: "Server";
             printf("%s: %s\n", say_prefix, text.data());
           });
 
@@ -174,10 +239,20 @@ public:
       // Kill say fallback
       utils::hook::set<uint8_t>(0x1402FF987_g, 0xEB);
 
+      console_command::add_console("muteclient", toggle_mute<true>);
+      console_command::add_console("unmuteclient", toggle_mute<false>);
+
+      sv::on_removeclient([](game::sv::client_s *client, const char *) {
+        const game::ClientNum_t client_num = sv::get_client_num(client);
+        if (game::valid_client_num(client_num)) {
+          muted_clients[client_num].store(false, std::memory_order_relaxed);
+        }
+      });
+
       scheduler::once(
           [] {
             sv_sayname = game::register_dvar_string(
-                "sv_sayname", "", game::DVAR_SERVERINFO,
+                "sv_sayname", "Server", game::DVAR_SERVERINFO,
                 "Custom name for server chat messages");
           },
           scheduler::pipeline::main);
@@ -196,7 +271,8 @@ public:
           },
           scheduler::pipeline::main);
 
-      utils::hook::call(0x141DEAA0F_g, cl_handle_chat);
+      utils::hook::call(game::select(0x141DDDF7F, 0x141DEAA0F, 0x0),
+                        cl_handle_chat);
     }
   }
 };

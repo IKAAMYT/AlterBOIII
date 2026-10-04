@@ -1,10 +1,11 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
 #include "localized_strings.hpp"
+#include <game/game.hpp>
+#include <loader/component_loader.hpp>
+#include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
-#include <utils/concurrency.hpp>
-#include <game/game.hpp>
 
 namespace localized_strings {
 namespace {
@@ -31,11 +32,15 @@ void override(const std::string &key, const std::string &value) {
 }
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "localized_strings"; }
+#endif
+
 public:
   void post_unpack() override {
     // Change some localized strings
-    seh_string_ed_get_string_hook.create(0x1422796E0_g,
-                                         &seh_string_ed_get_string);
+    seh_string_ed_get_string_hook.create(
+        game::select(0x14221CBC0, 0x1422796E0, 0x0), &seh_string_ed_get_string);
   }
 };
 } // namespace localized_strings

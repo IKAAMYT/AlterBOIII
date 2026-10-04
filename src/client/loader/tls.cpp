@@ -1,8 +1,9 @@
 #include <std_include.hpp>
+
 #include "tls.hpp"
 
-#include <utils/nt.hpp>
 #include <utils/binary_resource.hpp>
+#include <utils/nt.hpp>
 
 #include <resource.hpp>
 
@@ -21,7 +22,8 @@ PIMAGE_TLS_DIRECTORY allocate_tls_index() {
   already_allocated.store(true, std::memory_order_seq_cst);
 
   const std::string dll_path = tls_dll_file.get_extracted_file();
-  const utils::nt::library tls_dll = utils::nt::library::load(dll_path);
+  const utils::nt::library tls_dll =
+      utils::nt::library::load(std::string_view(dll_path));
   if (!tls_dll) {
     throw std::runtime_error("Failed to load TLS DLL");
   }

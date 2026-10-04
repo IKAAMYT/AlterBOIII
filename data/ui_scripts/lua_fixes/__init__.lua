@@ -1,6 +1,15 @@
 -- Fix LUI_NULL_FUNCTION messages
 function Engine.PIXBeginEvent() end
+
 function Engine.PIXEndEvent() end
+
+Engine.SetDvar("tu5_enableVialsOwed", 0)
+
+if type(GoBackAndOpenOverlayOnParent) == "function" then
+  GoBackAndOpenOverlayOnParent = function(menu, overlay, controller)
+    return OpenOverlay(GoBack(menu, controller), overlay, controller)
+  end
+end
 
 -- XP bar pcall fix
 pcall(function()
@@ -27,11 +36,11 @@ pcall(function()
   if CoD.AARUtilityZM then
     local origSetup = CoD.AARUtilityZM.SetupUIModels
     if origSetup then
-      CoD.AARUtilityZM.SetupUIModels = function(arg0)
-        local ok, err = pcall(origSetup, arg0)
+      CoD.AARUtilityZM.SetupUIModels = function(controller)
+        local ok, err = pcall(origSetup, controller)
         if not ok then
           pcall(function()
-            local root = Engine.GetModelForController(arg0)
+            local root = Engine.GetModelForController(controller)
             local sm = Engine.CreateModel(root, "aarStats.performanceTabStats")
             local defs = {
               kills = 0,
@@ -55,6 +64,12 @@ pcall(function()
             end
           end)
         end
+        pcall(function()
+          local root = Engine.GetModelForController(controller)
+          local stats = Engine.CreateModel(root, "aarStats.performanceTabStats")
+          local gained = Dvar.cg_last_divinium_award and Dvar.cg_last_divinium_award:get() or 0
+          Engine.SetModelValue(Engine.CreateModel(stats, "bgbTokensGainedThisGame"), gained)
+        end)
       end
     end
     local origGetMatch = CoD.AARUtilityZM.GetMatchStat

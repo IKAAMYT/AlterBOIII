@@ -9,7 +9,9 @@
 
 ---
 
-> [!NOTE] Feel free to open up Pull requests 😑
+> [!NOTE]
+>
+> Feel free to open up Pull requests 😑
 
 ---
 
@@ -89,7 +91,9 @@ play!
 3. **Run** `BOIII.exe`
 4. **Play!** 🎮
 
-> [!TIP] The default Steam installation path is usually:
+> [!TIP]
+>
+> The default Steam installation path is usually:
 > `C:/Program Files (x86)/Steam/steamapps/common/Call of Duty Black Ops III`
 
 ---
@@ -108,7 +112,9 @@ for help!
 
 ## Loading Mods & Custom Maps
 
-> [!TIP] **Default Workshop Location (Steam):**
+> [!TIP]
+>
+> **Default Workshop Location (Steam):**
 > `C:/Program Files (x86)/Steam/steamapps/workshop/content/311210/`
 >
 > **BOIII comes with a built-in Workshop Downloader** - see the
@@ -139,7 +145,9 @@ for help!
 
 4. **Launch Ezz BOIII** and select your mod/map from the menu! 🎮
 
-> [!IMPORTANT] **For Workshop Downloads from Steam:**
+> [!IMPORTANT]
+>
+> **For Workshop Downloads from Steam:**
 >
 > - Workshop items are in numbered folders (e.g., `311210/1234567890/`)
 > - Copy the entire numbered folder
@@ -218,6 +226,7 @@ Launch BOIII with these arguments for extra features:
 | `-mitigatepacketspam` | In dedicated server, attempt to reduce unnecessary reliable command packets sent by some custom maps' scripts. Fixes Kowloon and Daybreak client load-in failures.                                                                           |
 | `-nosnd`              | Disable attempt to load and use sound assets in dedicated server.                                                                                                                                                                            |
 | `-dump`               | Dump game or server executable to file in containing directory after Arxan unpack.                                                                                                                                                           |
+| `-disable-loadlib`    | Disable loading DLLs via `package.loadlib` in Lua. Can fix compatibility with mods that load DLLs that apply conflicting engine modifications.                                                                                               |
 
 **Example:**
 
@@ -225,9 +234,11 @@ Launch BOIII with these arguments for extra features:
 boiii.exe -nointro -console -unsafe-lua
 ```
 
-> [!WARNING] The `-unsafe-lua` argument is **required** for certain mods that
-> need to modify the UI, menus, or game scripts (like All-Around Enhancement
-> Mod). Only use this with trusted mods!
+> [!WARNING]
+>
+> The `-unsafe-lua` argument is **required** for certain mods that need to
+> modify the UI, menus, or game scripts (like All-Around Enhancement Mod). Only
+> use this with trusted mods!
 >
 > The `-headless` option may not behave correctly on non-server systems.
 
@@ -294,7 +305,10 @@ boiii.exe -nointro -console -unsafe-lua
 - Local: `/connect 192.168.1.100:27017`
 - WAN: `/connect 45.123.67.89:27017`
 
-> [!TIP] Find your local IP: Press `Win + R`, type `cmd`, then type `ipconfig`
+> [!TIP]
+>
+> Find your local IP: Press `Win + R`, type `cmd`, then type `ipconfig`
+>
 > Find your WAN IP: Visit [WhatIsMyIP.com](https://www.whatismyip.com/)
 
 ### Port Forwarding Alternatives
@@ -353,8 +367,10 @@ zone/zm_zod_patch.ff
 2. **Repeat** for each map you want to host
 3. **Skip** `.xpak` files (these are textures/sounds that servers don't need)
 
-> [!NOTE] If the server crashes on startup, check `console_mp.log` for missing
-> zone files
+> [!NOTE]
+>
+> If the server crashes on startup, check `console_mp.log` for missing zone
+> files
 
 **Common Maps:**
 

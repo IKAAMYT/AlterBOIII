@@ -1,9 +1,10 @@
 #include <std_include.hpp>
+
 #include "execution.hpp"
 #include "stack_guard.hpp"
 
 namespace ui_scripting {
-using namespace game::ui::lua::hks;
+using namespace game::lua::hks;
 namespace {
 script_value get_field(void *ptr, HksObjectType type, const script_value &key) {
   lua_State *state = *primary_luaVM;

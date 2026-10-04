@@ -1,15 +1,15 @@
 #pragma once
 
-#include <cstdint>
 #include "core.hpp"
-#include "net/net.hpp"
 #include "db/xasset/core.hpp"
-#include "scr/core.hpp"
-#include "weapon.hpp"
-#include "vehicle.hpp"
 #include "hunk.hpp"
 #include "level/core.hpp"
+#include "net/net.hpp"
+#include "scr/core.hpp"
 #include "steam.hpp" // IWYU pragma: keep
+#include "vehicle.hpp"
+#include "weapon.hpp"
+#include <cstdint>
 
 namespace game {
 
@@ -372,7 +372,7 @@ partial_def(CLIENTACTIVE_SIZE, struct, clientActive_t, {
   int32_t serverTimeErrorPrev;
   int32_t serverTimeError[20];
   int32_t serverTimeError2[20];
-  str64_t mapname;
+  zoneName_t mapname;
   int32_t parseMatchStateIndex;
   int32_t parseCasterStateIndex;
   int32_t parseCasterClientsIndex;

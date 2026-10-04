@@ -8,8 +8,8 @@
 #include <game/utils.hpp>
 
 #include <utils/hook.hpp>
-#include <utils/string.hpp>
 #include <utils/io.hpp>
+#include <utils/string.hpp>
 
 namespace game_log {
 namespace {
@@ -73,6 +73,10 @@ game::EngineDependentDvar register_g_log_stub() {
 } // namespace
 
 class component final : public server_component {
+#ifndef NDEBUG
+  std::string name() override { return "game_log"; }
+#endif
+
 public:
   void post_unpack() override {
     // Fix format string vulnerability & make it work

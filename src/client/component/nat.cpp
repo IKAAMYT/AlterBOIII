@@ -1,11 +1,12 @@
 #include <std_include.hpp>
+
 #include "loader/component_loader.hpp"
 
 #include "game/game.hpp"
 #include "game/utils.hpp"
 
-#include "getinfo.hpp"
 #include "auth.hpp"
+#include "getinfo.hpp"
 #include "nat.hpp"
 #include "network.hpp"
 #include "party.hpp"
@@ -212,7 +213,7 @@ void complete_join(const game::net::netadr_t &endpoint) {
 
 void show_join_failure() {
   game::ui::UI_OpenErrorPopupWithMessage(
-      0, game::errorCode::UI,
+      game::LOCAL_CLIENT_0, game::errorCode::UI,
       "The friend could not be reached. Their match may have closed, or one "
       "of the networks may block UDP hole punching.");
 }
@@ -488,6 +489,10 @@ void refresh_friends(const std::vector<uint64_t> &steam_ids,
 }
 
 class component final : public client_component {
+#ifndef NDEBUG
+  std::string name() override { return "nat"; }
+#endif
+
 public:
   void post_unpack() override {
     scheduler::once(

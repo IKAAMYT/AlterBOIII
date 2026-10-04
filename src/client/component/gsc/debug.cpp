@@ -29,18 +29,18 @@ inline void log_method_call_helper(const char *table_name,
   char entref_str_buf[93] = {0};
   const char *method_name =
       gsc::builtin_method_name(canonId).value_or("UNKNOWN");
-  trace("[Scr][Method] Calling built-in method with inst: %s, entref: %s, name "
-        "\"%s::%s\", address: 0x%p",
+  trace("[Scr][Method] Calling built-in method with inst: {}, entref: {}, name "
+        "\"{}::{}\", address: {:p}",
         serialize(inst), entref->serialize(entref_str_buf), table_name,
-        method_name, game::derelocate(original_func));
+        method_name, static_cast<void *>(game::derelocate(original_func)));
 
   original_func(inst, entref);
 
   entref->serialize(entref_str_buf);
   trace("[Scr][Method] Returning from call to built-in method with "
-        "inst: %s, entref: %s, name \"%s::%s\", address: 0x%p",
+        "inst: {}, entref: {}, name \"{}::{}\", address: {:p}",
         serialize(inst), entref->serialize(entref_str_buf), table_name,
-        method_name, game::derelocate(original_func));
+        method_name, static_cast<void *>(game::derelocate(original_func)));
 }
 
 inline void log_function_call_helper(const char *table_name,
@@ -50,16 +50,16 @@ inline void log_function_call_helper(const char *table_name,
   const char *function_name =
       gsc::builtin_function_name(canonId).value_or("UNKNOWN");
   trace("[Scr][Function] Calling built-in function with inst: "
-        "%s, name \"%s::%s\", address: 0x%p",
+        "{}, name \"{}::{}\", address: {:p}",
         serialize(inst), table_name, function_name,
-        game::derelocate(original_func));
+        static_cast<void *>(game::derelocate(original_func)));
 
   original_func(inst);
 
   trace("[Scr][Function] Returning from call to built-in function "
-        "with inst: %s, name \"%s::%s\", address: 0x%p",
+        "with inst: {}, name \"{}::{}\", address: {:p}",
         serialize(inst), table_name, function_name,
-        game::derelocate(original_func));
+        static_cast<void *>(game::derelocate(original_func)));
 }
 
 inline void log_all_builtin_calls() {
@@ -67,36 +67,34 @@ inline void log_all_builtin_calls() {
 #ifndef LOG_TABLE_FUNCTION_CALL
 #define LOG_TABLE_FUNCTION_CALL(table, function)                               \
   {                                                                            \
-    const_cast<BuiltinFunctionDef *>(&table->function)->type.devblockOnly = 0; \
+    table->function.type.devblockOnly = 0;                                     \
     using HookTag = decltype([] {});                                           \
     HookStateFunction<HookTag>::original_func = table->function.actionFunc;    \
     HookStateFunction<HookTag>::canon_id = table->function.canonId;            \
     HookStateFunction<HookTag>::table_name = #table;                           \
-    const_cast<BuiltinFunctionDef *>(&table->function)->actionFunc =           \
-        [](scriptInstance_t inst) {                                            \
-          log_function_call_helper(HookStateFunction<HookTag>::table_name,     \
-                                   HookStateFunction<HookTag>::original_func,  \
-                                   HookStateFunction<HookTag>::canon_id,       \
-                                   inst);                                      \
-        };                                                                     \
+    table->function.actionFunc = [](scriptInstance_t inst) {                   \
+      log_function_call_helper(HookStateFunction<HookTag>::table_name,         \
+                               HookStateFunction<HookTag>::original_func,      \
+                               HookStateFunction<HookTag>::canon_id, inst);    \
+    };                                                                         \
   }
 #endif
 
 #ifndef LOG_TABLE_METHOD_CALL
 #define LOG_TABLE_METHOD_CALL(table, method)                                   \
   {                                                                            \
-    const_cast<BuiltinMethodDef *>(&table->method)->type.devblockOnly = 0;     \
+    table->method.type.devblockOnly = 0;                                       \
     using HookTag = decltype([] {});                                           \
     HookStateMethod<HookTag>::original_func = table->method.actionFunc;        \
     HookStateMethod<HookTag>::canon_id = table->method.canonId;                \
     HookStateMethod<HookTag>::table_name = #table;                             \
-    const_cast<BuiltinMethodDef *>(&table->method)->actionFunc =               \
-        [](scriptInstance_t inst, scr_entref_t *entref) {                      \
-          log_method_call_helper(HookStateMethod<HookTag>::table_name,         \
-                                 HookStateMethod<HookTag>::original_func,      \
-                                 HookStateMethod<HookTag>::canon_id, inst,     \
-                                 entref);                                      \
-        };                                                                     \
+    table->method.actionFunc = [](scriptInstance_t inst,                       \
+                                  scr_entref_t *entref) {                      \
+      log_method_call_helper(HookStateMethod<HookTag>::table_name,             \
+                             HookStateMethod<HookTag>::original_func,          \
+                             HookStateMethod<HookTag>::canon_id, inst,         \
+                             entref);                                          \
+    };                                                                         \
   }
 #endif
   LOG_TABLE_METHOD_CALL(game::scr::builtin::table::gscr::builtin_methods,
@@ -4811,7 +4809,7 @@ inline void log_all_builtin_calls() {
   LOG_TABLE_FUNCTION_CALL(game::scr::builtin::table::cscr::ui_functions,
                           SetUIModelValue);
   LOG_TABLE_FUNCTION_CALL(game::scr::builtin::table::cscr::ui_functions,
-                          StopSound);
+                          SetExtraCamRenderReady);
 
   LOG_TABLE_FUNCTION_CALL(game::scr::builtin::table::cscr::util_functions,
                           ReportStubUsage);
@@ -5734,7 +5732,11 @@ inline void log_all_builtin_calls() {
                           Modvar);
 }
 
-struct component final : server_component {
+struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "debug"; }
+#endif
+
   void post_unpack() override {
     if (utils::flags::has_flag("scr-trace")) {
       log_all_builtin_calls();

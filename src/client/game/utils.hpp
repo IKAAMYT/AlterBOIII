@@ -16,12 +16,18 @@ get_dvar_string(const char *dvar_name);
 [[nodiscard]] std::optional<float> get_dvar_float(const char *dvar_name);
 [[nodiscard]] std::optional<bool> get_dvar_bool(const char *dvar_name);
 
-std::optional<int> set_dvar_int(const char *dvar_name, int32_t val);
-std::optional<int64_t> set_dvar_int64(const char *dvar_name, int64_t val);
-std::optional<uint64_t> set_dvar_uint64(const char *dvar_name, uint64_t val);
-bool set_dvar_bool(EngineDependentDvar dvar, bool val);
-std::optional<bool> set_dvar_bool(const char *dvar_name, bool val);
-std::optional<float> set_dvar_float(const char *dvar_name, float val);
+std::optional<int> set_dvar_int(const char *dvar_name, int32_t val,
+                                bool execModifiedCallback = true);
+std::optional<int64_t> set_dvar_int64(const char *dvar_name, int64_t val,
+                                      bool execModifiedCallback = true);
+std::optional<uint64_t> set_dvar_uint64(const char *dvar_name, uint64_t val,
+                                        bool execModifiedCallback = true);
+bool set_dvar_bool(EngineDependentDvar dvar, bool val,
+                   bool execModifiedCallback = true);
+std::optional<bool> set_dvar_bool(const char *dvar_name, bool val,
+                                  bool execModifiedCallback = true);
+std::optional<float> set_dvar_float(const char *dvar_name, float val,
+                                    bool execModifiedCallback = true);
 std::optional<std::string> set_dvar_string(const char *dvar_name,
                                            const char *val);
 
@@ -169,6 +175,9 @@ void dvar_remove_flags(const char *dvar_name, const T flags) {
   }
 }
 
+[[nodiscard]] inline std::optional<std::string_view> get_fs_game() {
+  return *fs_game ? fs_game->get_string() : std::nullopt;
+}
 [[nodiscard]] inline std::optional<std::string_view> get_mapname() {
   return *mapname ? mapname->get_string() : std::nullopt;
 }
@@ -354,8 +363,8 @@ inline bool valid_dvar(const EngineDependentDvar dvar) {
 }
 
 namespace level {
-template <typename T, typename = typename std::enable_if<std::is_convertible<
-                          T, game::ClientNum_t>::value>::type>
+template <typename T>
+  requires(std::is_convertible_v<T, game::ClientNum_t>)
 inline level::gentity_t *client_ent(T index) {
   level::gentity_pool *pool = get_g_entities();
   ClientNum_t clientNum = static_cast<game::ClientNum_t>(index);

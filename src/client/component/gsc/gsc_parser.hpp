@@ -6,20 +6,22 @@
 namespace gsc_compiler {
 // AST node types
 enum class node_type {
-  n_script,       // root: includes, namespace, functions
-  n_include,      // #using path;
-  n_namespace,    // #namespace name;
-  n_function_def, // function definition
-  n_block,        // { statements }
-  n_return,       // return [expr];
-  n_if,           // if (cond) block [else block]
-  n_while,        // while (cond) block
-  n_do_while,     // do block while (cond);
-  n_for,          // for (init; cond; iter) block
-  n_foreach,      // foreach (val in arr) / foreach (key, val in arr)
-  n_switch,       // switch (expr) { cases }
-  n_case,         // case expr:
-  n_default_case, // default:
+  n_script,         // root: includes, namespace, functions
+  n_include,        // #using path;
+  n_using_animtree, // #using_animtree("tree_name");
+  n_animtree,       // #animtree
+  n_namespace,      // #namespace name;
+  n_function_def,   // function definition
+  n_block,          // { statements }
+  n_return,         // return [expr];
+  n_if,             // if (cond) block [else block]
+  n_while,          // while (cond) block
+  n_do_while,       // do block while (cond);
+  n_for,            // for (init; cond; iter) block
+  n_foreach,        // foreach (val in arr) / foreach (key, val in arr)
+  n_switch,         // switch (expr) { cases }
+  n_case,           // case expr:
+  n_default_case,   // default:
   n_break,
   n_continue,
   n_wait, // wait(expr);
@@ -45,21 +47,26 @@ enum class node_type {
   n_self,
   n_level,
   n_game,
-  n_anim,
-  n_field_access, // expr.field
-  n_array_access, // expr[key]
-  n_size,         // expr.size
-  n_vector,       // (x, y, z)
-  n_empty_array,  // []
-  n_func_ref,     // ::func or path::func
-  n_waittill,     // obj waittill("event", ...)
-  n_notify,       // obj notify("event", ...)
-  n_endon,        // obj endon("event")
-  n_world,        // world
-  n_classes,      // classes
-  n_precache,     // #precache(type, value)
-  n_waitrealtime, // waitrealtime(expr)
-  n_ternary,      // cond ? true_expr : false_expr
+  n_anim,          // `anim` or `anim.field`
+  n_tree_anim,     // `%anim_name`
+  n_field_access,  // expr.field
+  n_array_access,  // expr[key]
+  n_size,          // expr.size
+  n_vector,        // (x, y, z)
+  n_empty_array,   // []
+  n_func_ref,      // ::func or path::func
+  n_waittill,      // obj waittillmatch("event", ...)
+  n_waittillmatch, // obj waittill("event", ...)
+  n_notify,        // obj notify("event", ...)
+  n_endon,         // obj endon("event")
+  n_world,         // world
+  n_classes,       // classes
+  n_precache,      // #precache(type, value)
+  n_waitrealtime,  // waitrealtime(expr)
+  n_ternary,       // cond ? true_expr : false_expr
+  n_ref_param,     // (&arg)
+  n_variadic_param // (...)
+
 };
 
 struct ast_node {

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include <game/structs/macros.hpp>
 #include <structs/func.hpp>
 
 namespace game {
@@ -69,6 +70,16 @@ struct DDLDef {
   int32_t userFlagsSize;
   bool paddingUsed;
 };
+ASSERT_SIZE(DDLDef, 0x60);
+
+struct DDLState {
+  bool isValid;
+  int32_t offset;
+  int32_t arrayIndex;
+  DDLMember *member;
+  const DDLDef *ddlDef;
+};
+ASSERT_SIZE(DDLState, 0x20);
 
 struct DDLContext;
 typedef fastcallPtr_t<void(DDLContext *ctx, void *data)> DDLWriteCB;
@@ -80,6 +91,21 @@ struct DDLContext {
   DDLWriteCB writeCB;
   void *userData;
 };
+
+PACKED(struct StringTableCell {
+  const char *string;
+  int32_t hash;
+  uint8_t _padding0C[4];
+});
+
+struct StringTable {
+  const char *name;
+  int32_t columnCount;
+  int32_t rowCount;
+  StringTableCell *values;
+  int16_t *cellIndex;
+};
+ASSERT_SIZE(StringTable, 0x20);
 
 } // namespace ddl
 } // namespace game

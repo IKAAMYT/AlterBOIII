@@ -1,9 +1,10 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
-#include "resource.hpp"
 
-#include <utils/nt.hpp>
+#include "resource.hpp"
+#include <loader/component_loader.hpp>
+
 #include <utils/hook.hpp>
+#include <utils/nt.hpp>
 
 namespace icon {
 namespace {
@@ -25,6 +26,10 @@ HICON WINAPI load_icon_a_stub(HINSTANCE module, LPCSTR icon_name) {
 } // namespace
 
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "icon"; }
+#endif
+
   void post_load() override {
     load_icon_a_hook.create(LoadIconA, load_icon_a_stub);
   }

@@ -1,14 +1,15 @@
 #include <std_include.hpp>
+
 #include "command.hpp"
 #include <loader/component_loader.hpp>
 
-#include <game/game.hpp>
-#include <game/utils.hpp>
 #include "../command.hpp"
 #include "../network.hpp"
 #include "../scheduler.hpp"
 #include "../server_list.hpp"
 #include <component/game_event.hpp>
+#include <game/game.hpp>
+#include <game/utils.hpp>
 
 #include <utils/hook.hpp>
 
@@ -61,6 +62,10 @@ void trigger_map_rotation() {
 }
 
 struct component final : server_component {
+#ifndef NDEBUG
+  std::string name() override { return "command"; }
+#endif
+
   void post_unpack() override {
     // Ignore "bad stats"
     // utils::hook::set<uint8_t>(0x14052D523_g, 0xEB);

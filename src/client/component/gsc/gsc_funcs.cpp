@@ -1,29 +1,33 @@
-#include <atomic>
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
-#include <game/utils.hpp>
-#include "../game_event.hpp"
-#include "../name.hpp"
 
+#include "gsc_funcs.hpp"
+
+#include <atomic>
 #include <optional>
 #include <string>
+
+#include <game/impl/scr/scr.hpp>
+#include <game/impl/scr/var.hpp>
+#include <game/impl/sv/sv.hpp>
+#include <game/utils.hpp>
+
+#include <component/command.hpp>
+#include <component/game_event.hpp>
+#include <component/name.hpp>
+#include <component/toast.hpp>
+#include <loader/component_loader.hpp>
+
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
 
 #include <rapidjson/writer.h>
 
-#include "../command.hpp"
-#include "game/impl/scr/var.hpp"
-#include "game/impl/scr/scr.hpp"
-#include "game/impl/sv/sv.hpp"
-#include "gsc_funcs.hpp"
-
 using namespace game;
 using namespace game::scr;
 
 namespace gsc::custom_builtins {
-CustomBuiltinMap<BuiltinFunctionDef> functions;
-CustomBuiltinMap<BuiltinMethodDef> methods;
+static ScrPool<CustomBuiltinMap<BuiltinFunctionDef>> functions;
+static ScrPool<CustomBuiltinMap<BuiltinMethodDef>> methods;
 } // namespace gsc::custom_builtins
 
 namespace script {
@@ -280,7 +284,7 @@ struct HudElemCfgStringPool : ui::he::HudElementPool<RegisteredCfgString> {
 } static hudelem_cfgstr_pool = {};
 
 void unregister_clear_hudelem_cfgstr(uint16_t hudElemIdx) {
-  RegisteredCfgString *entry = &hudelem_cfgstr_pool[hudElemIdx];
+  volatile RegisteredCfgString *entry = &hudelem_cfgstr_pool[hudElemIdx];
   if (entry->has_value()) {
     ui::he::g_hudelems->get(hudElemIdx).elem.text = 0;
     // TAC-protected on client, so we use a re-implementation to circumvent.
@@ -302,7 +306,8 @@ inline void clear_message_bufs() {
 
 void HECmd_SetText_ReuseCfgString(scriptInstance_t inst, scr_entref_t *entref) {
   if (entref->is_hudelem()) [[likely]] {
-    game_hudelem_t *elem = &g_hudelems->get(entref->u.hudElemIndex);
+    const uint16_t hudElemIdx = entref->u.hudElemIndex;
+    volatile game_hudelem_t *elem = &g_hudelems->get(hudElemIdx);
 
     elem->reset_value();
     const uint32_t argc = Scr_GetNumParam(inst);
@@ -311,8 +316,11 @@ void HECmd_SetText_ReuseCfgString(scriptInstance_t inst, scr_entref_t *entref) {
     com::Com_CleanStringForNetwork(message_buf, cleaned_message_buf,
                                    std::size(cleaned_message_buf));
 
-    elem->elem.type = he_type_field_t::TEXT;
-    const uint16_t hudElemIdx = entref->u.hudElemIndex;
+    // Assign to underlying directly to allow copy-assignment to volatile.
+    // Volatile copy-assign is not provided by default and definition breaks
+    // C++-03 PoD constraints :(.
+    elem->elem.type.underlying = he_type_field_t::TEXT;
+
     volatile RegisteredCfgString *pool_entry = &hudelem_cfgstr_pool[hudElemIdx];
 
     const bgCacheInstance cache_inst = static_cast<bgCacheInstance>(inst);
@@ -334,8 +342,8 @@ void HECmd_SetText_ReuseCfgString(scriptInstance_t inst, scr_entref_t *entref) {
 #ifndef NDEBUG
         trace("[Scr][HECmd_SetText] Registered localized string "
               "configstring for "
-              "hudelement 0x%03X with "
-              "index 0x%lX",
+              "hudelement 0x{:03X} with "
+              "index 0x{:X}",
               hudElemIdx, pool_entry->get_idx());
 #endif
       }
@@ -345,11 +353,12 @@ void HECmd_SetText_ReuseCfgString(scriptInstance_t inst, scr_entref_t *entref) {
 
 #ifndef NDEBUG
       trace("[Scr][HECmd_SetText] Localized config string entry with "
-            "index 0x%lX, "
-            "absolute config string index 0x%lX: got localized string data "
-            "pointer: 0x%p",
+            "index 0x{:X}, "
+            "absolute config string index 0x{:X}: got localized string data "
+            "pointer: {:p}",
             pool_entry->get_idx(), pool_entry->abs_idx(),
-            game::derelocate(data));
+            const_cast<void *>(
+                static_cast<volatile void *>(game::derelocate(data))));
 #endif
       data->setName(cleaned_message_buf);
       if (!data->refCount) {
@@ -359,8 +368,8 @@ void HECmd_SetText_ReuseCfgString(scriptInstance_t inst, scr_entref_t *entref) {
 
 #ifndef NDEBUG
       trace("[Scr][HECmd_SetText] Localized config string entry with "
-            "index 0x%lX, "
-            "absolute config string index 0x%lX: setting value to \"%s\"",
+            "index 0x{:X}, "
+            "absolute config string index 0x{:X}: setting value to \"{}\"",
             pool_entry->get_idx(), pool_entry->abs_idx(), cleaned_message_buf);
 #endif
       // TAC-protected on client, so we use a re-implementation to circumvent.
@@ -397,8 +406,8 @@ void BG_Cache_HandleConfigStringChange_ReuseExisting(
     [[maybe_unused]] LocalClientNum_t localClientNum, int32_t index) {
   const char *name = cl::CL_GetConfigString(index);
 #ifndef NDEBUG
-  trace("[BGCache][%u][%d] Received config string change with index: 0x%lX, "
-        "name: \"%s\"",
+  trace("[BGCache][{}][{}] Received config string change with index: 0x{:X}, "
+        "name: \"{}\"",
         +bgCacheInstance::CLIENT, +localClientNum, index,
         readable_ptr(name) ? name : "");
 #endif
@@ -418,28 +427,45 @@ void BG_Cache_HandleConfigStringChange_ReuseExisting(
       data->add_ref();
     }
     s_bgCache->client.checksum.isDirty = true;
-
-    /*
-      Registration or modification of a config string with this index causes the
-      client to recompute its BG Cache checksum and validate it against the
-      server's - this is not a true config string modification.
-
-      In a release profile build (ours), an invalid checksum does not trigger
-      an error or corrective behaviour otherwise - it simply logs the mismatch
-      to BB, re-computes the checksum, and continues. This recomputation of the
-      checksum causes a noticeable, slight drop in performance for the ~1/2 a
-      second it is occurring, so it seems preferable to skip this.
-    */
   } else {
     BG_Cache_HandleConfigStringChange_hook.invoke(localClientNum, index);
   }
 }
 
+template <const BuiltinMethod &hooked>
+void HECmd_ClearInvoke(scriptInstance_t inst, scr_entref_t *entref) {
+  if (entref->is_hudelem() && sv::sv->running()) {
+    unregister_clear_hudelem_cfgstr(entref->u.hudElemIndex);
+  }
+  hooked(inst, entref);
+}
+
 // HECmd script VM method hooks
 inline void apply_hecmd_hooks() {
-  BuiltinMethodDef *HECmd_SetText_def = const_cast<BuiltinMethodDef *>(
-      &game::scr::builtin::table::hudElem_methods->SetText);
-  HECmd_SetText_def->actionFunc = &hecmd_settext::HECmd_SetText_ReuseCfgString;
+  game::scr::builtin::table::hudElem_methods->SetText.actionFunc =
+      hecmd_settext::HECmd_SetText_ReuseCfgString;
+
+#ifndef HOOK_CLEAR_HECMD
+#define HOOK_CLEAR_HECMD(name)                                                 \
+  static const BuiltinMethod HECmd_##name##_Orig =                             \
+      game::scr::builtin::table::hudElem_methods->name.actionFunc;             \
+  game::scr::builtin::table::hudElem_methods->name.actionFunc =                \
+      HECmd_ClearInvoke<HECmd_##name##_Orig>;
+#endif
+
+  HOOK_CLEAR_HECMD(SetValue);
+  HOOK_CLEAR_HECMD(SetTimerUp);
+  HOOK_CLEAR_HECMD(SetTimer);
+  HOOK_CLEAR_HECMD(SetTenthsTimerUp);
+  HOOK_CLEAR_HECMD(SetTenthsTimer);
+  HOOK_CLEAR_HECMD(SetShader);
+  HOOK_CLEAR_HECMD(SetPlayerNameString);
+  HOOK_CLEAR_HECMD(SetMapNameString);
+  HOOK_CLEAR_HECMD(SetGameTypeString);
+  HOOK_CLEAR_HECMD(SetClockUp);
+  HOOK_CLEAR_HECMD(SetClock);
+  HOOK_CLEAR_HECMD(Reset);
+  HOOK_CLEAR_HECMD(Destroy);
 }
 
 inline void apply_hudelem_hooks() {
@@ -492,10 +518,11 @@ void gscr_println(scriptInstance_t inst) {
   }
   fprintf(stdout, "[Scr] %s\n", out.c_str());
   fflush(stdout);
-  game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT, "%s\n", out.c_str());
+  game::com::Com_Printf(consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "%s\n", out.c_str());
 
 #ifndef NDEBUG
-  trace("[Scr] %s", out.c_str());
+  trace("[Scr] {}", out);
 #endif
 }
 
@@ -512,7 +539,7 @@ void gscr_trace(scriptInstance_t inst) {
     }
   }
 
-  trace("[Scr] %s", out.c_str());
+  trace("[Scr] {}", out);
 }
 #endif
 
@@ -527,10 +554,11 @@ void gscr_print(scriptInstance_t inst) {
   }
   fprintf(stdout, "[Scr] %s", out.c_str());
   fflush(stdout);
-  game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT, "%s", out.c_str());
+  game::com::Com_Printf(consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "%s", out.c_str());
 
 #ifndef NDEBUG
-  trace("[Scr] %s", out.c_str());
+  trace("[Scr] {}", out);
 #endif
 }
 
@@ -647,19 +675,21 @@ void gscr_printf(scriptInstance_t inst) {
     }
   }
 
-  game::com::Com_Printf(0, game::consoleLabel_e::DEFAULT, "%s", buffer.data());
+  game::com::Com_Printf(consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT, "%s", buffer.data());
   fprintf(stdout, "%s", buffer.data());
   fflush(stdout);
 
 #ifndef NDEBUG
-  trace("[Scr] %s", buffer.data());
+  trace("[Scr] {}", buffer);
 #endif
 }
 
 void gscr_executecommand(scriptInstance_t inst) {
   const char *cmd = Scr_GetString(inst, 0);
   if (cmd) {
-    game::cbuf::Cbuf_AddText(0, utils::string::va("%s\n", cmd));
+    game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0,
+                             utils::string::va("%s\n", cmd));
   }
 }
 
@@ -1382,8 +1412,9 @@ BuiltinFunction Scr_GetFunction_SearchCustom(ScrVarCanonicalName_t canonId,
                                              BuiltinType *type,
                                              int32_t *min_args,
                                              int32_t *max_args) {
-  if (custom_builtins::functions.map.contains(canonId)) {
-    const BuiltinFunctionDef *def = &custom_builtins::functions.map[canonId];
+  if (custom_builtins::functions.server.map.contains(canonId)) {
+    const BuiltinFunctionDef *def =
+        &custom_builtins::functions.server.map[canonId];
 
     *type = def->type;
     *min_args = def->min_args;
@@ -1400,8 +1431,8 @@ utils::hook::detour Scr_GetMethod_hook;
 BuiltinMethod Scr_GetMethod_SearchCustom(ScrVarCanonicalName_t canonId,
                                          BuiltinType *type, int32_t *min_args,
                                          int32_t *max_args) {
-  if (custom_builtins::methods.map.contains(canonId)) {
-    const BuiltinMethodDef *def = &custom_builtins::methods.map[canonId];
+  if (custom_builtins::methods.server.map.contains(canonId)) {
+    const BuiltinMethodDef *def = &custom_builtins::methods.server.map[canonId];
 
     *type = def->type;
     *min_args = def->min_args;
@@ -1417,8 +1448,8 @@ BuiltinMethod Scr_GetMethod_SearchCustom(ScrVarCanonicalName_t canonId,
 utils::hook::detour Scr_GetFunctionReverseLookup_hook;
 ScrVarCanonicalName_t
 Scr_GetFunctionReverseLookup_SearchCustom(BuiltinFunction func) {
-  if (custom_builtins::functions.reverse.contains(func)) {
-    return custom_builtins::functions.reverse[func];
+  if (custom_builtins::functions.server.reverse.contains(func)) {
+    return custom_builtins::functions.server.reverse[func];
   }
   return Scr_GetFunctionReverseLookup_hook.invoke<ScrVarCanonicalName_t>(func);
 }
@@ -1426,11 +1457,68 @@ Scr_GetFunctionReverseLookup_SearchCustom(BuiltinFunction func) {
 utils::hook::detour Scr_GetMethodReverseLookup_hook;
 ScrVarCanonicalName_t
 Scr_GetMethodReverseLookup_SearchCustom(BuiltinMethod method) {
-  if (custom_builtins::methods.reverse.contains(method)) {
-    return custom_builtins::methods.reverse[method];
+  if (custom_builtins::methods.server.reverse.contains(method)) {
+    return custom_builtins::methods.server.reverse[method];
   }
   return Scr_GetMethodReverseLookup_hook.invoke<ScrVarCanonicalName_t>(method);
 }
+
+utils::hook::detour CScr_GetFunction_hook;
+BuiltinFunction CScr_GetFunction_SearchCustom(ScrVarCanonicalName_t canonId,
+                                              BuiltinType *type,
+                                              int32_t *min_args,
+                                              int32_t *max_args) {
+  if (custom_builtins::functions.client.map.contains(canonId)) {
+    const BuiltinFunctionDef *def =
+        &custom_builtins::functions.client.map[canonId];
+
+    *type = def->type;
+    *min_args = def->min_args;
+    *max_args = def->max_args;
+
+    return def->actionFunc;
+  }
+
+  return CScr_GetFunction_hook.invoke<BuiltinFunction>(canonId, type, min_args,
+                                                       max_args);
+}
+
+utils::hook::detour CScr_GetMethod_hook;
+BuiltinMethod CScr_GetMethod_SearchCustom(ScrVarCanonicalName_t canonId,
+                                          BuiltinType *type, int32_t *min_args,
+                                          int32_t *max_args) {
+  if (custom_builtins::methods.client.map.contains(canonId)) {
+    const BuiltinMethodDef *def = &custom_builtins::methods.client.map[canonId];
+
+    *type = def->type;
+    *min_args = def->min_args;
+    *max_args = def->max_args;
+
+    return def->actionFunc;
+  }
+
+  return CScr_GetMethod_hook.invoke<BuiltinMethod>(canonId, type, min_args,
+                                                   max_args);
+}
+
+utils::hook::detour CScr_GetFunctionReverseLookup_hook;
+ScrVarCanonicalName_t
+CScr_GetFunctionReverseLookup_SearchCustom(BuiltinFunction func) {
+  if (custom_builtins::functions.client.reverse.contains(func)) {
+    return custom_builtins::functions.client.reverse[func];
+  }
+  return CScr_GetFunctionReverseLookup_hook.invoke<ScrVarCanonicalName_t>(func);
+}
+
+utils::hook::detour CScr_GetMethodReverseLookup_hook;
+ScrVarCanonicalName_t
+CScr_GetMethodReverseLookup_SearchCustom(BuiltinMethod method) {
+  if (custom_builtins::methods.client.reverse.contains(method)) {
+    return custom_builtins::methods.client.reverse[method];
+  }
+  return CScr_GetMethodReverseLookup_hook.invoke<ScrVarCanonicalName_t>(method);
+}
+
 void PlayerCmd_IsHost_DelegateToFirstClient(scriptInstance_t inst,
                                             scr_entref_t *entref) {
   if (entref->classnum == 0) {
@@ -1454,7 +1542,61 @@ void add_detour(uint8_t *target_addr, uint8_t *replacement_addr) {
   detours_enabled.store(true, std::memory_order_release);
 }
 
+// Add template overloads for other types (e.g. bool, string) as needed.
+template <const bool Value> void Scr_Return(scriptInstance_t inst) {
+  scr::Scr_AddInt(inst, qboolean::from(Value));
+}
+
+// Method variant.
+// Add template overloads for other types (e.g. bool, string) as needed.
+template <const IntegralLike<int32_t> auto Value>
+void ScrCmd_Return(scriptInstance_t inst,
+                   [[maybe_unused]] scr_entref_t *entref) {
+  scr::Scr_AddInt(inst, static_cast<int32_t>(Value));
+}
+
+void Scr_StubFunc([[maybe_unused]] scriptInstance_t inst) {}
+
+void apply_bgb_hooks() {
+  // Workaround for "Out of X" gobblegum
+  game::scr::builtin::table::gscr::builtin_methods->GetBGBRemaining.actionFunc =
+      ScrCmd_Return<std::numeric_limits<uint8_t>::max()>;
+  game::scr::builtin::table::gscr::builtin_functions
+      ->__protected__SetBGBUnlocked.actionFunc = &Scr_StubFunc;
+  game::scr::builtin::table::gscr::builtin_functions
+      ->__protected__GetBGBUnlocked.actionFunc = &Scr_Return<true>;
+}
+
+static std::atomic_bool exitlevel_restrict = true;
+void gscr_exitlevel_togglerestrict(scriptInstance_t inst) {
+  const bool current_value = exitlevel_restrict.load(std::memory_order_acquire);
+  const bool new_value = static_cast<bool>(
+      Scr_GetIntOptional(inst, 0, qboolean::from(!current_value)));
+  exitlevel_restrict.store(new_value, std::memory_order_release);
+  Scr_AddInt(inst, qboolean::from(current_value));
+}
+
+template <const BuiltinFunction &Orig>
+void GScr_ExitLevel_RespectRestriction(scriptInstance_t inst) {
+  if (exitlevel_restrict.load(std::memory_order_acquire)) {
+    Orig(inst);
+  }
+}
+
+void apply_exitlevel_hooks() {
+  register_builtin(SCRIPTINSTANCE_SERVER, "exitlevel_togglerestrict",
+                   gscr_exitlevel_togglerestrict, 0, 1);
+  static const BuiltinFunction GScr_ExitLevel_orig =
+      game::scr::builtin::table::gscr::builtin_functions->ExitLevel.actionFunc;
+  game::scr::builtin::table::gscr::builtin_functions->ExitLevel.actionFunc =
+      &GScr_ExitLevel_RespectRestriction<GScr_ExitLevel_orig>;
+}
+
 struct component final : generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "gsc_funcs"; }
+#endif
+
   void post_unpack() override {
 
     Scr_GetFunctionReverseLookup_hook.create(
@@ -1469,9 +1611,23 @@ struct component final : generic_component {
     Scr_GetMethod_hook.create(game::scr::builtin::Scr_GetMethod.get(),
                               Scr_GetMethod_SearchCustom);
 
+    CScr_GetFunctionReverseLookup_hook.create(
+        game::scr::builtin::cscr::CScr_GetFunctionReverseLookup.get(),
+        CScr_GetFunctionReverseLookup_SearchCustom);
+    CScr_GetMethodReverseLookup_hook.create(
+        game::scr::builtin::cscr::CScr_GetMethodReverseLookup.get(),
+        CScr_GetMethodReverseLookup_SearchCustom);
+
+    CScr_GetFunction_hook.create(
+        game::scr::builtin::cscr::CScr_GetFunction.get(),
+        CScr_GetFunction_SearchCustom);
+    CScr_GetMethod_hook.create(game::scr::builtin::cscr::CScr_GetMethod.get(),
+                               CScr_GetMethod_SearchCustom);
+
     // Core
-    register_builtin("replacefunc", gscr_replacefunc, 2);
-    register_builtin("executecommand", gscr_executecommand, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "replacefunc", gscr_replacefunc, 2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "executecommand",
+                     gscr_executecommand, 1);
     register_builtin("say", gscr_say, 1);
     register_builtin("tell", gscr_tell::func, 2);
     register_builtin("tell", gscr_tell::method, 1);
@@ -1502,6 +1658,78 @@ struct component final : generic_component {
     register_builtin("int64_op", gscr_int64_op, 3);
     register_builtin("int64_isint", gscr_int64_isint, 1);
     register_builtin("int64_toint", gscr_int64_toint, 1);
+
+    command::add("weaponkitdump", [](const command::params &) {
+      rapidjson::Document doc;
+      doc.SetArray();
+      auto &alloc = doc.GetAllocator();
+
+      struct enum_ctx {
+        rapidjson::Document *doc;
+        rapidjson::Document::AllocatorType *alloc;
+      } ctx{&doc, &alloc};
+
+      db::xasset::DB_EnumXAssets(
+          db::xasset::XAssetType::WEAPON,
+          [](db::xasset::XAssetHeader header, void *data) {
+            enum_ctx *ctx = static_cast<enum_ctx *>(data);
+            game::weapon::WeaponVariantDef *variant = header.weapon;
+            if (!variant || !variant->szModeIndependentName) {
+              return;
+            }
+
+            auto &alloc = *ctx->alloc;
+            const game::weapon::WeaponCamo *camo =
+                variant->weapDef ? variant->weapDef->weaponCamo : nullptr;
+
+            rapidjson::Value entry(rapidjson::kObjectType);
+            entry.AddMember(
+                "name", rapidjson::Value(variant->szModeIndependentName, alloc),
+                alloc);
+            entry.AddMember("internalName",
+                            rapidjson::Value(variant->szInternalName
+                                                 ? variant->szInternalName
+                                                 : "",
+                                             alloc),
+                            alloc);
+            entry.AddMember("sessionMode",
+                            static_cast<int>(variant->sessionMode), alloc);
+            entry.AddMember("variantCount",
+                            static_cast<int>(variant->iVariantCount), alloc);
+            entry.AddMember("attachmentMask",
+                            static_cast<uint64_t>(variant->iAttachments),
+                            alloc);
+            entry.AddMember(
+                "camoName",
+                rapidjson::Value(camo && camo->name ? camo->name : "", alloc),
+                alloc);
+            entry.AddMember("camoMaterials",
+                            camo ? static_cast<uint32_t>(camo->numCamoMaterials)
+                                 : 0u,
+                            alloc);
+            entry.AddMember("hasRealCamo",
+                            camo != nullptr && camo->numCamoMaterials > 0,
+                            alloc);
+
+            ctx->doc->PushBack(entry, alloc);
+          },
+          &ctx, false);
+
+      rapidjson::StringBuffer buf;
+      rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+      doc.Accept(writer);
+
+      const std::filesystem::path out_path =
+          get_appdata_path() / "weapon_dump.json";
+      utils::io::write_file(out_path, std::string(buf.GetString()));
+
+      const std::string msg = "Dumped " + std::to_string(doc.Size()) +
+                              " weapon(s) to " + out_path.string();
+      com::Com_Printf(consoleChannel_e::CHANNEL_DONT_FILTER,
+                      consoleLabel_e::DEFAULT, "[weaponkitdump] %s\n",
+                      msg.c_str());
+      toast::info("Weapon Kit Dump", msg);
+    });
     register_builtin("int64_min", gscr_int64_min, 2);
     register_builtin("int64_max", gscr_int64_max, 2);
     register_builtin("int64_abs", gscr_int64_abs, 1);
@@ -1509,26 +1737,34 @@ struct component final : generic_component {
     register_builtin("int64_tostring", gscr_int64_tostring, 1);
 
     // Function lookup
-    register_builtin("getfunction", gscr_getfunction, 2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "getfunction", gscr_getfunction, 2);
 
     // Console commands
-    register_builtin("addcommand", gscr_addcommand, 1, 2);
-    register_builtin("getcommand", gscr_getcommand, 0, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "addcommand", gscr_addcommand, 1,
+                     2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "getcommand", gscr_getcommand, 0,
+                     1);
 
     // Utility
-    register_builtin("clearreplacefuncs", gscr_clearreplacefuncs, 0);
+    register_builtin(SCRIPTINSTANCE_SERVER, "clearreplacefuncs",
+                     gscr_clearreplacefuncs, 0);
 
     // Player name/tag overrides (server-only)
-    register_builtin("setname", gscr_setname::func, 2);
-    register_builtin("setname", gscr_setname::method, 1);
-    register_builtin("settag", gscr_settag::func, 2);
-    register_builtin("settag", gscr_settag::method, 1);
-    register_builtin("resetname", gscr_resetname::func, 1);
-    register_builtin("resetname", gscr_resetname::method, 0);
-    register_builtin("resettag", gscr_resettag::func, 1);
-    register_builtin("resettag", gscr_resettag::method, 0);
-    register_builtin("setclientdvar", gscr_setclientdvar::func, 2);
-    register_builtin("setclientdvar", gscr_setclientdvar::method, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "setname", gscr_setname::func, 2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "setname", gscr_setname::method, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "settag", gscr_settag::func, 2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "settag", gscr_settag::method, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "resetname", gscr_resetname::func,
+                     1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "resetname", gscr_resetname::method,
+                     0);
+    register_builtin(SCRIPTINSTANCE_SERVER, "resettag", gscr_resettag::func, 1);
+    register_builtin(SCRIPTINSTANCE_SERVER, "resettag", gscr_resettag::method,
+                     0);
+    register_builtin(SCRIPTINSTANCE_SERVER, "setclientdvar",
+                     gscr_setclientdvar::func, 2);
+    register_builtin(SCRIPTINSTANCE_SERVER, "setclientdvar",
+                     gscr_setclientdvar::method, 1);
 
     register_builtin("conststring", gscr_conststring, 1);
     register_builtin("isstruct", gscr_isstruct, 1);
@@ -1537,6 +1773,8 @@ struct component final : generic_component {
     register_builtin("vector", gscr_vector, 0, 3);
 
     apply_hudelem_hooks();
+    apply_bgb_hooks();
+    apply_exitlevel_hooks();
 
     /*
       In dedicated server, there is no host player.
@@ -1553,9 +1791,8 @@ struct component final : generic_component {
       \`true\` if the player has `clientIndex` `0`, and false otherwise.
     */
     if (game::is_server()) {
-      const_cast<BuiltinMethodDef *>(
-          &game::scr::builtin::table::player_methods->IsHost)
-          ->actionFunc = PlayerCmd_IsHost_DelegateToFirstClient;
+      game::scr::builtin::table::player_methods->IsHost.actionFunc =
+          PlayerCmd_IsHost_DelegateToFirstClient;
     }
 
     game_event::on_g_shutdown_game([] {

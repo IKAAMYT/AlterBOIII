@@ -336,10 +336,35 @@ buildoptions({
 linkoptions({ "/IGNORE:4702", "/LTCG" })
 filter({})
 filter({ "configurations:Release", "toolset:not msc*" })
--- incompatible with LTCG, and Windows libraries are not released with LTO
--- None of full, fat, or thin LTO work - tested.
-buildoptions({ "-march=x86-64", "-mno-sse4.1", "-mno-sse4.2", "-fno-lto" })
-linkoptions({ "-fno-lto" })
+buildoptions({
+  "-march=x86-64",
+  "-mno-sse4.1",
+  "-mno-sse4.2",
+  "-ffat-lto-objects",
+  "-flto=full",
+  "-fwhole-program-vtables",
+  "-fvisibility=hidden",
+  "-ffunction-sections",
+  "-fdata-sections",
+  "-Wl,-fat-lto-objects",
+  "-Wl,-opt:lldltocgo=3",
+  "-Wl,-opt:lldlto=3",
+  "-Wl,-opt:icf=safe",
+  "-Wl,-opt:ref",
+})
+linkoptions({
+  "-ffat-lto-objects",
+  "-flto=full",
+  "-fwhole-program-vtables",
+  "-fvisibility=hidden",
+  "-ffunction-sections",
+  "-fdata-sections",
+  "-Wl,-fat-lto-objects",
+  "-Wl,-opt:lldltocgo=3",
+  "-Wl,-opt:lldlto=3",
+  "-Wl,-opt:icf=safe",
+  "-Wl,-opt:ref",
+})
 filter({})
 
 filter("configurations:Debug")
@@ -389,12 +414,17 @@ project("common")
 kind("StaticLib")
 language("C++")
 
+filter({ "toolset: msc*" })
+buildoptions({ "-Qunused-arguments", "-Wno-dangling-else" })
+filter({})
+filter({ "toolset:not msc*" })
+buildoptions({ "-Wno-dangling-else" })
+filter({})
+
 files({ "./src/common/**.hpp", "./src/common/**.cpp" })
 
 includedirs({
-  "./deps/argparse/include",
   "./src/common",
-  "./deps/gtl/include",
   "./src",
   -- version.h and version.hpp headers
   "%{prj.location}/src",
@@ -408,6 +438,13 @@ project("client")
 kind("WindowedApp")
 language("C++")
 
+filter({ "toolset: msc*" })
+buildoptions({ "-Qunused-arguments", "-Wno-dangling-else" })
+filter({})
+filter({ "toolset:not msc*" })
+buildoptions({ "-Wno-dangling-else" })
+filter({})
+
 targetname("boiii")
 
 pchheader("std_include.hpp")
@@ -417,15 +454,10 @@ files({
   "./src/client/**.rc",
   "./src/client/**.hpp",
   "./src/client/**.cpp",
-  "./deps/Microsoft.Web.WebView2/build/native/include/*.h",
   "./src/client/resources/**.*",
 })
 includedirs({
-  "./deps/argparse/include",
-  "./deps/SteamworkSDK/public",
-  "./deps/gtl/include",
-  "./deps/frozen/include",
-  "./deps/Microsoft.Web.WebView2/build/native/include",
+  "./deps",
   "./src/client",
   "./src/common",
   "./src",
@@ -433,14 +465,11 @@ includedirs({
   "%{prj.location}/src",
 })
 
-syslibdirs({ "./deps/Microsoft.Web.WebView2/build/native/x64" })
-libdirs({ "./deps/Microsoft.Web.WebView2/build/native/x64" })
-
 resincludedirs({ "$(ProjectDir)src" })
 
 dependson({ "tlsdll" })
 
-links({ "common", "WebView2LoaderStatic" })
+links({ "common" })
 
 local hasVersion = (
   os.isfile(path.join(_MAIN_SCRIPT_DIR, "src/version.h"))
@@ -474,6 +503,13 @@ project("tlsdll")
 kind("SharedLib")
 language("C++")
 
+filter({ "toolset: msc*" })
+buildoptions({ "-Qunused-arguments", "-Wno-dangling-else" })
+filter({})
+filter({ "toolset:not msc*" })
+buildoptions({ "-Wno-dangling-else" })
+filter({})
+
 symbols("Off")
 exceptionhandling("Off")
 
@@ -492,12 +528,17 @@ filter({})
 
 filter("toolset:not msc*")
 
+buildoptions({ "-fno-lto" })
 -- equivalents for /NODEFAULTLIB and /IGNORE:4210 for gcc/clang
-linkoptions({ "-nodefaultlibs", "-nostdlib" })
+linkoptions({
+  "-nodefaultlibs",
+  "-nostdlib",
+  "-fno-lto",
+})
 filter({})
 
--- removebuildoptions({ "/GL" })
-removelinkoptions({ "/LTCG" })
+removebuildoptions({ "-fwhole-program-vtables" })
+removelinkoptions({ "/LTCG", "-fwhole-program-vtables" })
 
 files({ "./src/tlsdll/**.rc", "./src/tlsdll/**.hpp", "./src/tlsdll/**.cpp", "./src/tlsdll/resources/**.*" })
 

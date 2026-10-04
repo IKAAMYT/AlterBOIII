@@ -1,4 +1,5 @@
 #include <std_include.hpp>
+
 #include <loader/component_loader.hpp>
 
 #include <game/game.hpp>
@@ -160,7 +161,7 @@ void GScr_BBPrint_StdoutRedirect(scriptInstance_t inst) {
                                       messageStream.str().c_str());
   fprintf(stdout, "%s\n", out);
   fflush(stdout);
-  game::trace("%s", out);
+  game::trace("{}", out);
 #endif
 }
 } // namespace gscr
@@ -188,13 +189,13 @@ void BB_Print_StdoutRedirect(game::ControllerIndex_t controllerIndex,
                                         name, buffer.c_str());
     fprintf(stdout, "%s\n", out);
     fflush(stdout);
-    game::trace("%s", out);
+    game::trace("{}", out);
   } else {
     const char *out = utils::string::va(
         "[BB][%d]: %s", static_cast<int32_t>(controllerIndex), buffer.c_str());
     fprintf(stdout, "%s\n", out);
     fflush(stdout);
-    game::trace("%s", out);
+    game::trace("{}", out);
   }
 #endif
 }
@@ -208,24 +209,29 @@ utils::hook::detour BB_Print_hook;
 utils::hook::detour BB_Send_hook;
 utils::hook::detour BB_CheckSend_hook;
 
-utils::hook::detour GScr_BBPrint_hook;
-
 void redirect_bb_logging_to_stdout() {
-  BB_Send_hook.create(
-      game::bb::BB_Send.get(),
-      reinterpret_cast<fastcallPtr_t<void(game::ControllerIndex_t, bool)>>(
-          stub_func));
-  BB_CheckSend_hook.create(
-      game::bb::BB_CheckSend.get(),
-      reinterpret_cast<fastcallPtr_t<void(game::ControllerIndex_t)>>(
-          stub_func));
-  GScr_BBPrint_hook.create(game::scr::gscr::GScr_BBPrint.get(),
-                           game::scr::gscr::GScr_BBPrint_StdoutRedirect);
-  BB_Print_hook.create(game::bb::BB_Print.get(),
-                       game::bb::BB_Print_StdoutRedirect);
+  if (game::is_client()) {
+    BB_Send_hook.create(
+        game::bb::BB_Send.get(),
+        reinterpret_cast<fastcallPtr_t<void(game::ControllerIndex_t, bool)>>(
+            stub_func));
+    BB_CheckSend_hook.create(
+        game::bb::BB_CheckSend.get(),
+        reinterpret_cast<fastcallPtr_t<void(game::ControllerIndex_t)>>(
+            stub_func));
+    BB_Print_hook.create(game::bb::BB_Print.get(),
+                         game::bb::BB_Print_StdoutRedirect);
+  }
+
+  game::scr::builtin::table::common_functions->BBPrint.actionFunc =
+      game::scr::gscr::GScr_BBPrint_StdoutRedirect;
 }
 
-class component final : public client_component {
+class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "bb"; }
+#endif
+
 public:
   void post_unpack() override { redirect_bb_logging_to_stdout(); }
 };

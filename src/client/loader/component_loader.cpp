@@ -1,4 +1,5 @@
 #include <std_include.hpp>
+
 #include "component_loader.hpp"
 
 #include <utils/nt.hpp>
@@ -29,7 +30,8 @@ get_registration_functors() {
 }
 
 void activate_component(std::unique_ptr<generic_component> component) {
-  auto &components = get_components();
+  std::vector<std::unique_ptr<generic_component>> &components =
+      get_components();
   components.push_back(std::move(component));
 
   std::ranges::stable_sort(components,
@@ -49,9 +51,10 @@ void register_component(registration_functor functor, component_type type) {
 }
 
 bool activate(bool server) {
-  static auto res = [server] {
+  static const bool res = [server] {
     try {
-      for (auto &functor : get_registration_functors()) {
+      for (std::pair<registration_functor, component_type> &functor :
+           get_registration_functors()) {
         if (functor.second == component_type::any ||
             server == (functor.second == component_type::server)) {
           activate_component(functor.first());
@@ -71,18 +74,42 @@ bool activate(bool server) {
 }
 
 bool post_load() {
-  static auto res = [] {
+  static const bool res = [] {
     try {
-      for (const auto &component : get_components()) {
+#ifndef NDEBUG
+      game::trace("[component_loader] Executing component_loader::post_load");
+#endif
+      for (const std::unique_ptr<generic_component> &component :
+           get_components()) {
+
+#ifndef NDEBUG
+        game::trace("[component_loader] Executing post_load() in component "
+                    "with name: {}",
+                    component->name());
+#endif
         component->post_load();
+#ifndef NDEBUG
+        game::trace(
+            "Successfully executed post_load in component with name: {}",
+            component->name());
+#endif
       }
     } catch (premature_shutdown_trigger &) {
       return false;
     } catch (const std::exception &e) {
       game::show_error(e.what());
+#ifndef NDEBUG
+      game::trace("[component_loader] Failed to execute "
+                  "component_loader::post_load. Error: {}",
+                  e.what());
+#endif
       return false;
     }
 
+#ifndef NDEBUG
+    game::trace(
+        "[component_loader] Successfully executed component_loader::post_load");
+#endif
     return true;
   }();
 
@@ -90,16 +117,39 @@ bool post_load() {
 }
 
 void post_unpack() {
-  static auto res = [] {
+  static const bool res = [] {
     try {
-      for (const auto &component : get_components()) {
+#ifndef NDEBUG
+      game::trace("[component_loader] Executing component_loader::post_unpack");
+#endif
+      for (const std::unique_ptr<generic_component> &component :
+           get_components()) {
+#ifndef NDEBUG
+        game::trace("[component_loader] Executing post_unpack() in component "
+                    "with name: {}",
+                    component->name());
+#endif
         component->post_unpack();
+#ifndef NDEBUG
+        game::trace(
+            "Successfully executed post_unpack in component with name: {}",
+            component->name());
+#endif
       }
     } catch (const std::exception &e) {
       game::show_error(e.what());
+#ifndef NDEBUG
+      game::trace("[component_loader] Failed to execute "
+                  "component_loader::post_unpack. Error: {}",
+                  e.what());
+#endif
       return false;
     }
 
+#ifndef NDEBUG
+    game::trace("[component_loader] Successfully executed "
+                "component_loader::post_unpack");
+#endif
     return true;
   }();
 
@@ -109,13 +159,33 @@ void post_unpack() {
 }
 
 void pre_destroy() {
-  static auto res = [] {
+  static const bool res = [] {
     try {
-      for (const auto &component : get_components()) {
+#ifndef NDEBUG
+      game::trace("[component_loader] Executing component_loader::pre_destroy");
+#endif
+      for (const std::unique_ptr<generic_component> &component :
+           get_components()) {
+#ifndef NDEBUG
+        game::trace("[component_loader] Executing "
+                    "component_loader::pre_destroy in component with "
+                    "name: {}",
+                    component->name());
+#endif
         component->pre_destroy();
+#ifndef NDEBUG
+        game::trace(
+            "Successfully executed pre_destroy in component with name: {}",
+            component->name());
+#endif
       }
     } catch (const std::exception &e) {
       game::show_error(e.what());
+#ifndef NDEBUG
+      game::trace("[component_loader] Failed to execute "
+                  "component_loader::pre_destroy. Error: {}",
+                  e.what());
+#endif
       return false;
     }
 

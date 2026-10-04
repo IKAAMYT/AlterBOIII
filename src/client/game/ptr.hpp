@@ -5,9 +5,9 @@
 
 #include <cstdint>
 #include <intrin.h>
+#include <span>
 
 namespace game {
-
 #if defined(_WIN64)
 #include <intrin.h>
 inline uintptr_t PEB() {
@@ -59,27 +59,53 @@ template <typename T> inline const T *derelocate(const T *ptr) {
       derelocate(reinterpret_cast<uintptr_t>(ptr)));
 }
 
-inline uintptr_t select(const uintptr_t client_val,
-                        const uintptr_t server_val) {
-  return relocate(is_server() ? server_val : client_val);
+template <typename T>
+inline T select_value(T client, T legacy_client, T server) {
+  if (is_server()) {
+    return server;
+  }
+  if (is_new_client()) {
+    return client;
+  }
+  return legacy_client;
 }
 
 template <typename T>
-inline const T *select(const T *client_val, const T *server_val) {
+  requires(!std::is_pointer_v<T> && !std::is_same_v<T, uintptr_t> &&
+           !std::is_same_v<T, intptr_t>)
+inline T select(T client, T legacy_client, T server) {
+  return select_value(client, legacy_client, server);
+}
+
+inline uintptr_t select(const uintptr_t client_val,
+                        const uintptr_t legacy_client_val,
+                        const uintptr_t server_val) {
+  return relocate(select_value(client_val, legacy_client_val, server_val));
+}
+
+template <typename T>
+inline const T *select(const T *client_val, const T *legacy_client_val,
+                       const T *server_val) {
   return reinterpret_cast<const T *>(
       select(reinterpret_cast<uintptr_t>(client_val),
+             reinterpret_cast<uintptr_t>(legacy_client_val),
              reinterpret_cast<uintptr_t>(server_val)));
 }
 
-template <typename T> inline T *select(T *client_val, T *server_val) {
-  return reinterpret_cast<T *>(select(reinterpret_cast<uintptr_t>(client_val),
-                                      reinterpret_cast<uintptr_t>(server_val)));
+template <typename T>
+inline T *select(T *client_val, T *legacy_client_val, T *server_val) {
+  return reinterpret_cast<T *>(
+      select(reinterpret_cast<uintptr_t>(client_val),
+             reinterpret_cast<uintptr_t>(legacy_client_val),
+             reinterpret_cast<uintptr_t>(server_val)));
 }
 
 template <typename T>
-inline volatile T *select(volatile T *client_val, volatile T *server_val) {
+inline volatile T *select(volatile T *client_val, volatile T *legacy_client_val,
+                          volatile T *server_val) {
   return reinterpret_cast<volatile T *>(
       select(reinterpret_cast<uintptr_t>(client_val),
+             reinterpret_cast<uintptr_t>(legacy_client_val),
              reinterpret_cast<uintptr_t>(server_val)));
 }
 
@@ -180,6 +206,12 @@ template <typename A, typename B, IntegralLike<size_t> S>
 inline constexpr bool contains(const A *base, const S size, const B *cmp) {
   return contains<S>(reinterpret_cast<uintptr_t>(base), size,
                      reinterpret_cast<uintptr_t>(cmp));
+}
+
+template <typename A, typename B>
+inline constexpr bool contains(const std::span<const A> base, const B *cmp) {
+  return contains<uint64_t>(reinterpret_cast<uintptr_t>(base.data()),
+                            base.size(), reinterpret_cast<uintptr_t>(cmp));
 }
 
 template <typename T, IntegralLike<T> Align>

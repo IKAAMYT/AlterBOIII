@@ -1,17 +1,30 @@
 #pragma once
 
-#include <cstdint>
-
+#include "game/structs/atomic.hpp"
+#include <game/structs/macros.hpp>
 #include <structs/func.hpp>
+
+#include "game/symbol.hpp"
+
+#include <cstdint>
 
 namespace game {
 namespace jq {
 
+typedef uint64_t u64;
+typedef uint32_t u32;
+typedef uint16_t u16;
+typedef uint8_t u8;
+
+typedef int64_t i64;
+typedef int32_t i32;
+typedef int16_t i16;
+typedef int8_t i8;
+
 struct jqBatch;
 typedef fastcallPtr_t<int32_t(jqBatch *batch)> jqModuleCallback;
 
-#pragma pack(push, 1)
-struct jqBatchGroup {
+PACKED(struct jqBatchGroup {
   union {
     struct {
       int32_t QueuedBatchCount;
@@ -19,11 +32,9 @@ struct jqBatchGroup {
     };
     uint64_t BatchCount;
   };
-};
-#pragma pack(pop)
+});
 
-#pragma pack(push, 1)
-struct jqModule {
+PACKED(struct jqModule {
   const char *Name;
   jqModuleCallback Code;
   jqBatchGroup Group;
@@ -32,11 +43,9 @@ struct jqModule {
   uint16_t Requeues;
   uint8_t _padding24[4];
   jqBatchGroup *Dependencies[4];
-};
-#pragma pack(pop)
+});
 
-#pragma pack(push, 1)
-struct jqBatch {
+PACKED(struct jqBatch {
   void *p3x_info;
   void *Input;
   void *Output;
@@ -45,7 +54,93 @@ struct jqBatch {
   void *ConditionalAddress;
   uint32_t ConditionalValue;
   uint32_t ParamData[55];
+});
+
+template <typename NodeType> class jqAtomicQueuePtr {
+  union {
+    struct {
+      volatile uint32_t Index;
+      volatile uint32_t Count;
+    };
+    volatile u64 Val64;
+  };
 };
-#pragma pack(pop)
+
+template <typename Batch> class jqAtomicQueue {
+public:
+  struct NodeType;
+  typedef jqAtomicQueuePtr<NodeType> NodePtrType;
+  struct NodeType {
+    NodePtrType Next;
+    Batch Data;
+  };
+
+  NodeType *NodeStorage;
+  NodePtrType Head;
+  NodePtrType Tail;
+  NodePtrType FreeList;
+};
+
+typedef jqAtomicQueue<jqBatch> jqAtomicQueueType;
+
+struct jqQueue {
+  jqAtomicQueueType Queue;
+  int32_t QueuedBatchCount;
+  u32 ProcessorsMask;
+};
+ASSERT_SIZE(jqQueue, 0x28);
+
+class jqAtomicHeap;
+PACKED(class alignas(8) jqAtomicHeap {
+public:
+  typedef u64 CellType;
+
+  struct LevelInfo {
+    u32 BlockSize;
+    int32_t NBlocks;
+    int32_t NCells;
+    uint8_t _padding0C[4];
+    jqAtomicHeap::CellType *CellAvailable;
+    jqAtomicHeap::CellType *CellAllocated;
+  };
+
+  jqAtomicHeap *ThisPtr;
+  tlAtomicMutex Mutex;
+  u8 *HeapBase;
+  u32 HeapSize;
+  u32 BlockSize;
+  volatile u32 TotalUsed;
+  volatile u32 TotalBlocks;
+  int32_t NLevels;
+  uint8_t _padding3C[4];
+  jqAtomicHeap::LevelInfo Levels[13];
+  u8 *LevelData;
+
+  struct syms {
+    static constexpr symbol<
+        thiscall_t<void(volatile jqAtomicHeap *, void *Ptr)>>
+        Free{0x140009920, 0x140009920, 0x140009790};
+    static constexpr symbol<fastcall_t<void *(u32 Size)>> Alloc{
+        0x14000A2E0, 0x14000A2E0, 0x14000A150};
+  };
+
+  inline void Free(void *Ptr) volatile { return syms::Free(this, Ptr); }
+  static inline void *Alloc(u32 Size) { return syms::Alloc(Size); }
+});
+ASSERT_SIZE(jqAtomicHeap, 0x1E8);
+
+struct jqBatchPool {
+  jqQueue BaseQueue;
+  union {
+    struct {
+      int32_t QueuedBatchCount;
+      int32_t ExecutingBatchCount;
+    };
+    u64 BatchCount;
+  };
+  jqAtomicHeap BatchDataHeap;
+};
+ASSERT_SIZE(jqBatchPool, 0x218);
+
 } // namespace jq
 } // namespace game

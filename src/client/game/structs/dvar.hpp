@@ -1,17 +1,17 @@
 #pragma once
 
-#include <macros.hpp>
+#include "core.hpp"
 #include "game/ptr.hpp"
 #include "macros.hpp"
-#include <structs/func.hpp>
 #include "quake/vec.hpp"
-#include "core.hpp"
+#include <macros.hpp>
+#include <structs/func.hpp>
 
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 #include <optional>
 #include <string>
+#include <type_traits>
 
 namespace game {
 
@@ -854,6 +854,10 @@ union DvarLimits {
   struct {
     int32_t stringCount;
     const char **strings;
+
+    inline constexpr std::span<const char *> enumerations() const noexcept {
+      return std::span(strings, stringCount);
+    }
   } enumeration;
 
   PrimitiveLimit<int32_t> integer;
@@ -865,9 +869,8 @@ union DvarLimits {
 
   inline constexpr bool contains(const char *val) noexcept {
     if (val) {
-      for (int32_t i = 0; i < enumeration.stringCount; ++i) {
-        if (enumeration.strings[i] &&
-            std::strcmp(enumeration.strings[i], val) == 0) {
+      for (const char *str : enumeration.enumerations()) {
+        if (str && std::strcmp(str, val) == 0) {
           return true;
         }
       }
@@ -1123,11 +1126,14 @@ public:
     requires(!std::same_as<T, const char *> &&
              !std::same_as<T, const std::string_view &> &&
              !std::same_as<T, const std::string &>)
-  std::optional<T> set(T val) noexcept;
+  std::optional<T> set(T val, bool execModifiedCallback = true) noexcept;
 
-  std::optional<std::string> set(const char *val) noexcept;
-  std::optional<std::string> set(const std::string_view &val) noexcept;
-  std::optional<std::string> set(const std::string &val) noexcept;
+  std::optional<std::string> set(const char *val,
+                                 bool execModifiedCallback = true) noexcept;
+  std::optional<std::string> set(const std::string_view &val,
+                                 bool execModifiedCallback = true) noexcept;
+  std::optional<std::string> set(const std::string &val,
+                                 bool execModifiedCallback = true) noexcept;
 
   inline int32_t get_int() noexcept { return resolve()->current().integer(); }
   inline constexpr uint32_t get_uint() noexcept {
@@ -1226,47 +1232,59 @@ union EngineDependentDvarMut {
   dvar_t *sv;
   encryptedDvar_t *cl;
 
-  inline std::optional<std::string> set(const char *val) {
+  dvarCallBack_t *modifiedCallback() noexcept {
     if (is_server()) {
-      return sv->set(val);
+      return sv->modifiedCallback();
     }
-    return cl->set(val);
+    return cl->modifiedCallback();
   }
-  inline std::optional<float> set(float val) {
+
+  inline std::optional<std::string> set(const char *val,
+                                        bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
   }
-  inline std::optional<uint64_t> set(uint64_t val) {
+  inline std::optional<float> set(float val, bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
   }
-  inline std::optional<int64_t> set(int64_t val) {
+  inline std::optional<uint64_t> set(uint64_t val,
+                                     bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
   }
-  inline std::optional<int32_t> set(int32_t val) {
+  inline std::optional<int64_t> set(int64_t val,
+                                    bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
   }
-  inline std::optional<uint32_t> set(uint32_t val) {
+  inline std::optional<int32_t> set(int32_t val,
+                                    bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
   }
-  inline std::optional<bool> set(bool val) {
+  inline std::optional<uint32_t> set(uint32_t val,
+                                     bool execModifiedCallback = true) {
     if (is_server()) {
-      return sv->set(val);
+      return sv->set(val, execModifiedCallback);
     }
-    return cl->set(val);
+    return cl->set(val, execModifiedCallback);
+  }
+  inline std::optional<bool> set(bool val, bool execModifiedCallback = true) {
+    if (is_server()) {
+      return sv->set(val, execModifiedCallback);
+    }
+    return cl->set(val, execModifiedCallback);
   }
 
   inline int32_t get_int() const {
@@ -1501,10 +1519,10 @@ union EngineDependentDvarMut {
     return result;
   }
 
-  inline constexpr bool nonnull() noexcept { return sv != nullptr; }
-  inline constexpr bool null() noexcept { return sv == nullptr; }
+  inline constexpr bool nonnull() const noexcept { return sv != nullptr; }
+  inline constexpr bool null() const noexcept { return sv == nullptr; }
 
-  inline constexpr bool operator!() noexcept { return null(); }
+  inline constexpr bool operator!() const noexcept { return null(); }
   inline constexpr bool
   operator>(const EngineDependentDvarMut &rhs) const noexcept {
     return sv > rhs.sv;

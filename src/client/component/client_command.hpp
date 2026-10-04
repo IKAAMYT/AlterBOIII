@@ -1,12 +1,11 @@
 #pragma once
 
-#include <game/game.hpp>
 #include "command.hpp"
+#include <game/game.hpp>
 
-#include <functional>
-#include <string>
 namespace client_command {
-using callback = std::function<void(game::level::gentity_s *ent,
-                                    const command::params_sv &params)>;
-void add(const std::string &name, const callback &cmd);
+using clientCommandHandler_t = fastcallPtr_t<void(
+    game::level::gentity_s *ent, const command::params_sv &params)>;
+
+void register_handler(std::string name, clientCommandHandler_t cmd);
 } // namespace client_command

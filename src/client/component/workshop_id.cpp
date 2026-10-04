@@ -1,11 +1,12 @@
 #include <std_include.hpp>
-#include <loader/component_loader.hpp>
+
+#include <game/game.hpp>
 #include <game/utils.hpp>
+#include <loader/component_loader.hpp>
+#include <utils/flags.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
 #include <utils/thread.hpp>
-#include <utils/flags.hpp>
-#include <game/game.hpp>
 
 namespace workshop_id {
 namespace {
@@ -148,10 +149,15 @@ void get_map_id_from_json() {
   } else {
     const std::string &usermaps_path =
         std::filesystem::current_path().string() + "/usermaps";
+    std::error_code ec;
+    if (!std::filesystem::is_directory(usermaps_path, ec)) {
+      return;
+    }
+
     std::string_view mapname = game::get_mapname().value_or("");
 
     for (const auto &entry :
-         std::filesystem::directory_iterator(usermaps_path)) {
+         std::filesystem::directory_iterator(usermaps_path, ec)) {
       std::filesystem::path workshop_json = entry.path() / "workshop.json";
       std::filesystem::path workshop_json_zone =
           entry.path() / "zone/workshop.json";
@@ -189,6 +195,10 @@ void get_map_id_from_json() {
 } // namespace
 
 class component final : public generic_component {
+#ifndef NDEBUG
+  std::string name() override { return "workshop_id"; }
+#endif
+
 public:
   void pre_destroy() override {
     running = false;

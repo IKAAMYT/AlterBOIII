@@ -1,12 +1,12 @@
 #pragma once
 #include <game/game.hpp>
 
-#include <vector>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace ui_scripting {
-using namespace game::ui::lua::hks;
+using namespace game::lua::hks;
 
 class lightuserdata;
 class userdata_value;
@@ -16,7 +16,7 @@ class table;
 class function;
 class script_value;
 
-template <typename T> std::string get_typename();
+template <typename T> constexpr const char *get_typename();
 
 class hks_object {
 public:
@@ -63,6 +63,7 @@ public:
   script_value(const lightuserdata &value);
   script_value(const userdata &value);
   script_value(const table &value);
+  script_value(HashTable *value);
   script_value(const function &value);
 
   template <template <class, class> class C, class T,
@@ -83,6 +84,20 @@ public:
 
   template <typename T = script_value>
   table_value operator[](const T &key) const;
+
+  template <IntegralLike<int32_t> T>
+    requires(sizeof(T) == sizeof(int32_t))
+  [[nodiscard]] inline bool is() const {
+    const HksNumber number = this->get_raw().v.number;
+    return this->get_raw().t == HksObjectType::TNUMBER &&
+           static_cast<int32_t>(number) == number;
+  }
+
+  template <IntegralLike<int32_t> T>
+    requires(sizeof(T) == sizeof(int32_t))
+  [[nodiscard]] inline T get() const {
+    return static_cast<T>(this->get_raw().v.number);
+  }
 
   template <typename T> [[nodiscard]] bool is() const;
 
