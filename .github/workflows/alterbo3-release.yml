@@ -105,6 +105,10 @@ jobs:
           cd ..
           # Also ship the standalone exe (update.json -> exe_url).
           cp build/bin/x64/Release/boiii.exe AlterBOIII.exe
+          # Version compilee (tagName de premake5.lua), comparee au tag avant
+          # de publier update.json.
+          grep -oE 'tagName = "[0-9.]+"' premake5.lua | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' > built_version.txt
+          echo "Version compilee : $(cat built_version.txt)"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -113,6 +117,7 @@ jobs:
           path: |
             AlterBO3.zip
             AlterBOIII.exe
+            built_version.txt
 
   # ---------------------------------------------------------------
   # 2. Release GitHub
@@ -139,7 +144,50 @@ jobs:
             dist/AlterBOIII.exe
           generate_release_notes: true
           body: |
-            **AlterBO3** — reskin IKAAM du client BOIII (Black Ops III).
-            Theme MW jaune. Decompresse l'archive dans ton dossier Black Ops III et lance AlterBOIII.exe.
+            **AlterBOIII** — client Black Ops III de l'equipe AlterCOD.
+            Decompresse `AlterBO3.zip` dans ton dossier Black Ops III et lance `AlterBOIII.exe`.
+            Depuis la 2.4.0, AlterBOIII se met a jour tout seul au lancement.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Auto-update : update.json (branche main) annonce la nouvelle version
+      # aux clients 2.4.0+. Uniquement pour un tag X.Y.Z / vX.Y.Z egal a la
+      # version compilee : sinon les clients retelechargeraient en boucle un
+      # exe qui se croit plus ancien.
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: repo
+
+      - name: Publish update.json
+        shell: bash
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          BUILT="$(cat dist/built_version.txt 2>/dev/null || true)"
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag '$TAG' : pas une version X.Y.Z, update.json inchange."
+            exit 0
+          fi
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "::warning::Tag $TAG mais version compilee '$BUILT' (premake5.lua) : update.json inchange. Mets tagName a $VERSION puis relance."
+            exit 0
+          fi
+          SHA1="$(sha1sum dist/AlterBOIII.exe | cut -d' ' -f1)"
+          SIZE="$(stat -c%s dist/AlterBOIII.exe)"
+          URL="https://github.com/IKAAMYT/AlterBOIII/releases/download/${TAG}/AlterBOIII.exe"
+          printf '{\n  "version": "%s",\n  "exe_url": "%s",\n  "exe_sha1": "%s",\n  "exe_size": %s,\n  "ui_version": "%s"\n}\n' \
+            "$VERSION" "$URL" "$SHA1" "$SIZE" "$VERSION" > repo/update.json
+          cat repo/update.json
+          cd repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json
+          if git diff --cached --quiet; then
+            echo "update.json deja a jour."
+            exit 0
+          fi
+          git commit -m "update.json : AlterBOIII $VERSION (auto-update)"
+          git push origin HEAD:main

@@ -67,7 +67,10 @@ AlterCOD.
   `exe_url` (uniquement depuis les releases du dépôt), vérifie `exe_size` et
   `exe_sha1`, remplace l'exe (l'ancien passe en `.exe.old`, supprimé au
   lancement suivant) puis se relance. Désactivable via le réglage « mises à
-  jour automatiques » du launcher ou `-noupdate`.
+  jour automatiques » du launcher ou `-noupdate`. Le workflow « AlterBO3
+  Release » réécrit `update.json` lui-même (version, URL, taille, SHA-1) quand
+  le tag correspond au `tagName` de `premake5.lua` ; un exe déjà identique à
+  celui publié n'est jamais retéléchargé.
 
 ## Serveur dédié
 - Redémarrage automatique après erreur de script (`sv_errorRestartDelay`,

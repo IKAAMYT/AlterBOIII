@@ -491,6 +491,14 @@ void file_updater::update_alter_binary() const {
   if (!release || !is_newer_version(release->version, SHORTVERSION))
     return;
 
+  // Garde-fou anti-boucle : si l'exe publie est deja celui qui tourne (version
+  // mal renseignee dans update.json), on ne retelecharge pas a chaque
+  // lancement.
+  std::string current{};
+  if (utils::io::read_file(this->process_file_, &current) &&
+      utils::string::to_lower(get_hash(current)) == release->exe.hash)
+    return;
+
   OutputDebugStringA(("AlterBOIII " + release->version +
                       " available, updating from " SHORTVERSION "\n")
                          .c_str());
