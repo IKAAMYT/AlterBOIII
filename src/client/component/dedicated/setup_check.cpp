@@ -81,8 +81,9 @@ void check_data_files() {
   if (!path_exists(data / script) &&
       !path_exists(host.get_folder() / "boiii" / script)) {
     warn(std::format("The server lobby script is missing: {}. The server "
-                     "can't start a match without it. Start AlterBOIII.exe once "
-                     "without -noupdate so it can download its data files.",
+                     "can't start a match without it. Start AlterBOIII.exe "
+                     "once without -noupdate so it can download its data "
+                     "files.",
                      (data / script).string()));
   }
 

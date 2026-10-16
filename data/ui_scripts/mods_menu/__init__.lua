@@ -8,7 +8,9 @@ CoD.OverlayUtility.AddSystemOverlay("DeleteModConfirmation", {
   menuName = "SystemOverlay_Compact",
   title = "SUPPRIMER LE MOD ?",
   description = function(name)
-    return "Cette action supprime définitivement ^3" .. name .. "^7 de votre PC. Vous devrez le télécharger à nouveau pour y jouer."
+    return "Cette action supprime définitivement ^3"
+      .. name
+      .. "^7 de votre PC. Vous devrez le télécharger à nouveau pour y jouer."
   end,
   categoryType = CoD.OverlayUtility.OverlayTypes.GenericMessage,
   [CoD.OverlayUtility.GoBackPropertyName] = CoD.OverlayUtility.DefaultGoBack,
@@ -297,7 +299,9 @@ LUI.createMenu.MenuModsLoad = function(controller)
 
   local emptyText =
     newText(64, -64, 300, 330, "fonts/RefrigeratorDeluxe-Regular.ttf", Enum.LUIAlignment.LUI_ALIGNMENT_CENTER)
-  emptyText:setText("Aucun mod installé. Abonnez-vous à des mods sur le Workshop Steam ou utilisez l'onglet Workshop du launcher.")
+  emptyText:setText(
+    "Aucun mod installé. Abonnez-vous à des mods sur le Workshop Steam ou utilisez l'onglet Workshop du launcher."
+  )
   emptyText:setAlpha(Engine.Mods_Lists_GetInfoEntriesCount(LuaEnums.MODS_BASE_PATH) == 0 and 1 or 0)
   self:addElement(emptyText)
 

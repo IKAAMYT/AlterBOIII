@@ -35,10 +35,16 @@ local function addHostOptions(options)
     },
   })
   table.insert(options, { models = { displayText = "^3CHANGER DE MAP", action = openPopup("BoiiiChangeMapMenu") } })
-  table.insert(options, { models = { displayText = "^3EXPULSER UN JOUEUR", action = openPopup("BoiiiKickPlayersMenu") } })
+  table.insert(
+    options,
+    { models = { displayText = "^3EXPULSER UN JOUEUR", action = openPopup("BoiiiKickPlayersMenu") } }
+  )
   table.insert(options, { models = { displayText = "^3REDÉMARRER LA PARTIE", action = RestartGame } })
   if LUI.createMenu.BoiiiGameTweaksMenu then
-    table.insert(options, { models = { displayText = "^3RÉGLAGES DE JEU", action = openPopup("BoiiiGameTweaksMenu") } })
+    table.insert(
+      options,
+      { models = { displayText = "^3RÉGLAGES DE JEU", action = openPopup("BoiiiGameTweaksMenu") } }
+    )
   end
 end
 

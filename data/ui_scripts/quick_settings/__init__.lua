@@ -24,10 +24,22 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
       "Passer la vidéo de la forêt",
       "Passe uniquement la vidéo de la forêt avant de rejoindre une partie Zombies. Les vidéos des maps restent affichées.",
     },
-    { "boiii_skipCinematics", "Passer toutes les cinématiques", "Passe toutes les cinématiques et vidéos, y compris celles des maps." },
+    {
+      "boiii_skipCinematics",
+      "Passer toutes les cinématiques",
+      "Passe toutes les cinématiques et vidéos, y compris celles des maps.",
+    },
     { "boiii_fullLogs", "Logs complets dans la console", "Affiche tous les messages de log dans la console." },
-    { "boiii_logScriptErrors", "Journaliser les erreurs de script", "Journalise toutes les erreurs de script, y compris les non fatales." },
-    { "boiii_ultrawide", "Support ultra-large", "Utilise toute la largeur des écrans ultra-larges. Nécessite un redémarrage." },
+    {
+      "boiii_logScriptErrors",
+      "Journaliser les erreurs de script",
+      "Journalise toutes les erreurs de script, y compris les non fatales.",
+    },
+    {
+      "boiii_ultrawide",
+      "Support ultra-large",
+      "Utilise toute la largeur des écrans ultra-larges. Nécessite un redémarrage.",
+    },
     {
       "boiii_allowCheats",
       "Autoriser les cheats",
@@ -133,7 +145,11 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     )
   )
 
-  addToggle("r_vsync", "VSync", "Synchronise les images par seconde avec la fréquence de rafraîchissement de l'écran.")
+  addToggle(
+    "r_vsync",
+    "VSync",
+    "Synchronise les images par seconde avec la fréquence de rafraîchissement de l'écran."
+  )
   addToggle("com_drawFPS_PC", "Afficher le compteur FPS", "Affiche le nombre d'images par seconde à l'écran.")
 
   -- ── Game Settings ──

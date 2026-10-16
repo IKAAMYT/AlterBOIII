@@ -201,101 +201,106 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
     })
   end
 
-  addToggle("Unlock All Loot", "Unlocks all Black Market loot.", "MPStatsSettings_unlock_loot", "cg_unlockall_loot")
+  addToggle(
+    "Débloquer tout le contenu",
+    "Débloque tout le contenu du Black Market.",
+    "MPStatsSettings_unlock_loot",
+    "cg_unlockall_loot"
+  )
   if isZM and type(game.resetgobblegums) == "function" and type(game.setcurrencymaxed) == "function" then
     addToggle(
-      "Local Currency",
-      "Uses locally saved COD Points, Liquid Divinium, GobbleGums, and Cookbook Distills.",
+      "Monnaie locale",
+      "Utilise les Points COD, le Divinium liquide, les GobbleGums et les distillats enregistrés localement.",
       "MPStatsSettings_local_currency",
       "cg_local_currency",
       true
     )
     addToggle(
-      "Unlimited GobbleGums",
-      "Uses unlimited GobbleGums without replacing your earned inventory.",
+      "GobbleGums illimités",
+      "Utilise des GobbleGums illimités sans remplacer l'inventaire déjà gagné.",
       "MPStatsSettings_unlimited_gobblegums",
       "cg_unlockall_gobblegums"
     )
     addCurrencyToggle(
-      "Max COD Points",
-      "Sets COD Points to maximum or zero.",
+      "Points COD au maximum",
+      "Met les Points COD au maximum ou à zéro.",
       Enum.InventoryCurrency.INVENTORY_CURRENCY_COD_POINTS
     )
     addCurrencyToggle(
-      "Max Zombies Currencies",
-      "Sets Liquid Divinium and Cookbook Distills to maximum or zero.",
+      "Monnaies Zombies au maximum",
+      "Met le Divinium liquide et les distillats au maximum ou à zéro.",
       Enum.InventoryCurrency.INVENTORY_CURRENCY_ZM_VIALS
     )
   end
   if isMP then
     if type(game.setcurrencymaxed) == "function" then
       addToggle(
-        "Local Currency",
-        "Uses locally saved COD Points and Cryptokeys.",
+        "Monnaie locale",
+        "Utilise les Points COD et les Cryptoclés enregistrés localement.",
         "MPStatsSettings_local_currency",
         "cg_local_currency",
         true
       )
       addCurrencyToggle(
-        "Max COD Points",
-        "Sets COD Points to maximum or zero.",
+        "Points COD au maximum",
+        "Met les Points COD au maximum ou à zéro.",
         Enum.InventoryCurrency.INVENTORY_CURRENCY_COD_POINTS
       )
       addCurrencyToggle(
-        "Max Cryptokeys",
-        "Sets Cryptokeys to maximum or zero.",
+        "Cryptoclés au maximum",
+        "Met les Cryptoclés au maximum ou à zéro.",
         Enum.InventoryCurrency.INVENTORY_CURRENCY_MP_CRYPTO_KEYS
       )
     end
     addToggle(
-      "Unlock All Purchases",
-      "All items that need to be purchased with unlock tokens are unlocked.",
+      "Débloquer tous les achats",
+      "Tous les objets achetables avec les jetons de déblocage sont débloqués.",
       "MPStatsSettings_purchase_all",
       "cg_unlockall_purchases"
     )
     addToggle(
-      "Unlock All Class Slots",
-      "Unlocks all create-a-class slots and sets.",
+      "Débloquer tous les slots de classes",
+      "Débloque tous les slots et sets de création de classe.",
       "MPStatsSettings_unlockall_cac_slots",
       "cg_unlockall_cac_slots"
     )
   end
   addToggle(
-    "Unlock All Attachments",
-    "All attachments on weapons are unlocked.",
+    "Débloquer tous les accessoires",
+    "Tous les accessoires d'armes sont débloqués.",
     "MPStatsSettings_unlockall_attachments",
     "cg_unlockall_attachments"
   )
   addToggle(
-    "Unlock all Camos and Reticles",
-    "All camos and reticles on weapons are unlocked.",
+    "Débloquer tous les camouflages et réticules",
+    "Tous les camouflages et réticules d'armes sont débloqués.",
     "MPStatsSettings_unlockall_camos_and_reticles",
     "cg_unlockall_camos_and_reticles"
   )
   addToggle(
-    "Unlock all Calling Cards",
-    "All calling cards are unlocked.",
+    "Débloquer toutes les cartes d'appel",
+    "Toutes les cartes d'appel sont débloquées.",
     "MPStatsSettings_unlockall_calling_cards",
     "cg_unlockall_calling_cards"
   )
   if isMP then
     addToggle(
-      "Unlock all Specialists Outfits",
-      "All specialists outfits are unlocked.",
+      "Débloquer toutes les tenues de spécialistes",
+      "Toutes les tenues de spécialistes sont débloquées.",
       "MPStatsSettings_unlockall_specialists_outfits",
       "cg_unlockall_specialists_outfits"
     )
     addToggle(
-      "Unlock Blackjack",
-      "Blackjack can be used without a Mercenary Contract.",
+      "Débloquer Blackjack",
+      "Blackjack peut être utilisé sans contrat de mercenaire.",
       "MPStatsSettings_unlock_blackjack",
       "cg_unlockall_blackjack"
     )
   end
   if isZM then
     addToggle(
-      "Unlock Easter Eggs",
-      "Complete all Easter Egg Achievements.",
+      "Débloquer les Easter Eggs",
+      "Terminez tous les succès Easter Egg.",
       "MPStatsSettings_complete_ee",
       "all_ee_completed"
     )
@@ -325,19 +330,19 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
         name = value <= minlevel and "Min" or value >= maxlevel and "Max" or value,
         value = value - 1,
         default = value == currentRank,
-        title = "Rank Level",
-        desc = value ~= currentRank and "" or "Current Rank",
+        title = "Niveau de rang",
+        desc = value ~= currentRank and "" or "Rang actuel",
       })
     end
 
     if currentRank ~= minlevel and currentRank < maxlevel and not isMasterPrestige then
       table.insert(rankObjs, {
-        name = "Current: "
+        name = "Actuel : "
           .. tostring(currentRank <= minlevel and "Min" or currentRank >= maxlevel and "Max" or currentRank),
         value = currentRank - 1,
         default = true,
-        title = "Rank Level",
-        desc = "Do not adjust rank",
+        title = "Niveau de rang",
+        desc = "Ne pas modifier le rang",
       })
     end
   end
@@ -345,7 +350,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
   local prestigeTable = {}
   for i = 0, 11 do
     table.insert(prestigeTable, {
-      name = i == 0 and "None" or i == 11 and "Master" or i,
+      name = i == 0 and "Aucun" or i == 11 and "Maître" or i,
       value = i,
       default = i == currentPrestige,
       title = "Prestige",
@@ -384,7 +389,7 @@ DataSources.MPStatsSettings = DataSourceHelpers.ListSetup("MPStatsSettings", fun
 
     table.insert(optionsTable, {
       models = {
-        name = "Rank Level",
+        name = "Niveau de rang",
         desc = "",
         image = nil,
         optionsDatasource = createSettingsDatasource(
@@ -449,9 +454,9 @@ LUI.createMenu.BoiiiStatsMenu = function(controller)
   local GameSettingsBackground = CoD.GameSettings_Background.new(self, controller)
   GameSettingsBackground:setLeftRight(true, true, 0, 0)
   GameSettingsBackground:setTopBottom(true, true, 0, 0)
-  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("STATS SETTINGS"))
+  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES DES STATS"))
   GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-    Engine.Localize("STATS SETTINGS")
+    Engine.Localize("PARAMÈTRES DES STATS")
   )
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeInfo:setAlpha(0)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeName:setAlpha(0)
@@ -461,7 +466,7 @@ LUI.createMenu.BoiiiStatsMenu = function(controller)
   local Options = CoD.Competitive_SettingsList.new(self, controller)
   Options:setLeftRight(true, false, 26, 741)
   Options:setTopBottom(true, false, 135, 720)
-  Options.Title.DescTitle:setText(Engine.Localize("Stats"))
+  Options.Title.DescTitle:setText(Engine.Localize("Statistiques"))
   Options.ButtonList:setVerticalCount(15)
   Options.ButtonList:setDataSource("MPStatsSettings")
   self:addElement(Options)

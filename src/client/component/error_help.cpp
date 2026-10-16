@@ -216,8 +216,8 @@ constexpr char HELP_GAME_MISMATCH[] =
 constexpr char HELP_CONFIGSTRING_MISMATCH[] =
     "^1Your game and the server disagree about the match data (models, "
     "effects or settings).\n^3Fix: ^7Your game and the server are probably "
-    "not on the same AlterBOIII version or mod files. Update AlterBOIII, load the same "
-    "mod as the server, or join another server.";
+    "not on the same AlterBOIII version or mod files. Update AlterBOIII, load "
+    "the same mod as the server, or join another server.";
 constexpr char HELP_RELIABLE_CYCLED_OUT[] =
     "^1The server sent updates faster than your game could confirm them, so "
     "the connection fell out of sync.\n^3Fix: ^7This is usually a lag spike or "

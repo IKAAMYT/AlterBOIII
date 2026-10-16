@@ -120,17 +120,17 @@ local function presenceForFriend(friend)
   if friend.invited and friend.status == 2 then
     return Enum.PresencePrimary.PRESENCE_PRIMARY_TITLE,
       Enum.PresenceActivity.PRESENCE_ACTIVITY_MENU_INLOBBY,
-      "^2Invited you to play"
+      "^2Vous a invité à jouer"
   elseif friend.status == 2 then
     return Enum.PresencePrimary.PRESENCE_PRIMARY_TITLE,
       Enum.PresenceActivity.PRESENCE_ACTIVITY_MENU_INLOBBY,
-      "In a joinable game"
+      "Dans une partie rejoignable"
   elseif friend.status == 1 then
     return Enum.PresencePrimary.PRESENCE_PRIMARY_ONLINE,
       Enum.PresenceActivity.PRESENCE_ACTIVITY_ONLINE_NOT_IN_TITLE,
-      "^3Online, party closed"
+      "^3En ligne, groupe fermé"
   end
-  return Enum.PresencePrimary.PRESENCE_PRIMARY_OFFLINE, Enum.PresenceActivity.PRESENCE_ACTIVITY_OFFLINE, "Offline"
+  return Enum.PresencePrimary.PRESENCE_PRIMARY_OFFLINE, Enum.PresenceActivity.PRESENCE_ACTIVITY_OFFLINE, "Hors ligne"
 end
 
 local function createPlayerSlot(parent, index)
@@ -196,7 +196,7 @@ local function updatePlayerSlot(controller, slot, player)
   local xuid = Engine.StringToXUIDDecimal(player.steam_id)
   local primary, activity, presence = presenceForFriend(player)
   if player.seen then
-    presence = (player.friend and "Friend, " or "") .. "last seen " .. player.seen
+    presence = (player.friend and "Ami, " or "") .. "vu " .. player.seen
   end
   local values = {
     xuid = xuid,
@@ -418,7 +418,7 @@ local function detailsButtons(controller)
   end
 
   if player.friend and player.server ~= "" and not inParty and not inGameLobby then
-    add(player.invited and "Accept Invite" or "MENU_JOIN_GAME", function(menu, element, controllerIndex)
+    add(player.invited and "Accepter l'invitation" or "MENU_JOIN_GAME", function(menu, element, controllerIndex)
       joinPlayer(params.hex)
       GoBackToMenu(GoBack(menu, controllerIndex), controllerIndex, "Lobby")
     end)
@@ -436,7 +436,7 @@ local function detailsButtons(controller)
 
   if player.friend then
     add(
-      "Remove Friend",
+      "Retirer l'ami",
       goBackAfter(function(p)
         game.removefriend(p.steamId)
       end)
@@ -444,7 +444,7 @@ local function detailsButtons(controller)
   end
 
   add(
-    "Copy Friend Code",
+    "Copier le code ami",
     goBackAfter(function(p)
       FileIO.ClipboardSet(p.steamId)
     end),
@@ -455,7 +455,7 @@ local function detailsButtons(controller)
   -- added straight to the friends list
   if not player.friend then
     add(
-      "Add Friend",
+      "Ajouter en ami",
       goBackAfter(function(p)
         game.addfriend(p.steamId, player.name)
       end),
@@ -519,7 +519,7 @@ end
 require("ui.uieditor.widgets.Social.Social_Party_PC")
 
 local function partyLabel()
-  return Engine.DvarBool(nil, "friends_open") and "^2PARTY IS OPEN" or "^1PARTY IS CLOSED"
+  return Engine.DvarBool(nil, "friends_open") and "^2GROUPE OUVERT" or "^1GROUPE FERMÉ"
 end
 
 local function managePartyButton(label, action)

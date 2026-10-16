@@ -75,13 +75,14 @@ table social_player(const game::XUID id, const std::string &name) {
 std::string time_ago(const int64_t timestamp) {
   const int64_t minutes =
       std::max<int64_t>(std::time(nullptr) - timestamp, 0) / 60;
+  // AlterBO3 (IKAAM): texte affiche dans le menu social (onglet Recents).
   if (minutes < 1)
-    return "just now";
+    return "a l'instant";
   if (minutes < 60)
-    return std::format("{}m ago", minutes);
+    return std::format("il y a {} min", minutes);
   if (minutes < 1440)
-    return std::format("{}h ago", minutes / 60);
-  return std::format("{}d ago", minutes / 1440);
+    return std::format("il y a {} h", minutes / 60);
+  return std::format("il y a {} j", minutes / 1440);
 }
 
 luaReturnCount_e getvoiceinputdevices(lua_State *luaVM) {

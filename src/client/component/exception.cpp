@@ -889,9 +889,9 @@ std::string find_culprit(const std::vector<resolved_frame> &frames) {
   if (crashed.get_ptr() == utils::nt::library::get_by_address(
                                reinterpret_cast<const void *>(&find_culprit))
                                .get_ptr()) {
-    return "This is a bug in the AlterBOIII client, not a problem with your PC or "
-           "game files.\nFix: Please report it on https://dc.ezz.lol with the "
-           "crash dump.";
+    return "This is a bug in the AlterBOIII client, not a problem with your PC "
+           "or game files.\nFix: Please report it on https://dc.ezz.lol with "
+           "the crash dump.";
   }
 
   std::vector<const void *> addresses{exception_data.address};
