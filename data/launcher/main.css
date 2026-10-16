@@ -1927,8 +1927,17 @@ cards
   text-transform: uppercase;
   color: var(--texte-3);
 }
+.amis-identite-nom {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--texte);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .amis-code {
-  margin-top: 5px;
+  margin-top: 3px;
   font-family: 'Consolas', 'SF Mono', monospace;
   font-size: 19px;
   font-weight: 700;

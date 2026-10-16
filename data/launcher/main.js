@@ -141,30 +141,20 @@
     'Plus anciens': 'Oldest',
     'Alphabétique': 'Alphabetical',
 
-    // Amis
+    // Amis (systeme local par code ami, meme base que le launcher d'Ezz)
+    'Ta liste locale, celle que le jeu utilise pour le menu social.': 'Your local list, the one the in-game social menu uses.',
+    'Ton code ami AlterBOIII': 'Your AlterBOIII Friend Code',
+    'Ton identité AlterBOIII': 'Your AlterBOIII identity',
+    'Donne-le à tes potes : c\'est ce code qu\'ils collent ci-dessous pour t\'ajouter.': 'Give it to your friends: this is the code they paste below to add you.',
+    'Copier': 'Copy',
     'Ajouter un ami': 'Add a friend',
-    'Entre le pseudo de la personne pour lui envoyer une demande.': 'Enter someone\'s username to send them a request.',
-    'Envoyer': 'Send',
-    'Mes amis': 'My friends',
-    'Demandes reçues': 'Received requests',
-    'Rechercher': 'Search',
-    'Rechercher un ami...': 'Search a friend...',
-    'Se connecter avec le forum': 'Sign in with the forum',
-    'Se déconnecter': 'Sign out',
-    'Connecté en tant que': 'Signed in as',
+    'Entre un pseudo et le code ami de ton pote.': 'Enter a display name and your friend\'s AlterBOIII Friend Code.',
+    'Pseudo': 'Display name',
+    'Code ami AlterBOIII': 'AlterBOIII Friend Code',
+    'Ajouter': 'Add',
+    'Aucun ami enregistré': 'No friends added yet',
+    'Aucun ami pour le moment': 'No friends yet',
     'En ligne': 'Online',
-    'Connecte-toi à AlterCOD': 'Sign in to AlterCOD',
-    'Utilise ton compte du forum pour retrouver tes amis en jeu.': 'Use your forum account to find your friends in-game.',
-    'Crée-le sur le forum': 'Create one on the forum',
-    'Ouverture du navigateur... autorise la connexion puis reviens ici.': 'Opening your browser... authorize the connection then come back here.',
-    'Serveur injoignable.': 'Server unreachable.',
-    '0 ami': '0 friends',
-
-    // WIP (en cours de creation)
-    'Système d\'amis en cours de création': 'Friends system under construction',
-    'Connexion via le forum, demandes d\'amis, présence en jeu et statut "en partie" : tout ça arrive bientôt pour retrouver ta communauté directement depuis le launcher.': 'Forum sign-in, friend requests, in-game presence and "in match" status: it\'s all coming soon so you can find your community right from the launcher.',
-    'Retour du développement début août': 'Development resumes early August',
-    'En développement': 'In development',
 
     // Modes de jeu
     'Multijoueur': 'Multiplayer',
@@ -4876,6 +4866,7 @@ fetchReleases();
    ───────────────────────────────────────────────────────────── */
 (function initAmis() {
   var codeEl    = document.getElementById('amisCode');
+  var nomEl     = document.getElementById('amisNom');
   var copierBtn = document.getElementById('amisCopierBtn');
   var compteEl  = document.getElementById('amisCompte');
   var listeEl   = document.getElementById('amisListe');
@@ -4908,8 +4899,12 @@ fetchReleases();
 
     var d = parseJson(brut);
     if (!d) return;
-    monCode = d.friend_code || '';
+    monCode = d.friend_code ? String(d.friend_code) : '';
     if (codeEl) codeEl.textContent = monCode || 'indisponible';
+    // Comme le launcher d'Ezz : le pseudo courant s'affiche au-dessus du
+    // code, pour qu'on sache sous quel nom les potes nous verront.
+    if (nomEl && d.name) nomEl.textContent = d.name;
+    if (copierBtn) copierBtn.disabled = !monCode;
   }
 
   function chargerAmis() {
@@ -5091,17 +5086,22 @@ fetchReleases();
   if (addCode) addCode.onkeydown = surEntree;
   if (addNom)  addNom.onkeydown  = surEntree;
 
-  /* Recharge en entrant sur la page, et toutes les 20 s si elle est ouverte :
-     le jeu reecrit friends.json quand la presence change. */
+  /* Recharge en entrant sur la page, et toutes les 5 s si elle est ouverte
+     et visible (meme cadence que le launcher d'Ezz) : le jeu reecrit
+     friends.json quand un ami est ajoute/retire depuis le menu social. */
   var setPageOrig = setPage;
   setPage = function(cible) {
     setPageOrig(cible);
     if (cible === 'friends') { chargerIdentite(); chargerAmis(); }
   };
   setInterval(function() {
+    if (document.hidden) return;
     var page = document.getElementById('friendsPage');
-    if (page && page.className.indexOf('active') !== -1) chargerAmis();
-  }, 20000);
+    if (page && page.className.indexOf('active') !== -1) {
+      chargerIdentite();
+      chargerAmis();
+    }
+  }, 5000);
 
   setTimeout(function() { chargerIdentite(); chargerAmis(); }, 1200);
 })();

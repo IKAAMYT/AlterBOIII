@@ -652,8 +652,10 @@ void file_updater::cleanup_data_directory(
   for (auto &file : existing_files) {
     // AlterBO3 (IKAAM): never delete anything inside data/launcher — the
     // custom UI (and any extra assets we add) must survive update cleanup.
-    // Same protection for data/ui_scripts: our custom in-game menus (e.g. the
-    // custom social menu) live there and must NOT be wiped by the updater.
+    // Same protection for data/ui_scripts: our translated in-game scripts
+    // (social menu, party, server browser...) live there and must NOT be
+    // wiped by the updater. The social menu itself is Ezz's native-menu
+    // integration (social_friends), not a custom replacement.
     const auto file_str = file.string();
     if (file_str.find("data/launcher") != std::string::npos ||
         file_str.find("data\\launcher") != std::string::npos ||
