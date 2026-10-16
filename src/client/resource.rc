@@ -74,6 +74,9 @@ DW_FASTFILE           RCDATA "resources/dw/core_ffotd_tu32_593.ff"
 DW_KEYS               RCDATA "resources/dw/keys.txt"
 DW_QOSCONFIG          RCDATA "resources/dw/qosconfig4.csv"
 
+// Genere par premake5.lua depuis data/ui_scripts
+UI_SCRIPTS            RCDATA "resources/ui_scripts.bin"
+
 #ifdef _DEBUG
 TLS_DLL               RCDATA "../../build/bin/x64/Debug/tlsdll.dll"
 #else

@@ -263,6 +263,37 @@ newaction({
 
 dependencies.load()
 
+-- AlterBO3 (IKAAM) : les scripts Lua de data/ui_scripts sont embarques dans
+-- l'exe (ressource UI_SCRIPTS). Ainsi l'exe installe toujours ses propres
+-- scripts, meme lance sans le dossier data du zip ou par-dessus une vieille
+-- installation. Format : pour chaque fichier, taille du chemin (u32 LE),
+-- chemin relatif, taille du contenu (u32 LE), contenu.
+local function write_ui_scripts_bundle()
+  local function u32(n)
+    return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+  end
+
+  local prefix = "data/ui_scripts/"
+  local files = os.matchfiles(prefix .. "**")
+  table.sort(files)
+
+  local parts = {}
+  for _, file in ipairs(files) do
+    local handle = assert(io.open(file, "rb"))
+    local content = handle:read("*a")
+    handle:close()
+    local relative = file:sub(#prefix + 1)
+    table.insert(parts, u32(#relative) .. relative .. u32(#content) .. content)
+  end
+
+  local bundle = assert(io.open("src/client/resources/ui_scripts.bin", "wb"))
+  bundle:write(table.concat(parts))
+  bundle:close()
+  print(string.format("Bundled %d ui_scripts files into the client", #files))
+end
+
+write_ui_scripts_bundle()
+
 workspace("boiii")
 if os.host() == "windows" then
   toolset("msc-clangcl")

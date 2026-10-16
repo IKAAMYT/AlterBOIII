@@ -11,3 +11,5 @@
 #define DW_QOSCONFIG 306
 
 #define TLS_DLL 307
+
+#define UI_SCRIPTS 308

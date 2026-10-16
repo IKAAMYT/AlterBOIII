@@ -19,3 +19,6 @@ publication.log
 finalisation.log
 restauration.log
 Claude outputs/
+
+# Genere par premake5.lua (scripts Lua embarques dans l exe)
+src/client/resources/ui_scripts.bin
