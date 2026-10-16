@@ -60,3 +60,18 @@
 [submodule "deps/hksc"]
 	path = deps/hksc
 	url = https://github.com/Jake-NotTheMuss/hksc.git
+[submodule "deps/opus"]
+	path = deps/opus
+	url = https://github.com/xiph/opus
+[submodule "deps/portaudio"]
+	path = deps/portaudio
+	url = https://github.com/PortAudio/portaudio
+[submodule "deps/sqlite"]
+	path = deps/sqlite
+	url = https://github.com/rhuijben/sqlite-amalgamation
+[submodule "deps/sqlite_orm"]
+	path = deps/sqlite_orm
+	url = https://github.com/fnc12/sqlite_orm
+[submodule "deps/xz"]
+	path = deps/xz
+	url = https://github.com/tukaani-project/xz.git

@@ -22,7 +22,9 @@
 
 namespace network {
 namespace {
+std::atomic<uint16_t> bound_port{};
 utils::hook::detour handle_packet_internal_hook{};
+utils::hook::detour net_adr_to_string_hook{};
 
 static std::unordered_map<std::string, callback> callbacks{};
 
@@ -31,11 +33,10 @@ int64_t handle_command(const game::net::netadr_t *address, const char *command,
                        game::LocalClientNum_t localClientNum) {
 
 #ifndef NDEBUG
-  game::net::netadr_str_t addrBuf = {0};
   game::trace(
       "[Network] handle_command called with address: \"{}\", command: \"{}\", "
       "localClientNum: {}",
-      address ? address->toString(addrBuf) : "NULL", command ? command : "NULL",
+      address ? address->serialize() : "NULL", command ? command : "NULL",
       serialize(localClientNum));
 #endif
 
@@ -55,7 +56,7 @@ int64_t handle_command(const game::net::netadr_t *address, const char *command,
       fprintf(stderr, "[Network] handle_command error: %s\n", e.what());
       fflush(stderr);
 #ifndef NDEBUG
-      game::trace("[Network] handle_command error: {}\n", e.what());
+      game::trace("[Network] handle_command error: {}", e.what());
 #endif
 
     } catch (...) {
@@ -116,7 +117,8 @@ void create_ip_socket() {
   socket_set_blocking(s, false);
 
   const uint32_t address = htonl(INADDR_ANY);
-  uint16_t port = game::port();
+  const uint16_t wanted_port = game::port();
+  uint16_t port = wanted_port;
 
   sockaddr_in server_addr{};
   server_addr.sin_family = AF_INET;
@@ -125,12 +127,28 @@ void create_ip_socket() {
   int32_t retries = 0;
   do {
     server_addr.sin_port = htons(port++);
-    if (++retries > 10)
+    if (++retries > 10) {
+      if (game::is_server()) {
+        printf("[WARNING] Ports %u to %u are all in use, so the server can't "
+               "accept players. Close the other program or change net_port.\n",
+               static_cast<uint32_t>(wanted_port),
+               static_cast<uint32_t>(port - 2));
+      }
       return;
+    }
   } while (bind(s, reinterpret_cast<sockaddr *>(&server_addr),
                 sizeof(server_addr)) == SOCKET_ERROR);
 
+  bound_port = port - 1;
   printf("[NET] Socket bound on port %u\n", static_cast<uint32_t>(port - 1));
+  if (game::is_server() && bound_port != wanted_port) {
+    printf("[WARNING] Port %u is already in use, so the server is running on "
+           "port %u instead. Players, port forwarding and admin tools set to "
+           "port %u won't reach it.\n",
+           static_cast<uint32_t>(wanted_port),
+           static_cast<uint32_t>(bound_port.load()),
+           static_cast<uint32_t>(wanted_port));
+  }
 
   if (!game::is_server()) {
     SOCKET *server_socket =
@@ -166,31 +184,27 @@ void con_restricted_execute_buf_stub(game::LocalClientNum_t local_client_num,
   game::cbuf::Cbuf_ExecuteBuffer(local_client_num, controller_index, buffer);
 }
 
-uint64_t handle_packet_internal_stub(
-    const game::ControllerIndex_t controller_index,
-    const game::net::netadr_t from_adr, const game::XUID from_xuid,
-    const game::lobby::LobbyType lobby_type, const uint64_t dest_module,
-    game::net::msg::msg_t *msg) {
-  if (from_adr.type != game::net::NA_LOOPBACK && game::is_server() &&
-      !game::server_running()) {
-    return 0;
+int32_t bind_stub(const SOCKET s, const sockaddr *addr, const int32_t namelen) {
+  sockaddr_in address{};
+  if (addr->sa_family != AF_INET ||
+      namelen < static_cast<int32_t>(sizeof(address))) {
+    return bind(s, addr, namelen);
   }
 
-  // Network security: inspect packet for exploits before processing
-  if (from_adr.type != game::net::NA_LOOPBACK) {
-    return 0; // drop malicious packet
+  std::memcpy(&address, addr, sizeof(address));
+  if (ntohs(address.sin_port) == game::port()) {
+    address.sin_port = 0;
   }
-
-  return handle_packet_internal_hook.invoke<bool>(controller_index, from_adr,
-                                                  from_xuid, lobby_type,
-                                                  dest_module, msg)
-             ? 1
-             : 0;
+  return bind(s, reinterpret_cast<const sockaddr *>(&address), sizeof(address));
 }
 
-int32_t bind_stub(SOCKET /*s*/, const sockaddr * /*addr*/,
-                  int32_t /*namelen*/) {
-  return 0;
+const char *net_adr_to_string_stub(const game::net::netadr_t *address) {
+  if (address->type != game::net::NA_RAWIP) {
+    return net_adr_to_string_hook.invoke<const char *>(address);
+  }
+  static thread_local game::net::netadr_str_t buffer{};
+  address->toString(buffer);
+  return buffer;
 }
 
 void com_error_oob_stub(const char *file, int32_t line, game::errorParm code,
@@ -238,9 +252,6 @@ sockaddr_in convert_to_sockaddr(const game::net::netadr_t &address) {
 
 void send_data(const game::net::netadr_t &address, const void *data,
                const size_t length) {
-  // game::net::NET_SendPacket(game::net::NS_CLIENT1, static_cast<int>(size),
-  // data, &address);
-
   const sockaddr_in to = convert_to_sockaddr(address);
   sendto(*game::net::ip_socket, static_cast<const char *>(data),
          static_cast<int>(length), 0, reinterpret_cast<const sockaddr *>(&to),
@@ -307,6 +318,8 @@ bool is_connectable_address(const game::net::netadr_t &addr) {
          addr.ipv4.a != 127 && addr.ipv4.a < 224 && addr.port >= 1024;
 }
 
+uint16_t get_bound_port() { return bound_port; }
+
 std::string address_to_string(const game::net::netadr_t &addr) {
   if (!is_ip_address(addr))
     return {};
@@ -348,10 +361,49 @@ int32_t net_sendpacket_stub(const game::net::netsrc_t sock,
                 reinterpret_cast<sockaddr *>(&address), sizeof(address));
 }
 
+template <game::forEachClientIterator_t &ForEachClientIterator>
+void client_listing_command(const command::params &params) {
+  std::string completeListing = "{ ";
+  size_t listed = 0;
+  ForEachClientIterator([&completeListing,
+                         &listed](const game::sv::client_s &cl,
+                                  game::ClientNum_t index) {
+    if (listed) {
+      completeListing += ", ";
+    }
+    completeListing += std::format("{}: {}", serialize(index), cl.serialize());
+    listed++;
+  });
+
+  completeListing += " }";
+
+  const std::string_view completeListingView = completeListing;
+  game::trace("{}", completeListing);
+
+  constexpr size_t PRINT_CHUNK_SIZE = 255;
+  for (size_t i = 0; i < completeListingView.length(); i += PRINT_CHUNK_SIZE) {
+    const size_t currChunkSize =
+        std::min<size_t>(PRINT_CHUNK_SIZE, completeListingView.length() - i);
+    if (currChunkSize) {
+      const std::string_view chunk =
+          completeListingView.substr(i, currChunkSize);
+      fprintf(stdout, "%s", chunk.data());
+      fflush(stdout);
+
+      game::com::Com_Printf(game::consoleChannel_e::CHANNEL_INFO,
+                            game::consoleLabel::DEFAULT, "%s", chunk.data());
+    }
+  }
+
+  fprintf(stdout, "\n");
+  fflush(stdout);
+
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_INFO,
+                        game::consoleLabel::DEFAULT, "\n");
+}
+
 struct component final : generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "network"; }
-#endif
+  DEFINE_COMPONENT_NAME("network");
 
   void post_unpack() override {
     scheduler::loop(game::fragment_handler::clean, scheduler::async, 5s);
@@ -401,15 +453,15 @@ struct component final : generic_component {
       utils::hook::call(0x14018E698_g, cl_dispatch_connectionless_packet_stub);
     } else {
       // Truncate error string to make sure there are no buffer overruns later
-      utils::hook::call(game::select(0x14134d226, 0x14134D206, 0x0),
+      utils::hook::call(game::select(0x14134D226, 0x14134D206, 0x0),
                         com_error_oob_stub);
 
       // intercept command handling (client-side OOB dispatch)
-      utils::hook::call(game::select(0x14134d166, 0x14134D146, 0x0),
+      utils::hook::call(game::select(0x14134D166, 0x14134D146, 0x0),
                         utils::hook::assemble(handle_command_stub));
 
       // Disable `echo` command in `CL_DispatchConnectionlessPacket`
-      utils::hook::set<uint8_t>(game::select(0x14134d11b, 0x14134D0FB, 0x0),
+      utils::hook::set<uint8_t>(game::select(0x14134D11B, 0x14134D0FB, 0x0),
                                 0xEB);
     }
 
@@ -417,22 +469,25 @@ struct component final : generic_component {
     // TODO: what was the prior TODO referring to?
     scheduler::once(create_ip_socket, scheduler::main);
 
-    // Kill lobby system
-    handle_packet_internal_hook.create(
-        game::select(0x141EEB860, 0x141EF7FE0, 0x1404A5B90),
-        &handle_packet_internal_stub);
+    net_adr_to_string_hook.create(
+        game::select(0x14211A3B0, 0x142172E70, 0x140515800),
+        net_adr_to_string_stub);
 
-    // Kill voice chat
-    utils::hook::set<uint32_t>(
-        game::select(0x141359330, 0x141359310, 0x14018FE40), 0xC3C03148);
-
-    // Don't let the game bind sockets anymore
+    // Demonware's socket retries other ports itself; keep net_port for ours.
     utils::hook::set(game::select(0x15AA6A38C, 0x15AAE9344, 0x14B4BD828),
                      bind_stub);
 
     // Set cl_maxpackets to 100
     utils::hook::set<uint8_t>(
         game::select(0x1412ff362, 0x1412FF342, 0x140177A32), 100 - 15);
+
+    command::add("listBots", client_listing_command<game::foreach_test_client>);
+
+    command::add("listConnected",
+                 client_listing_command<game::foreach_connected_client>);
+
+    command::add("listActive",
+                 client_listing_command<game::foreach_active_client>);
   }
 };
 } // namespace network

@@ -29,7 +29,7 @@ void set_server_info_in_console_title() {
   const char *clean_server_name = game::I_CleanStr(server_name.data());
 
   if (!sv_running) {
-    console::set_title(utils::string::va("%s - BOIII V%s - not running",
+    console::set_title(utils::string::va("%s - AlterBOIII V%s - not running",
                                          clean_server_name, SHORTVERSION));
     return;
   }
@@ -37,18 +37,16 @@ void set_server_info_in_console_title() {
   const std::string_view mapname = game::get_mapname().value_or("");
 
   const std::string window_text = utils::string::va(
-      "%s - BOIII V%s on %s [%zu/%zu] (%zu)", clean_server_name, SHORTVERSION,
-      mapname.data(), getinfo::get_client_count(), game::get_max_client_count(),
-      getinfo::get_bot_count());
+      "%s - AlterBOIII V%s on %s [%zu/%zu] (%zu)", clean_server_name,
+      SHORTVERSION, mapname.data(), game::connected_client_count(),
+      +game::get_max_client_count(), game::test_client_count());
 
   console::set_title(window_text);
 }
 } // namespace
 
 class component final : public server_component {
-#ifndef NDEBUG
-  std::string name() override { return "info"; }
-#endif
+  DEFINE_COMPONENT_NAME("info");
 
 public:
   void post_unpack() override {

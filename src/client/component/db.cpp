@@ -2,10 +2,18 @@
 
 #include <loader/component_loader.hpp>
 
+#include "command.hpp"
+#include "scheduler.hpp"
+#include "workshop/workshop.hpp"
+
 #include <game/game.hpp>
 #include <game/utils.hpp>
 
 #include <utils/hook.hpp>
+#include <utils/thread.hpp>
+
+#include <fstream>
+#include <regex>
 
 namespace db {
 using namespace game;
@@ -75,10 +83,62 @@ maptable::MapTable *Com_GetMapTable_Safe(const char *mapTableName) {
   return mapTable;
 }
 
+EngineDependentDvarMut db_log_missing_assets;
+
+bool is_optional_asset(const XAssetType type, const std::string_view name) {
+  switch (type) {
+  case XAssetType::WEAPON:
+  case XAssetType::FX:
+  case XAssetType::TAGFX:
+  case XAssetType::MATERIAL:
+  case XAssetType::CGMEDIA:
+  case XAssetType::NAVVOLUME:
+  case XAssetType::RUMBLE:
+    return true;
+  case XAssetType::RAWFILE:
+    return name.starts_with("gamedata/constbaselines/") ||
+           name.starts_with("vision/");
+  case XAssetType::STRUCTURED_TABLE:
+    return name == "gamedata/tables/common/mod_game_types.json";
+  default:
+    return false;
+  }
+}
+
+utils::hook::detour PrintWaitedError_hook;
+void PrintWaitedError_stub(const XAssetType type, const char *name,
+                           const int32_t waitedMsec) {
+  // Shared scripts and engine code look up assets from every map and mode, so
+  // most of these lookups are expected to fail. They are hidden by default and
+  // can be listed with db_logMissingAssets 1.
+  if (name && is_optional_asset(type, name) &&
+      (!db_log_missing_assets || !db_log_missing_assets.get_bool())) {
+    return;
+  }
+
+  PrintWaitedError_hook.invoke(type, name, waitedMsec);
+}
+
+void preload_mode_files() {
+  SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+  static const std::regex mode_file(
+      R"(([a-z]{2}_)?(zm|mp|cp)_(patch|common)(_d)?\.(ff|xpak))");
+  std::vector<char> buffer(1 << 20);
+  std::error_code ec;
+  for (const auto &entry : std::filesystem::directory_iterator(
+           game::get_game_path() / "zone", ec)) {
+    if (!std::regex_match(entry.path().filename().string(), mode_file)) {
+      continue;
+    }
+    std::ifstream file(entry.path(), std::ios::binary);
+    while (
+        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()))) {
+    }
+  }
+}
+
 class component final : public generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "db"; }
-#endif
+  DEFINE_COMPONENT_NAME("db");
 
 public:
   void post_unpack() override {
@@ -93,6 +153,32 @@ public:
     Com_GametypeSettings_SetGametype_hook.create(
         game::com::gts::Com_GametypeSettings_SetGametype.get(),
         Com_GametypeSettings_SetGametype_GetOrInitGameTypeSettingsDDL);
+
+    PrintWaitedError_hook.create(PrintWaitedError.get(), PrintWaitedError_stub);
+    db_log_missing_assets =
+        register_dvar_bool("db_logMissingAssets", false, DVAR_NONE,
+                           "Print every asset that couldn't be found");
+
+    if (game::is_client()) {
+      command::add("DB_FreeUnusedResources", [](const command::params &params) {
+        if (!workshop::are_xzones_loading()) {
+          game::db::load::DB_FreeUnusedResources(std::atoi(params.get(1)) != 0,
+                                                 std::atoi(params.get(2)) != 0);
+        }
+      });
+
+      scheduler::schedule(
+          [] {
+            if (!com::Com_IsRunningUILevel()) {
+              return scheduler::cond_continue;
+            }
+            utils::thread::create_named_thread("Mode Preload",
+                                               preload_mode_files)
+                .detach();
+            return scheduler::cond_end;
+          },
+          scheduler::main, 1s);
+    }
   }
 };
 } // namespace db

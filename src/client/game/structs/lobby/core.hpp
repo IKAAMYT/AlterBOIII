@@ -40,6 +40,17 @@ enum class LobbyType : int32_t {
 };
 IMPL_ENUM_OPERATORS(LobbyType);
 
+inline constexpr const char *serialize(const LobbyType lobbyType) {
+  switch (lobbyType) {
+  case LobbyType::PRIVATE:
+    return "LOBBYTYPE_PRIVATE";
+  case LobbyType::GAME:
+    return "LOBBYTYPE_GAME";
+  default:
+    return "LOBBYTYPE_INVALID";
+  }
+}
+
 enum class LobbyClientType : int32_t {
   INVALID = -1,
   ALL = 0,
@@ -141,90 +152,16 @@ enum class LobbyProcessComplete : int32_t {
 IMPL_ENUM_OPERATORS(LobbyProcessComplete);
 enum class LobbyDisconnectClient : int32_t {
   INVALID = -1,
-  DROP = 0,
-  KICK = 1,
-  BADDLC = 2,
-  KICK_PARTY = 3,
-  HOSTRELOAD = 4,
-  NOPARTYCHAT = 5,
-  LOBBY_DISCONNECT_CLIENT_ERROR = 6,
-  MISSING_CONTENT = 7,
+  DROP = 0x0,
+  KICK = 0x1,
+  BADDLC = 0x2,
+  KICK_PARTY = 0x3,
+  HOSTRELOAD = 0x4,
+  NOPARTYCHAT = 0x5,
+  LOBBY_DISCONNECT_CLIENT_ERROR = 0x6,
+  MISSING_CONTENT = 0x7,
 };
 IMPL_ENUM_OPERATORS(LobbyDisconnectClient);
-
-enum class JoinType : uint32_t {
-  NORMAL = 0x0,
-  PLAYLIST = 0x1,
-  FRIEND = 0x2,
-  INVITE = 0x3,
-  PARTY = 0x4,
-  COUNT = 0x5,
-};
-IMPL_ENUM_OPERATORS(JoinType);
-
-enum class JoinSourceState : uint32_t {
-  IDLE = 0x0,
-  CONNECT_TO_NEXT_HOST = 0x1,
-  ASSOCIATING = 0x2,
-  HANDSHAKING = 0x3,
-  WAITING_FOR_AGREEMENT = 0x4,
-  CONNECTION_FAILED = 0x5,
-  CONNECTION_SUCCESS = 0x6,
-  ENDING_HOST = 0x7,
-  CLEANUP = 0x8,
-  COUNT = 0x9,
-};
-IMPL_ENUM_OPERATORS(JoinSourceState);
-
-enum class JoinResult : uint32_t {
-  INVALID = 0x0,
-  SUCCESS = 0x1,
-  CONNECT_TO_HOST_FAILURE = 0x2,
-  PROBE_SEND_FAILURE = 0x3,
-  PROBE_TIMEOUT = 0x4,
-  PROBE_INVALID_LOBBY = 0x5,
-  PROBE_INVALID_INFO = 0x6,
-  PROBE_RESULT_INVALID = 0x7,
-  INVALID_LOBBY = 0x8,
-  SEND_AGREEMENT_REQUEST_FAILED = 0x9,
-  HANDSHAKE_WINDOW_EXPIRED = 0xA,
-  AGREEMENT_WINDOW_EXPIRED = 0xB,
-  JOIN_DISABLED = 0xC,
-  JOIN_ALREADY_IN_PROGRESS = 0xD,
-  NOT_JOINABLE_NOT_HOSTING = 0xE,
-  NOT_JOINABLE_NOT_IDLE = 0xF,
-  NOT_JOINABLE_CLOSED = 0x10,
-  NOT_JOINABLE_INVITE_ONLY = 0x11,
-  NOT_JOINABLE_FRIENDS_ONLY = 0x12,
-  LOBBY_FULL = 0x13,
-  NETWORK_MODE_MISMATCH = 0x14,
-  MISMATCH_PLAYLISTID = 0x15,
-  MISMATCH_PLAYLIST_VERSION_TO_NEW = 0x16,
-  MISMATCH_PLAYLIST_VERSION_TO_OLD = 0x17,
-  MISMATCH_PROTOCOL_VERSION = 0x18,
-  MISMATCH_NETFIELD_CHECKSUM = 0x19,
-  MISMATCH_FFOTD_VERSION_TO_NEW = 0x1A,
-  MISMATCH_FFOTD_VERSION_TO_OLD = 0x1B,
-  MIGRATE_IN_PROGRESS = 0x1C,
-  COULD_NOT_RESERVE = 0x1D,
-  COUNT = 0x1E,
-};
-IMPL_ENUM_OPERATORS(JoinResult);
-
-enum class JoinClientState : int32_t {
-  JOIN_CLIENT_STATE_IDLE = 0x0,
-  JOIN_CLIENT_STATE_CONNECT_TO_NEXT_HOST = 0x1,
-  JOIN_CLIENT_STATE_ASSOCIATING = 0x2,
-
-  JOIN_CLIENT_STATE_HANDSHAKING = 0x3,
-  JOIN_CLIENT_STATE_WAITING_FOR_AGREEMENT = 0x4,
-  JOIN_CLIENT_STATE_CONNECTED_FAILED = 0x5,
-  JOIN_CLIENT_STATE_CONNECTION_SUCCESS = 0x6,
-  JOIN_CLIENT_STATE_ENDING_HOST = 0x7,
-  JOIN_CLIENT_STATE_CLEANUP = 0x8,
-  JOIN_CLIENT_STATE_COUNT = 0x9,
-};
-IMPL_ENUM_OPERATORS(JoinClientState);
 
 enum class MutableClientFlag : uint32_t {
   HEADSET_PRESENT = 0x0,
@@ -258,8 +195,6 @@ struct JoinHost {
   int32_t retryCount;
 };
 
-typedef fastcallPtr_t<void(int32_t, JoinResult result)> joinCompleteCallback;
-
 struct AgreementStatus {
   XUID xuid;
   name_t name;
@@ -275,26 +210,6 @@ struct Agreement {
   int32_t requestCount;
   int32_t responseCount;
   int32_t agreeCount;
-};
-
-struct Join {
-  JoinSourceState state;
-  int32_t actionId;
-  int32_t startTime;
-  int32_t duration;
-  ControllerIndex_t controllerIndex;
-  LobbyType sourceLobbyType;
-  LobbyType targetLobbyType;
-  joinCompleteCallback joinComplete;
-  JoinHost hostList[50];
-  int32_t hostCount;
-  int32_t processedCount;
-  bool isFinalized;
-  JoinHost potentialHost;
-  Agreement agreement;
-  Agreement debugAgreement;
-  JoinType joinType;
-  JoinResult joinResult;
 };
 
 struct ServerInfo {

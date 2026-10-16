@@ -5,7 +5,7 @@
 #include "cbuf.hpp"        // IWYU pragma: export
 #include "cg/cg.hpp"       // IWYU pragma: export
 #include "cinematic.hpp"   // IWYU pragma: export
-#include "cl.hpp"          // IWYU pragma: export
+#include "cl/cl.hpp"       // IWYU pragma: export
 #include "cm.hpp"          // IWYU pragma: export
 #include "cmd.hpp"         // IWYU pragma: export
 #include "com/com.hpp"     // IWYU pragma: export
@@ -22,6 +22,7 @@
 #include "glasssv.hpp"     // IWYU pragma: export
 #include "hunk.hpp"        // IWYU pragma: export
 #include "ik.hpp"          // IWYU pragma: export
+#include "in.hpp"          // IWYU pragma: export
 #include "info.hpp"        // IWYU pragma: export
 #include "jq.hpp"          // IWYU pragma: export
 #include "level.hpp"       // IWYU pragma: export
@@ -54,3 +55,4 @@
 #include "ugc.hpp"         // IWYU pragma: export
 #include "ui/ui.hpp"       // IWYU pragma: export
 #include "vehicle.hpp"     // IWYU pragma: export
+#include "voice.hpp"       // IWYU pragma: export

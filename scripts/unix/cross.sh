@@ -34,6 +34,7 @@ MARCH="x86-64"
 NUM_THREADS="$(num_threads)"
 BOIII_EXE="boiii.exe"
 TLS_DLL="tlsdll.dll"
+VERBOSE=0
 
 exec_arbitrary() {
 	[ "$EXEC_ARBITRARY" -ne 0 ]
@@ -363,6 +364,7 @@ flags_to_yaml_array_items() {
 }
 
 FLAG_INDENTATION="   "
+# shellcheck disable=SC2120
 clangd_flag_indent() {
 	local in
 	in="$1"
@@ -371,6 +373,7 @@ clangd_flag_indent() {
 		in="$(cat -)"
 	fi
 
+	# shellcheck disable=SC2001
 	sed "s/^[ \t]*/${FLAG_INDENTATION}/g" <<<"$in"
 }
 
@@ -408,6 +411,27 @@ DEP_INCLUDE_PATHS=(
 	"deps/zstd/lib"
 	"deps/brotli/c/include"
 	"deps/gtl/include"
+	"deps/hksc/src"
+	"deps/opus/include"
+	"deps/opus/silk"
+	"deps/opus/silk/x86"
+	"deps/opus/silk/float"
+	"deps/opus/silk/float/x86"
+	"deps/opus/celt"
+	"deps/opus/celt/x86"
+	"deps/portaudio/include"
+	"deps/portaudio/src/common"
+	"deps/portaudio/src/os/win"
+	"deps/sqlite"
+	"deps/sqlite_orm/include"
+	"deps/xz/src/common"
+	"deps/xz/src/liblzma/common"
+	"deps/xz/src/liblzma/check"
+	"deps/xz/src/liblzma/lz"
+	"deps/xz/src/liblzma/lzma"
+	"deps/xz/src/liblzma/rangecoder"
+	"deps/xz/src/liblzma/delta"
+	"deps/xz/src/liblzma/simple"
 )
 
 NUM_DEP_INCLUDES="${#DEP_INCLUDE_PATHS[@]}"
@@ -431,7 +455,7 @@ clangd_include_flags() {
 		echo "$(inc_path_flag "${DEP_INCLUDE_PATHS[$dep_inc_idx]}"),"
 	done
 
-	echo "$(inc_path_flag "${DEP_INCLUDE_PATHS[$((NUM_DEP_INCLUDES - 1))]}")"
+	inc_path_flag "${DEP_INCLUDE_PATHS[$((NUM_DEP_INCLUDES - 1))]}"
 
 }
 
@@ -520,6 +544,7 @@ print_usage() {
 	echo "  --output, -o               Specify the output directory for build files."
 	echo "  -march, -m                 Specify the target architecture (default: x86-64-v2)."
 	echo "  -j, --threads              Specify the number of threads to use for building (default: $(nproc))."
+	echo "  -v, --verbose              Enable verbose compilation logging."
 	echo "  --help, -h                 Show this help message and exit."
 }
 
@@ -558,6 +583,10 @@ while [ "$#" -gt 0 ]; do
 		fi
 		MARCH="$2"
 		shift 2
+		;;
+	--verbose | -verbose | -v)
+		VERBOSE=1
+		shift 1
 		;;
 	-j | -threads | --threads)
 		if [ -z "$2" ]; then
@@ -693,6 +722,13 @@ fi
 
 resflags=("--target=pe-x86-64" "-I${msvc_toolchain_sysroot}/include")
 
+if [ "$VERBOSE" -eq 1 ]; then
+	ldflags+=("-v")
+	cxxflags+=("-v")
+	cflags+=("-v")
+	resflags+=("--verbose")
+fi
+
 disabled_warnings=(
 	"unknown-warning-option"
 	"microsoft-cast"
@@ -702,12 +738,8 @@ disabled_warnings=(
 	"error=microsoft-case"
 	"error=dangling-else"
 	"system-headers"
-	"unused-function"
-	"unused-variable"
 	"sign-compare"
-	"unused-but-set-variable"
 	"format"
-	"unused-lambda-capture"
 	"unused-command-line-argument"
 )
 
@@ -749,7 +781,6 @@ BUILD_DEPS=(
 )
 
 if tidy; then
-
 	if ! cross_env \
 		clang-tidy "${EXEC_ARGS[@]}" -- \
 		-I"${WINDOWS_MSVC_TOOLCHAIN_INCLUDE_PATH}" \

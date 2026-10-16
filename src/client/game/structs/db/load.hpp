@@ -13,7 +13,7 @@ namespace db {
 
 typedef int32_t DBFile;
 
-typedef void DB_Interrupt(void);
+typedef fastcall_t<void()> DB_Interrupt;
 
 struct alignas(128) DB_LOAD_STREAM {
   uint8_t decompressedData[262144];
@@ -205,5 +205,6 @@ struct DB_LoadData {
   DB_PATCH_STREAM patchStream;
 };
 ASSERT_SIZE(DB_LoadData, 0xA88);
+ASSERT_OFFSET(DB_LoadData, flags, 0x28);
 } // namespace db
 } // namespace game

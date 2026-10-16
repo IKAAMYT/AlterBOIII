@@ -2,6 +2,8 @@ if Engine.GetCurrentMap() ~= "core_frontend" then
   return
 end
 
+require("ui.uieditor.widgets.Scrollbars.verticalScrollbar")
+
 DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings", function(controller)
   local optionsTable = {}
 
@@ -13,6 +15,49 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
       return
     end
     Engine.SetDvar(dvarName, optionModel.value)
+  end
+
+  local toggleSettings = {
+    { "boiii_skipIntro", "Passer l'intro", "Passe la vidéo d'introduction au démarrage." },
+    {
+      "boiii_skipForestCinematic",
+      "Passer la vidéo de la forêt",
+      "Passe uniquement la vidéo de la forêt avant de rejoindre une partie Zombies. Les vidéos des maps restent affichées.",
+    },
+    {
+      "boiii_skipCinematics",
+      "Passer toutes les cinématiques",
+      "Passe toutes les cinématiques et vidéos, y compris celles des maps.",
+    },
+    { "boiii_fullLogs", "Logs complets dans la console", "Affiche tous les messages de log dans la console." },
+    {
+      "boiii_logScriptErrors",
+      "Journaliser les erreurs de script",
+      "Journalise toutes les erreurs de script, y compris les non fatales.",
+    },
+    {
+      "boiii_ultrawide",
+      "Support ultra-large",
+      "Utilise toute la largeur des écrans ultra-larges. Nécessite un redémarrage.",
+    },
+    {
+      "boiii_allowCheats",
+      "Autoriser les cheats",
+      "Autorise les commandes de triche comme noclip et god mode. Seul ce réglage peut activer les cheats, pas les maps ni les scripts.",
+    },
+  }
+  local function addToggle(dvar, name, description)
+    table.insert(
+      optionsTable,
+      CoD.OptionsUtility.CreateDvarSettings(controller, name, description, "QuickSettings_" .. dvar, dvar, {
+        { option = "MENU_DISABLED", value = 0, default = true },
+        { option = "MENU_ENABLED", value = 1 },
+      }, nil, updateDvar)
+    )
+  end
+
+  for _, setting in ipairs(toggleSettings) do
+    addToggle(setting[1], setting[2], setting[3])
   end
 
   -- FOV (65-120 in steps of 5)
@@ -42,7 +87,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     )
   )
 
-  -- Échelle FOV (zoom FOV multiplier)
+  -- FOV Scale (zoom FOV multiplier)
   -- NOTE: CreateDvarSettings uses DvarInt internally to match selection.
   -- DvarInt("cg_fovScale") returns 1 for 1.0, so only 1.0 auto-selects.
   -- We default to 1.0 and use float values directly.
@@ -60,7 +105,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
       "Échelle FOV",
-      "Multiplier applied to ADS and zoom FOV. 1.0 = default.",
+      "Multiplicateur appliqué au FOV en visée et en zoom. 1.0 = défaut.",
       "QuickSettings_fovscale",
       "cg_fovScale",
       fovScaleOptions,
@@ -81,7 +126,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
   local fpsValues = { 0, 30, 60, 90, 120, 144, 165, 240, 300, 500 }
   for _, fps in ipairs(fpsValues) do
     table.insert(fpsOptions, {
-      option = fps == 0 and "Unlimited" or tostring(fps),
+      option = fps == 0 and "Illimité" or tostring(fps),
       value = fps,
       default = fps == currentFps,
     })
@@ -90,8 +135,8 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Max FPS",
-      "Cap your maximum framerate. 0 = unlimited.",
+      "FPS max",
+      "Limitez votre nombre d'images par seconde. 0 = illimité.",
       "QuickSettings_maxfps",
       "com_maxfps",
       fpsOptions,
@@ -100,55 +145,12 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     )
   )
 
-  -- VSync toggle
-  table.insert(
-    optionsTable,
-    CoD.OptionsUtility.CreateDvarSettings(
-      controller,
-      "VSync",
-      "Sync framerate to monitor refresh rate.",
-      "QuickSettings_vsync",
-      "r_vsync",
-      {
-        {
-          option = "MENU_DISABLED",
-          value = 0,
-          default = true,
-        },
-        {
-          option = "MENU_ENABLED",
-          value = 1,
-        },
-      },
-      nil,
-      updateDvar
-    )
+  addToggle(
+    "r_vsync",
+    "VSync",
+    "Synchronise les images par seconde avec la fréquence de rafraîchissement de l'écran."
   )
-
-  -- Draw FPS counter toggle
-  table.insert(
-    optionsTable,
-    CoD.OptionsUtility.CreateDvarSettings(
-      controller,
-      "Show FPS Counter",
-      "Display frames per second on screen.",
-      "QuickSettings_drawfps",
-      "com_drawFPS_PC",
-      {
-        {
-          option = "MENU_DISABLED",
-          value = 0,
-          default = true,
-        },
-        {
-          option = "MENU_ENABLED",
-          value = 1,
-        },
-      },
-      nil,
-      updateDvar
-    )
-  )
+  addToggle("com_drawFPS_PC", "Afficher le compteur FPS", "Affiche le nombre d'images par seconde à l'écran.")
 
   -- ── Game Settings ──
 
@@ -157,26 +159,26 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Bot Difficulty",
-      "Set AI bot difficulty level.",
+      "Difficulté des bots",
+      "Réglez le niveau de difficulté des bots.",
       "QuickSettings_botdifficulty",
       "bot_difficulty",
       {
         {
-          option = "Recruit",
+          option = "Recrue",
           value = 0,
           default = true,
         },
         {
-          option = "Regular",
+          option = "Normal",
           value = 1,
         },
         {
-          option = "Hardened",
+          option = "Endurci",
           value = 2,
         },
         {
-          option = "Veteran",
+          option = "Vétéran",
           value = 3,
         },
       },
@@ -204,8 +206,8 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
       optionsTable,
       CoD.OptionsUtility.CreateDvarSettings(
         controller,
-        "Max Players",
-        "Maximum number of players in custom games.",
+        "Joueurs max",
+        "Nombre maximum de joueurs dans les parties personnalisées.",
         "QuickSettings_maxclients",
         "com_maxclients",
         maxClientOptions,
@@ -220,8 +222,8 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
     optionsTable,
     CoD.OptionsUtility.CreateDvarSettings(
       controller,
-      "Min Players to Start",
-      "Minimum players required to start a match.",
+      "Joueurs min pour lancer",
+      "Nombre minimum de joueurs requis pour lancer une partie.",
       "QuickSettings_minplayers",
       "party_minplayers",
       {
@@ -259,11 +261,11 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
       "timescale",
       {
         {
-          option = "0.25x (Quarter)",
+          option = "0.25x (Quart)",
           value = 0.25,
         },
         {
-          option = "0.5x (Half)",
+          option = "0.5x (Demi-vitesse)",
           value = 0.5,
         },
         {
@@ -272,7 +274,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
           default = true,
         },
         {
-          option = "1.5x (Fast)",
+          option = "1.5x (Rapide)",
           value = 1.5,
         },
         {
@@ -280,7 +282,7 @@ DataSources.BoiiiQuickSettings = DataSourceHelpers.ListSetup("BoiiiQuickSettings
           value = 2,
         },
         {
-          option = "4x (Quad)",
+          option = "4x (Quadruple)",
           value = 4,
         },
       },
@@ -314,10 +316,12 @@ LUI.createMenu.BoiiiQuickSettingsMenu = function(controller)
   local GameSettingsBackground = CoD.GameSettings_Background.new(self, controller)
   GameSettingsBackground:setLeftRight(true, true, 0, 0)
   GameSettingsBackground:setTopBottom(true, true, 0, 0)
-  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES RAPIDES"))
-  GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0:setText(
-    Engine.Localize("PARAMÈTRES RAPIDES")
-  )
+  local menuTitle =
+    GameSettingsBackground.MenuFrame.cac3dTitleIntermediary0.FE3dTitleContainer0.MenuTitle.TextBox1.Label0
+  GameSettingsBackground.MenuFrame.titleLabel:setText(Engine.Localize("PARAMÈTRES ALTERBOIII"))
+  GameSettingsBackground.MenuFrame.titleLabel:setRGB(1, 0.55, 0.1)
+  menuTitle:setText(Engine.Localize("PARAMÈTRES ALTERBOIII"))
+  menuTitle:setRGB(1, 0.55, 0.1)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeInfo:setAlpha(0)
   GameSettingsBackground.GameSettingsSelectedItemInfo.GameModeName:setAlpha(0)
   self:addElement(GameSettingsBackground)
@@ -327,7 +331,9 @@ LUI.createMenu.BoiiiQuickSettingsMenu = function(controller)
   Options:setLeftRight(true, false, 26, 741)
   Options:setTopBottom(true, false, 135, 720)
   Options.Title.DescTitle:setText(Engine.Localize("Paramètres fréquemment utilisés"))
+  Options.Title.DescTitle:setRGB(1, 0.55, 0.1)
   Options.ButtonList:setVerticalCount(14)
+  Options.ButtonList:setVerticalScrollbar(CoD.verticalScrollbar)
   Options.ButtonList:setDataSource("BoiiiQuickSettings")
   self:addElement(Options)
   self.Options = Options

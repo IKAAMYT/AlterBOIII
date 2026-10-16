@@ -6,18 +6,41 @@ if not CoD.LobbyButtons then
   return
 end
 
+local utils = require("utils")
+
+CoD.LobbyButtons.WORKSHOP = {
+  stringRef = "WORKSHOP",
+  action = function(self, element, controller, param, menu)
+    OpenPopup(menu, "BoiiiWorkshopMenu", controller)
+  end,
+  customId = "btnWorkshop",
+}
+
+local function addWorkshopButton(controller, menuId, buttonTable)
+  if menuId ~= LobbyData.UITargets.UI_MODESELECT.id or not buttonTable then
+    return
+  end
+  local modsIndex = utils.GetButtonIndex(buttonTable, CoD.LobbyButtons.MODS_LOAD)
+  utils.AddSmallButton(controller, buttonTable, CoD.LobbyButtons.WORKSHOP, modsIndex and modsIndex + 1)
+end
+
 if
   type(Engine.IsUsingMods) == "function"
   and Engine.IsUsingMods()
   and (type(Engine.UsingModsUgcName) ~= "function" or Engine.UsingModsUgcName() ~= "usermaps")
 then
+  local oldAddButtonsForTarget = CoD.LobbyMenus.AddButtonsForTarget
+  CoD.LobbyMenus.AddButtonsForTarget = function(controller, id)
+    local result = oldAddButtonsForTarget(controller, id)
+    addWorkshopButton(controller, id, result)
+    return result
+  end
   return
 end
 
 local enableLobbyMapVote = true -- toggle map vote in public lobby
 local enableLargeServerBrowserButton = true -- toggle large server browser button
 
-local utils = require("utils")
 require("datasources_start_menu_tabs")
 require("datasources_change_map_categories")
 require("datasources_gamesettingsflyout_buttons")
@@ -48,12 +71,39 @@ CoD.LobbyButtons.STATS = {
 }
 
 CoD.LobbyButtons.QUICK_SETTINGS = {
-  stringRef = "PARAMÈTRES RAPIDES",
+  stringRef = "^8" .. Engine.Localize("PARAMÈTRES ALTERBOIII"),
   action = function(self, element, controller, param, menu)
     SetPerControllerTableProperty(controller, "disableGameSettingsOptions", true)
     OpenPopup(menu, "BoiiiQuickSettingsMenu", controller)
   end,
   customId = "btnQuickSettings",
+}
+
+local function friendsPartyLabel()
+  if Engine.DvarBool(nil, "friends_open") then
+    return "^2GROUPE OUVERT"
+  end
+  return "^1GROUPE FERMÉ"
+end
+
+CoD.LobbyButtons.FRIENDS_PARTY = {
+  stringRef = friendsPartyLabel(),
+  action = function(self, element, controller, param, menu)
+    Engine.ExecNow(controller, "friends_open")
+    Engine.SetModelValue(Engine.GetModel(element:getModel(), "displayText"), friendsPartyLabel())
+  end,
+  customId = "btnFriendsParty",
+}
+
+CoD.LobbyButtons.STEAM_STORE = {
+  stringRef = "MENU_STORE_CAPS",
+  action = function(self, element, controller, param, menu)
+    local storeRoot = Engine.CreateModel(Engine.GetModelForController(controller), "StoreRoot")
+    Engine.SetModelValue(Engine.CreateModel(storeRoot, "actionSource", true), "StoreButton")
+    Engine.SetModelValue(Engine.CreateModel(storeRoot, "storeSource", true), LobbyData:GetCurrentMenuTarget().name)
+    OpenOverlay(menu, "Store", controller)
+  end,
+  customId = "btnSteamStore",
 }
 
 CoD.LobbyButtons.MP_START_GAME = {
@@ -108,6 +158,29 @@ local lobbyMapVote = function(lobbyMapVoteIsEnabled)
   end
 end
 
+local function addFriendsPartyButton(controller, menuId, buttonTable, isLeader)
+  if
+    (isLeader ~= 1 and isLeader ~= true)
+    or Engine.GetLobbyNetworkMode() == Enum.LobbyNetworkMode.LOBBY_NETWORKMODE_LAN
+  then
+    return
+  end
+  for _, anchor in ipairs({
+    CoD.LobbyButtons.ZM_CHANGE_MAP,
+    CoD.LobbyButtons.MP_CUSTOM_SETUP_GAME,
+    CoD.LobbyButtons.CP_SELECT_MISSION,
+  }) do
+    local index = utils.GetButtonIndex(buttonTable, anchor)
+    if index then
+      CoD.LobbyButtons.FRIENDS_PARTY.stringRef = friendsPartyLabel()
+      utils.AddSmallButton(controller, buttonTable, CoD.LobbyButtons.FRIENDS_PARTY, index + 1)
+      buttonTable[index + 1].isLastButtonInGroup = buttonTable[index].isLastButtonInGroup
+      buttonTable[index].isLastButtonInGroup = false
+      return
+    end
+  end
+end
+
 local addCustomButtons = function(controller, menuId, buttonTable, isLeader)
   if menuId == LobbyData.UITargets.UI_MPLOBBYMAIN.id then
     utils.RemoveSpaces(buttonTable)
@@ -127,6 +200,13 @@ local addCustomButtons = function(controller, menuId, buttonTable, isLeader)
   then
     utils.AddSmallButton(controller, buttonTable, CoD.LobbyButtons.STATS)
     utils.AddSmallButton(controller, buttonTable, CoD.LobbyButtons.QUICK_SETTINGS)
+  end
+
+  addFriendsPartyButton(controller, menuId, buttonTable, isLeader)
+
+  if menuId == LobbyData.UITargets.UI_MPLOBBYONLINECUSTOMGAME.id then
+    utils.AddSpacer(buttonTable)
+    utils.AddSmallButton(controller, buttonTable, CoD.LobbyButtons.BLACK_MARKET)
   end
 
   if menuId == LobbyData.UITargets.UI_ZMLOBBYLANGAME.id then
@@ -200,6 +280,7 @@ CoD.LobbyMenus.AddButtonsForTarget = function(controller, id)
     isLeader = 1
   end
   local result = oldAddButtonsForTarget(controller, id)
+  addWorkshopButton(controller, id, result)
   addCustomButtons(controller, id, result, isLeader)
   return result
 end

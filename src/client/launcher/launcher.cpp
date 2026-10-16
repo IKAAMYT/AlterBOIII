@@ -1,5 +1,6 @@
 #include <std_include.hpp>
 
+#include <utils/compression.hpp>
 #include <utils/http.hpp>
 #include <utils/io.hpp>
 #include <utils/nt.hpp>
@@ -7,6 +8,7 @@
 #include <utils/string.hpp>
 
 #include "component/auth.hpp"
+#include "component/workshop/workshop.hpp"
 #include "html/html_window.hpp"
 #include "launcher.hpp"
 #include "launcher_workshop.hpp"
@@ -42,12 +44,8 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-#pragma comment(lib, "Shell32.lib")
-#pragma comment(lib, "Shlwapi.lib")
-
 namespace launcher {
 namespace {
-std::string human_readable_size(std::uint64_t bytes);
 const std::filesystem::path &get_steam_workshop_path();
 
 std::string sanitize_player_name(const std::string &name) {
@@ -162,21 +160,6 @@ void reset_remove_status() {
   remove_status_message.clear();
   remove_progress_percent = 0.0;
   remove_progress_details.clear();
-}
-
-std::uint64_t compute_folder_size(const std::filesystem::path &folder) {
-  std::uint64_t total = 0;
-  std::error_code ec;
-  if (!std::filesystem::exists(folder, ec))
-    return 0;
-  for (const std::filesystem::directory_entry &entry :
-       std::filesystem::recursive_directory_iterator(folder, ec)) {
-    if (ec)
-      break;
-    if (entry.is_regular_file(ec))
-      total += static_cast<std::uint64_t>(entry.file_size(ec));
-  }
-  return total;
 }
 
 std::mutex verify_mutex;
@@ -662,6 +645,8 @@ bool is_safe_workshop_item_path(const std::filesystem::path &target) {
   return false;
 }
 
+} // namespace
+
 bool workshop_remove_by_path(const std::string &path_str, std::string &error) {
   std::string p = path_str;
   utils::string::trim(p);
@@ -700,6 +685,7 @@ bool workshop_remove_by_path(const std::string &path_str, std::string &error) {
   return true;
 }
 
+namespace {
 constexpr std::string_view IMAGE_EXTENSIONS[] = {".jpg",  ".jpeg", ".png",
                                                  ".webp", ".gif",  ".bmp"};
 
@@ -823,7 +809,7 @@ std::string get_mode_files_info() {
     w.Key("size");
     w.Uint64(m.total_size);
     w.Key("sizeHuman");
-    w.String(human_readable_size(m.total_size).c_str());
+    w.String(::workshop::human_readable_size(m.total_size).c_str());
     w.EndObject();
   }
   w.EndObject();
@@ -882,82 +868,11 @@ std::string remove_mode_files(const std::string &prefixes_csv) {
   w.Key("removedCount");
   w.Uint(removed_count);
   w.Key("removedSize");
-  w.String(human_readable_size(removed_size).c_str());
+  w.String(::workshop::human_readable_size(removed_size).c_str());
   w.Key("failedCount");
   w.Uint(failed_count);
   w.EndObject();
   return std::string(buf.GetString(), buf.GetSize());
-}
-
-constexpr const char *STEAM_WORKSHOP_API =
-    "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/"
-    "v1/";
-constexpr int BO3_APP_ID = 311210;
-
-std::string get_steam_workshop_preview_url(const std::string &workshop_id) {
-  if (workshop_id.empty())
-    return {};
-  try {
-    std::string body = "itemcount=1&publishedfileids[0]=" + workshop_id;
-    std::optional<std::string> resp =
-        utils::http::post_data(STEAM_WORKSHOP_API, body, 3);
-    if (!resp || resp->empty())
-      return {};
-
-    rapidjson::Document doc;
-    if (doc.Parse(resp->c_str()).HasParseError() || !doc.IsObject())
-      return {};
-    const rapidjson::Document::ConstMemberIterator resp_it =
-        doc.FindMember("response");
-    if (resp_it == doc.MemberEnd() || !resp_it->value.IsObject())
-      return {};
-    const rapidjson::Document::ConstMemberIterator details_it =
-        resp_it->value.FindMember("publishedfiledetails");
-    if (details_it == resp_it->value.MemberEnd() ||
-        !details_it->value.IsArray() || details_it->value.Empty())
-      return {};
-
-    const rapidjson::Value &first = details_it->value[0];
-    if (!first.IsObject())
-      return {};
-    const rapidjson::Value::ConstMemberIterator consumer_it =
-        first.FindMember("consumer_app_id");
-    if (consumer_it == first.MemberEnd())
-      return {};
-    int app_id = 0;
-    if (consumer_it->value.IsInt())
-      app_id = consumer_it->value.GetInt();
-    else if (consumer_it->value.IsInt64())
-      app_id = static_cast<int>(consumer_it->value.GetInt64());
-    else if (consumer_it->value.IsString())
-      app_id = std::atoi(consumer_it->value.GetString());
-    if (app_id != BO3_APP_ID)
-      return {};
-
-    const rapidjson::Value::ConstMemberIterator preview_it =
-        first.FindMember("preview_url");
-    if (preview_it == first.MemberEnd() || !preview_it->value.IsString())
-      return {};
-    return std::string(preview_it->value.GetString(),
-                       preview_it->value.GetStringLength());
-  } catch (...) {
-    return {};
-  }
-}
-
-std::string human_readable_size(std::uint64_t bytes) {
-  const char *suffixes[] = {"B", "KB", "MB", "GB", "TB"};
-  double value = static_cast<double>(bytes);
-  int idx = 0;
-
-  while (value >= 1024.0 && idx < 4) {
-    value /= 1024.0;
-    ++idx;
-  }
-
-  char buf[64]{};
-  std::snprintf(buf, sizeof(buf), "%.2f %s", value, suffixes[idx]);
-  return buf;
 }
 
 const std::filesystem::path &get_steam_workshop_path() {
@@ -1036,6 +951,11 @@ bool try_parse_workshop_json(const std::filesystem::path &dir,
   if (!doc.HasMember("Title") || !doc.HasMember("FolderName"))
     return false;
   item.name = doc["Title"].GetString();
+  if (doc.HasMember("Type") && doc["Type"].IsString()) {
+    item.type = utils::string::to_lower(doc["Type"].GetString()) == "map"
+                    ? "map"
+                    : "mod";
+  }
   if (doc.HasMember("Description") && doc["Description"].IsString()) {
     item.description = doc["Description"].GetString();
     if (item.description.size() > 300)
@@ -1059,102 +979,62 @@ std::string workshop_list_json() {
   std::vector<mod_item_info> items;
   std::set<std::string> seen_paths;
 
-  auto scan = [&](const std::filesystem::path &parent, const char *type_label) {
-    if (!std::filesystem::exists(parent))
-      return;
+  const auto add_item = [&](const std::filesystem::path &dir, const char *type,
+                            const bool from_steam) {
+    std::error_code ec;
+    if (!seen_paths.insert(std::filesystem::absolute(dir, ec).string())
+             .second) {
+      return true;
+    }
+    mod_item_info item;
+    item.folder = dir.filename().string();
+    item.type = type;
+    item.dir_path = dir;
+    if (from_steam) {
+      item.source = "steam";
+      item.path = dir.string();
+    }
+    if (!try_parse_workshop_json(dir, item)) {
+      if (!folder_has_zone_content(dir)) {
+        return false;
+      }
+      item.name = item.folder;
+      if (utils::string::is_numeric(item.folder)) {
+        item.id = item.folder;
+      }
+    }
+    item.local_size = ::workshop::compute_folder_size_bytes(dir);
+    const std::string image_path = find_mod_image_path(dir);
+    if (!image_path.empty()) {
+      item.image = path_to_file_url(image_path);
+    }
+    items.push_back(std::move(item));
+    return true;
+  };
+
+  const auto scan = [&](const std::filesystem::path &parent, const char *type,
+                        const bool from_steam) {
     std::error_code ec;
     for (const std::filesystem::directory_entry &entry :
          std::filesystem::directory_iterator(parent, ec)) {
-      if (!entry.is_directory())
+      if (!entry.is_directory(ec) || add_item(entry.path(), type, from_steam) ||
+          !from_steam) {
         continue;
-      std::string abs = std::filesystem::absolute(entry.path(), ec).string();
-      if (seen_paths.count(abs))
-        continue;
-
-      mod_item_info item;
-      item.folder = entry.path().filename().string();
-      item.type = type_label;
-      item.dir_path = entry.path();
-      item.local_size = compute_folder_size(entry.path());
-
-      if (!try_parse_workshop_json(entry.path(), item)) {
-        if (!folder_has_zone_content(entry.path()))
-          continue;
-        item.name = item.folder;
-        if (utils::string::is_numeric(item.folder))
-          item.id = item.folder;
       }
-
-      std::string image_path = find_mod_image_path(entry.path());
-      if (!image_path.empty())
-        item.image = path_to_file_url(image_path);
-      else if (!item.id.empty())
-        item.image = get_steam_workshop_preview_url(item.id);
-
-      seen_paths.insert(abs);
-      items.push_back(std::move(item));
+      for (const std::filesystem::directory_entry &child :
+           std::filesystem::directory_iterator(entry.path(), ec)) {
+        if (child.is_directory(ec)) {
+          add_item(child.path(), type, from_steam);
+        }
+      }
     }
   };
-  scan(base / "usermaps", "map");
-  scan(base / "mods", "mod");
 
-  std::filesystem::path steam_ws = get_steam_workshop_path();
+  scan(base / "usermaps", "map", false);
+  scan(base / "mods", "mod", false);
+  const std::filesystem::path &steam_ws = get_steam_workshop_path();
   if (!steam_ws.empty()) {
-    std::error_code ws_ec;
-    if (std::filesystem::exists(steam_ws, ws_ec)) {
-      auto scan_steam = [&](const std::filesystem::path &dir) {
-        const std::string abs = std::filesystem::absolute(dir, ws_ec).string();
-        if (seen_paths.count(abs))
-          return;
-
-        mod_item_info item;
-        item.folder = dir.filename().string();
-        item.type = "map";
-        item.source = "steam";
-        item.path = dir.string();
-        item.dir_path = dir;
-        item.local_size = compute_folder_size(dir);
-
-        if (!try_parse_workshop_json(dir, item)) {
-          if (!folder_has_zone_content(dir))
-            return;
-          item.name = item.folder;
-          if (utils::string::is_numeric(item.folder))
-            item.id = item.folder;
-        }
-
-        std::string image_path = find_mod_image_path(dir);
-        if (!image_path.empty())
-          item.image = path_to_file_url(image_path);
-        else if (!item.id.empty())
-          item.image = get_steam_workshop_preview_url(item.id);
-
-        seen_paths.insert(abs);
-        items.push_back(std::move(item));
-      };
-
-      std::error_code ec;
-      for (const std::filesystem::directory_entry &ws_entry :
-           std::filesystem::directory_iterator(steam_ws, ec)) {
-        if (!ws_entry.is_directory())
-          continue;
-
-        mod_item_info dummy{};
-        if (try_parse_workshop_json(ws_entry.path(), dummy) ||
-            folder_has_zone_content(ws_entry.path())) {
-          scan_steam(ws_entry.path());
-          continue;
-        }
-
-        std::error_code ec2;
-        for (const std::filesystem::directory_entry &sub :
-             std::filesystem::directory_iterator(ws_entry.path(), ec2)) {
-          if (!sub.is_directory())
-            continue;
-          scan_steam(sub.path());
-        }
-      }
-    }
+    scan(steam_ws, "mod", true);
   }
 
   std::vector<std::string> all_ids;
@@ -1418,7 +1298,171 @@ bool relaunch_with_launch_options(const std::vector<std::string> &options) {
 
   return false;
 }
+
+std::filesystem::path profile_path() {
+  return game::get_game_path() / "boiii_players";
+}
+
+std::filesystem::path backups_path() {
+  return game::get_appdata_path() / "backups";
+}
+
+std::filesystem::path crash_reports_path() {
+  return game::get_appdata_path() / "minidumps";
+}
+
+std::string timestamp_for_file() {
+  const std::time_t now = std::time(nullptr);
+  std::tm local{};
+  localtime_s(&local, &now);
+  char buffer[32]{};
+  std::strftime(buffer, sizeof(buffer), "%Y%m%d-%H%M%S", &local);
+  return buffer;
+}
+
+std::string strip_color_codes(const std::string &text) {
+  std::string result;
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '^' && i + 1 < text.size() &&
+        std::isdigit(static_cast<unsigned char>(text[i + 1]))) {
+      ++i;
+      continue;
+    }
+    result += text[i];
+  }
+  return result;
+}
+
+// Zips boiii_players into the backups folder. Returns the backup's path, or
+// an empty path if there was nothing to back up or the zip couldn't be written.
+std::filesystem::path back_up_profile(const std::string &suffix = {}) {
+  const std::filesystem::path profile = profile_path();
+  std::error_code ec;
+  if (!std::filesystem::is_directory(profile, ec))
+    return {};
+
+  utils::compression::zip::archive archive;
+  size_t files = 0;
+  for (const std::filesystem::directory_entry &entry :
+       std::filesystem::recursive_directory_iterator(profile, ec)) {
+    if (!entry.is_regular_file(ec))
+      continue;
+    std::string data;
+    if (!utils::io::read_file(entry.path().string(), &data))
+      continue;
+    archive.add(
+        std::filesystem::relative(entry.path(), profile, ec).generic_string(),
+        std::move(data));
+    ++files;
+  }
+  if (!files)
+    return {};
+
+  std::filesystem::create_directories(backups_path(), ec);
+  const std::filesystem::path file =
+      backups_path() / ("profile-" + timestamp_for_file() + suffix + ".zip");
+  return archive.write(file.string()) ? file : std::filesystem::path{};
+}
+
+// Replaces boiii_players with the contents of a backup. Extracts to a
+// temporary folder first so a broken backup leaves the profile untouched.
+bool restore_profile(const std::filesystem::path &backup) {
+  std::string data;
+  if (!utils::io::read_file(backup.string(), &data))
+    return false;
+  const std::unordered_map<std::string, std::vector<uint8_t>> files =
+      utils::compression::zip::extract(data);
+  if (files.empty())
+    return false;
+
+  const std::filesystem::path profile = profile_path();
+  const std::filesystem::path staging =
+      profile.parent_path() / "boiii_players.restore";
+  std::error_code ec;
+  std::filesystem::remove_all(staging, ec);
+  for (const auto &[name, contents] : files) {
+    const std::filesystem::path relative =
+        std::filesystem::path(name).lexically_normal();
+    // Reject entries that would land outside the profile folder
+    if (relative.empty() || relative.is_absolute() ||
+        relative.has_root_name() || *relative.begin() == "..") {
+      std::filesystem::remove_all(staging, ec);
+      return false;
+    }
+    const std::filesystem::path target = staging / relative;
+    std::filesystem::create_directories(target.parent_path(), ec);
+    if (!utils::io::write_file(
+            target.string(),
+            std::string(reinterpret_cast<const char *>(contents.data()),
+                        contents.size()))) {
+      std::filesystem::remove_all(staging, ec);
+      return false;
+    }
+  }
+
+  std::filesystem::remove_all(profile, ec);
+  if (ec)
+    return false;
+  std::filesystem::rename(staging, profile, ec);
+  return !ec;
+}
 } // namespace
+
+constexpr const char *STEAM_WORKSHOP_API =
+    "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/"
+    "v1/";
+constexpr int BO3_APP_ID = 311210;
+
+std::string get_steam_workshop_preview_url(const std::string &workshop_id) {
+  if (workshop_id.empty())
+    return {};
+  try {
+    std::string body = "itemcount=1&publishedfileids[0]=" + workshop_id;
+    std::optional<std::string> resp =
+        utils::http::post_data(STEAM_WORKSHOP_API, body, 3);
+    if (!resp || resp->empty())
+      return {};
+
+    rapidjson::Document doc;
+    if (doc.Parse(resp->c_str()).HasParseError() || !doc.IsObject())
+      return {};
+    const rapidjson::Document::ConstMemberIterator resp_it =
+        doc.FindMember("response");
+    if (resp_it == doc.MemberEnd() || !resp_it->value.IsObject())
+      return {};
+    const rapidjson::Document::ConstMemberIterator details_it =
+        resp_it->value.FindMember("publishedfiledetails");
+    if (details_it == resp_it->value.MemberEnd() ||
+        !details_it->value.IsArray() || details_it->value.Empty())
+      return {};
+
+    const rapidjson::Value &first = details_it->value[0];
+    if (!first.IsObject())
+      return {};
+    const rapidjson::Value::ConstMemberIterator consumer_it =
+        first.FindMember("consumer_app_id");
+    if (consumer_it == first.MemberEnd())
+      return {};
+    int app_id = 0;
+    if (consumer_it->value.IsInt())
+      app_id = consumer_it->value.GetInt();
+    else if (consumer_it->value.IsInt64())
+      app_id = static_cast<int>(consumer_it->value.GetInt64());
+    else if (consumer_it->value.IsString())
+      app_id = std::atoi(consumer_it->value.GetString());
+    if (app_id != BO3_APP_ID)
+      return {};
+
+    const rapidjson::Value::ConstMemberIterator preview_it =
+        first.FindMember("preview_url");
+    if (preview_it == first.MemberEnd() || !preview_it->value.IsString())
+      return {};
+    return std::string(preview_it->value.GetString(),
+                       preview_it->value.GetStringLength());
+  } catch (...) {
+    return {};
+  }
+}
 
 bool is_game_process_running() {
   const DWORD self_pid = GetCurrentProcessId();
@@ -1540,15 +1584,6 @@ bool run() {
         "getVersion",
         [](const std::vector<html_argument> & /*params*/) -> CComVariant {
           return CComVariant(SHORTVERSION);
-        });
-
-    window.get_html_frame()->register_callback(
-        "isWine",
-        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
-          CComVariant result;
-          result.vt = VT_BOOL;
-          result.boolVal = utils::nt::is_wine() ? VARIANT_TRUE : VARIANT_FALSE;
-          return result;
         });
 
     window.get_html_frame()->register_callback(
@@ -2850,11 +2885,11 @@ bool run() {
           if (GetDiskFreeSpaceExW(game_path.c_str(), &available, nullptr,
                                   nullptr)) {
             const ULONGLONG free_space = available.QuadPart;
-            add_check("Free disk space",
-                      free_space >= 5ULL * 1024ULL * 1024ULL * 1024ULL
-                          ? "ok"
-                          : "warning",
-                      human_readable_size(free_space) + " available");
+            add_check(
+                "Free disk space",
+                free_space >= 5ULL * 1024ULL * 1024ULL * 1024ULL ? "ok"
+                                                                 : "warning",
+                ::workshop::human_readable_size(free_space) + " available");
           }
 
           if (utils::nt::is_wine())
@@ -2892,14 +2927,189 @@ bool run() {
         [](const std::vector<html_argument> & /*params*/) -> CComVariant {
           if (is_game_process_running())
             return CComVariant("game_running");
-          const std::filesystem::path profile_path =
-              game::get_game_path() / "boiii_players";
-          if (profile_path.filename() != "boiii_players")
+          const std::filesystem::path profile = profile_path();
+          if (profile.filename() != "boiii_players")
             return CComVariant("invalid_path");
           std::error_code ec;
-          if (std::filesystem::exists(profile_path, ec))
-            std::filesystem::remove_all(profile_path, ec);
+          if (std::filesystem::exists(profile, ec)) {
+            back_up_profile("-before-clear");
+            std::filesystem::remove_all(profile, ec);
+          }
           return CComVariant(ec ? "error" : "ok");
+        });
+
+    window.get_html_frame()->register_callback(
+        "getStorageUsage",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          constexpr auto old_age = std::chrono::days(7);
+          const auto now = std::filesystem::file_time_type::clock::now();
+          std::error_code ec;
+
+          uint64_t crash_count = 0, crash_bytes = 0, old_count = 0,
+                   old_bytes = 0;
+          for (const std::filesystem::directory_entry &entry :
+               std::filesystem::directory_iterator(crash_reports_path(), ec)) {
+            if (!entry.is_regular_file(ec))
+              continue;
+            const uint64_t size = entry.file_size(ec);
+            ++crash_count;
+            crash_bytes += size;
+            if (now - entry.last_write_time(ec) > old_age) {
+              ++old_count;
+              old_bytes += size;
+            }
+          }
+
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          writer.StartObject();
+          writer.Key("crashCount");
+          writer.Uint64(crash_count);
+          writer.Key("crashSize");
+          writer.String(::workshop::human_readable_size(crash_bytes).c_str());
+          writer.Key("oldCrashCount");
+          writer.Uint64(old_count);
+          writer.Key("oldCrashSize");
+          writer.String(::workshop::human_readable_size(old_bytes).c_str());
+          writer.Key("logsSize");
+          writer.String(::workshop::human_readable_size(
+                            ::workshop::compute_folder_size_bytes(
+                                game::get_game_path() / "logs"))
+                            .c_str());
+          writer.Key("backupsSize");
+          writer.String(
+              ::workshop::human_readable_size(
+                  ::workshop::compute_folder_size_bytes(backups_path()))
+                  .c_str());
+
+          struct item {
+            std::string name;
+            uint64_t bytes;
+          };
+          std::vector<item> items;
+          for (const char *folder : {"mods", "usermaps"}) {
+            for (const std::filesystem::directory_entry &entry :
+                 std::filesystem::directory_iterator(
+                     game::get_game_path() / folder, ec)) {
+              if (!entry.is_directory(ec))
+                continue;
+              mod_item_info info{};
+              const std::string name = try_parse_workshop_json(entry, info)
+                                           ? strip_color_codes(info.name)
+                                           : entry.path().filename().string();
+              items.push_back(
+                  {name, ::workshop::compute_folder_size_bytes(entry)});
+            }
+          }
+          std::ranges::sort(items, [](const item &a, const item &b) {
+            return a.bytes > b.bytes;
+          });
+          writer.Key("items");
+          writer.StartArray();
+          for (const item &entry : items) {
+            writer.StartObject();
+            writer.Key("name");
+            writer.String(entry.name.c_str());
+            writer.Key("size");
+            writer.String(::workshop::human_readable_size(entry.bytes).c_str());
+            writer.EndObject();
+          }
+          writer.EndArray();
+          writer.EndObject();
+          return CComVariant(
+              std::string(buffer.GetString(), buffer.GetSize()).c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "deleteOldCrashReports",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          constexpr auto old_age = std::chrono::days(7);
+          const auto now = std::filesystem::file_time_type::clock::now();
+          std::error_code ec;
+          uint64_t count = 0, bytes = 0;
+          for (const std::filesystem::directory_entry &entry :
+               std::filesystem::directory_iterator(crash_reports_path(), ec)) {
+            if (!entry.is_regular_file(ec) ||
+                now - entry.last_write_time(ec) <= old_age)
+              continue;
+            const uint64_t size = entry.file_size(ec);
+            std::error_code remove_error;
+            if (std::filesystem::remove(entry.path(), remove_error)) {
+              ++count;
+              bytes += size;
+            }
+          }
+          return CComVariant(std::format("{} {}", count,
+                                         ::workshop::human_readable_size(bytes))
+                                 .c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "backUpProfile",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          const std::filesystem::path file = back_up_profile();
+          return CComVariant(file.empty() ? ""
+                                          : file.filename().string().c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "listProfileBackups",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::vector<std::filesystem::directory_entry> backups;
+          std::error_code ec;
+          for (const std::filesystem::directory_entry &entry :
+               std::filesystem::directory_iterator(backups_path(), ec)) {
+            if (entry.is_regular_file(ec) && entry.path().extension() == ".zip")
+              backups.push_back(entry);
+          }
+          std::ranges::sort(backups, [](const auto &a, const auto &b) {
+            return a.path().filename() > b.path().filename();
+          });
+
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          writer.StartArray();
+          for (const std::filesystem::directory_entry &entry : backups) {
+            writer.StartObject();
+            writer.Key("file");
+            writer.String(entry.path().filename().string().c_str());
+            writer.Key("size");
+            writer.String(
+                ::workshop::human_readable_size(entry.file_size(ec)).c_str());
+            writer.EndObject();
+          }
+          writer.EndArray();
+          return CComVariant(
+              std::string(buffer.GetString(), buffer.GetSize()).c_str());
+        });
+
+    window.get_html_frame()->register_callback(
+        "restoreProfileBackup",
+        [](const std::vector<html_argument> &params) -> CComVariant {
+          if (params.empty() || !params[0].is_string())
+            return CComVariant("invalid");
+          if (is_game_process_running())
+            return CComVariant("game_running");
+          // Only names from listProfileBackups, never a path from elsewhere
+          const std::filesystem::path name(params[0].get_string());
+          if (name.has_parent_path() || name.extension() != ".zip")
+            return CComVariant("invalid");
+          const std::filesystem::path backup = backups_path() / name;
+          std::error_code ec;
+          if (!std::filesystem::is_regular_file(backup, ec))
+            return CComVariant("invalid");
+          back_up_profile("-before-restore");
+          return CComVariant(restore_profile(backup) ? "ok" : "error");
+        });
+
+    window.get_html_frame()->register_callback(
+        "openBackupsFolder",
+        [](const std::vector<html_argument> & /*params*/) -> CComVariant {
+          std::error_code ec;
+          std::filesystem::create_directories(backups_path(), ec);
+          ShellExecuteW(nullptr, L"open", backups_path().wstring().c_str(),
+                        nullptr, nullptr, SW_SHOWNORMAL);
+          return {};
         });
 
     window.get_html_frame()->register_callback(

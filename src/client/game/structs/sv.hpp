@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scr/scr.hpp"
+
 #include "asm.hpp"
 #include "core.hpp"
 #include "lobby/core.hpp"
@@ -7,7 +9,6 @@
 #include "phys/core.hpp"
 #include "quake/core.hpp"
 #include "scr/core.hpp"
-#include "scr/scr.hpp"
 #include "snd/snd.hpp"
 
 #include <cstdint>
@@ -205,13 +206,27 @@ struct client_s {
   playerName_t name;
   clanAbbrev_t clanAbbrev;
   XUID xuid;
-  char __pad3[0xB5D84];
+  uint32_t doubleXPGroupMask;
+  uint32_t availableMappackFlags;
+  int32_t _unknown5650;
+  int nextReliableTime;
+  int lastPacketTime;
+  int32_t lastConnectTime;
+  int32_t nextSnapshotTime;
+  int32_t lastSnapshotTime;
+  int32_t timeoutCount;
+  char __pad3[0xB5D60];
   int32_t guid;
-  char __pad4[0x8];
+  scr::var::ScrVarIndex_t scriptId;
+  bool isSplitscreenClient;
+  bool isSecondScreenClient;
+  char __pad4[0x2];
   bool bIsTestClient;
   char __pad5[3];
   int32_t serverId;
   char __pad6[171432];
+
+  std::string serialize() const noexcept;
 };
 typedef client_s client_t;
 
@@ -280,10 +295,9 @@ struct cachedSnapshot_t {
 
 ASSERT_SIZE(cachedSnapshot_t, 0x38);
 
-#pragma pack(push, 1)
 // Verified, 100% correct on dedicated server.
 // Currently unverified whether this is identical on client.
-struct serverStaticHeader_t {
+PACKED(struct serverStaticHeader_t {
   sv::client_s *clients;
   user::actor_t *actors;
   int32_t time;
@@ -361,16 +375,14 @@ struct serverStaticHeader_t {
   int32_t constBaselineEntitesMax;
   uint8_t _padding1A4[4];
   const level::entityState_t *constBaselineEntities;
-};
+});
 ASSERT_SIZE(serverStaticHeader_t, 0x1B0);
-#pragma pack(pop)
 
 // TODO
 struct archivedEntity_s;
 typedef archivedEntity_s archivedEntity_t;
 
-#pragma pack(push, 1)
-struct serverSnapshot_t {
+PACKED(struct serverSnapshot_t {
   lobby::LobbyClientPool<level::playerState_t *> ps;
   int32_t entityCount;
   int32_t clientCount;
@@ -382,9 +394,8 @@ struct serverSnapshot_t {
   int32_t casterStateIndex;
   int32_t firstCasterClientIndex;
   uint8_t _padding[4];
-};
+});
 ASSERT_SIZE(serverSnapshot_t, 0xB8);
-#pragma pack(pop)
 
 struct archivedSnapshot_s {
   int32_t start;
@@ -392,14 +403,12 @@ struct archivedSnapshot_s {
 };
 typedef archivedSnapshot_s archivedSnapshot_t;
 
-#pragma pack(push, 1)
-struct tempBanSlot_t {
-  uint64_t guid;
+PACKED(struct tempBanSlot_t {
+  XUID guid;
   uint32_t banTime;
   uint8_t _padding[4];
-};
+});
 ASSERT_SIZE(tempBanSlot_t, 16);
-#pragma pack(pop)
 
 // Fields and types unverified, but size should be correct.
 struct rateBoostingStats_t {
@@ -420,9 +429,8 @@ ASSERT_SIZE(rateBoostingStats_t, 0x24);
   fields.
   Unverified on client, but likely either identical or very similar.
 */
-#pragma pack(push, 1)
-struct serverStatic_t {
-  int32_t clientCount;
+PACKED(struct serverStatic_t {
+  ClientNum_t clientCount;
   int32_t packetBackupCount;
   int32_t packetBackupMask;
   uint8_t _padding0C[4];
@@ -512,12 +520,10 @@ struct serverStatic_t {
   int32_t constBaselineEntitesMax;
   const level::entityState_t *constBaselineEntities;
   uint8_t _padding14E0[0x20];
-};
+});
 ASSERT_SIZE(serverStatic_t, 0x1500);
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-struct flashbackState_t {
+PACKED(struct flashbackState_t {
   vec3_t position;
   vec3_t angles;
   vec3_t velocity;
@@ -525,8 +531,7 @@ struct flashbackState_t {
   uint8_t psFlags;
   bool valid;
   uint8_t _padding2A[2];
-};
-#pragma pack(pop)
+});
 
 struct clientsFlashbackArchive_t {
   lobby::LobbyClientPool<flashbackState_t> clientsFlashbackStates;
@@ -544,8 +549,7 @@ struct recentFrame {
 };
 ASSERT_SIZE(recentFrame, 0x1);
 
-#pragma pack(push, 1)
-struct playerAnimState_t {
+PACKED(struct playerAnimState_t {
   float fTorsoPitch;
   float fWaistPitch;
   animationNumber_t animNum[3];
@@ -558,12 +562,10 @@ struct playerAnimState_t {
     };
   };
   uint8_t _padding0F[1];
-};
+});
 ASSERT_SIZE(playerAnimState_t, 0x10);
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-struct AntilagPlayerAnimState {
+PACKED(struct AntilagPlayerAnimState {
   uint16_t notifyChild;
   int16_t notifyIndex;
   scr::ScrString_t notifyName;
@@ -575,9 +577,8 @@ struct AntilagPlayerAnimState {
   uint8_t oldTime;
   uint8_t _padding0F[1];
   float rate;
-};
+});
 ASSERT_SIZE(AntilagPlayerAnimState, 0x14);
-#pragma pack(pop)
 
 struct clientControllers_t {
   vec3_t angles[6];
@@ -605,8 +606,7 @@ struct clientsPositionArchive_t {
 };
 ASSERT_SIZE(clientsPositionArchive_t, 0x1B9C);
 
-#pragma pack(push, 1)
-struct server_t {
+PACKED(struct server_t {
   volatile serverState_t state;
   int32_t physicsTime;
   int32_t timeResidual;
@@ -666,9 +666,8 @@ struct server_t {
   inline constexpr bool running() volatile noexcept {
     return this->state == serverState_t::GAME || this->restarting;
   }
-};
+});
 ASSERT_SIZE(server_t, 0xBC5C0);
-#pragma pack(pop)
 
 enum class SwimStateType : int32_t {
   SWIM_STATE_NONE = 0x0,
@@ -785,77 +784,6 @@ struct CharacterItemInfo {
   scr::ScriptBundleKVP *kvpItems;
 };
 
-enum class CharacterGenderTypes : int32_t {
-  CHARACTER_GENDER_TYPE_MALE = 0x0,
-  CHARACTER_GENDER_TYPE_MP = 0x0,
-  CHARACTER_GENDER_TYPE_FIRST = 0x0,
-  CHARACTER_GENDER_TYPE_FEMALE = 0x1,
-  CHARACTER_GENDER_TYPE_COUNT = 0x2,
-  CHARACTER_GENDER_TYPE_INVALID = 0x2,
-  CHARACTER_GENDER_TYPE_ANY = 0x3,
-};
-
-struct CharacterBodyType {
-  const char *name;
-  const char *displayName;
-  const char *description;
-  const char *heroWeapon;
-  const char *heroAbility;
-  XString bodySoundContext;
-  scr::ScriptBundlePtr mpDialog;
-  XString chrName;
-  gfx::GfxImageHandle rewardIcon;
-  XString background;
-  XString backgroundWithCharacter;
-  XString lockedImage;
-  XString personalizeRender;
-  XString frozenMomentRender;
-  XString frozenMomentOverlay;
-  gfx::GfxImageHandle defaultHeroRender;
-  gfx::GfxImageHandle defaultHeroRenderAbility;
-  gfx::GfxImageHandle positionDraftPortrait;
-  gfx::GfxImageHandle positionDraftIcon;
-  XString equippedLoadoutIcons[2];
-  XString unequippedLoadoutIcons[2];
-  gfx::GfxImageHandle zombiePlayerIcon;
-  uint32_t numBodyInfos;
-  CharacterItemInfo *bodyInfo;
-  uint32_t numHelmetInfos;
-  CharacterItemInfo *helmetInfo;
-  CharacterGenderTypes gender;
-  bool disabled;
-  XString frontendVignetteStruct;
-  db::xasset::XCamPtr frontendVignetteXCam;
-  db::xasset::XAnimPartsPtr frontendVignetteXAnim;
-  db::xasset::xmodel::XModelPtr frontendVignetteWeaponModel;
-  uint32_t kvpCount;
-  scr::ScriptBundleKVP *kvpItems;
-  db::xasset::PlayerSoundsTablePtr characterMovementSounds;
-  db::xasset::PlayerFXTablePtr characterMovementFx;
-  db::xasset::FootstepTableDefPtr characterFootsteps;
-  db::xasset::FootstepTableDefPtr characterFootstepsQuiet;
-  db::xasset::FootstepTableDefPtr characterFootstepsNPC;
-  db::xasset::FootstepTableDefPtr characterFootstepsNPCLoud;
-  db::xasset::FootstepTableDefPtr characterFootstepsNPCQuiet;
-  db::xasset::xmodel::XModelPtr dogtagFriendly;
-  db::xasset::xmodel::XModelPtr dogTagEnemy;
-  XString cardBackIcon;
-  XString realName;
-  int32_t age;
-  XString genderString;
-  XString bio;
-  XString weaponCardBackIcon;
-  XString weaponCardBackSubIcon;
-  XString weaponCardBackDesc;
-  XString weaponSubItemDesc;
-  XString weaponSchema;
-  XString abilityCardBackIcon;
-  XString abilityCardBackSubIcon;
-  XString abilityCardBackDesc;
-  XString abilitySubItemDesc;
-  XString abilitySchema;
-};
-
 struct PlayerRoleCategory {
   XString name;
   XString displayName;
@@ -920,7 +848,7 @@ struct PlayerEnergy {
 
 struct __attribute__((aligned(2))) PlayerRoleTemplate {
   XString name;
-  CharacterBodyType *bodyType;
+  db::xasset::CharacterBodyType *bodyType;
   PlayerRoleCategory *roleCategory;
   PMoveDef *pmoveDef;
   uint32_t defaultLoadoutCount;
@@ -1021,8 +949,7 @@ struct animScriptItem_t {
 };
 ASSERT_SIZE(animScriptItem_t, 0x130);
 
-#pragma pack(push, 1)
-struct visionPulse_t {
+PACKED(struct visionPulse_t {
   qboolean active;
   int32_t startTime;
   int32_t endTime;
@@ -1040,8 +967,7 @@ struct visionPulse_t {
   snd::SndAliasId pulseSound;
   snd::SndAliasId pulseMissSound;
   uint8_t _padding4C[4];
-};
-#pragma pack(pop)
+});
 
 struct CasterHUDInfo {
   uint32_t gadgetPlayerStateFlags;
@@ -1054,8 +980,7 @@ struct CasterHUDInfo {
 
   Verify and adjust as needed prior to usage.
 */
-#pragma pack(push, 1)
-struct clientInfo_t {
+PACKED(struct clientInfo_t {
   qboolean infoValid;
   qboolean nextValid;
   ClientNum_t clientNum;
@@ -1224,7 +1149,7 @@ struct clientInfo_t {
   uint8_t _paddingED1[3];
   CasterHUDInfo casterHUDInfo;
   uint8_t _paddingEDC[4];
-};
+});
 ASSERT_OFFSET(clientInfo_t, _padding73D, 0x73D);
 ASSERT_OFFSET(clientInfo_t, _padding9D4, 0x9D4);
 ASSERT_OFFSET(clientInfo_t, _paddingEC4, 0xEC4);
@@ -1233,17 +1158,14 @@ ASSERT_OFFSET(clientInfo_t, _padding807, 0x807);
 ASSERT_OFFSET(clientInfo_t, name, 0x0C);
 ASSERT_OFFSET(clientInfo_t, clanAbbrev, 0x80);
 ASSERT_SIZE(clientInfo_t, 0xEE0);
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-struct ucmd_t {
+PACKED(struct ucmd_t {
   const char *name;
-  fastcallPtr_t<void(client_t *cl)> func;
+  fastcallPtr_t<void(client_t * cl)> func;
   qboolean fromOldServer;
   uint8_t _padding14[4];
-};
+});
 ASSERT_SIZE(ucmd_t, 0x18);
-#pragma pack(pop)
 
 PACKED(struct BitField {
   const uint64_t *array;

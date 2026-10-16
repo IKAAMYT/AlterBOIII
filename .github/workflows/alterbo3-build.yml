@@ -1,0 +1,99 @@
+name: AlterBO3 Build (test, sans release)
+
+# Build de validation : compile le client et met le zip en artefact, sans
+# publier de release GitHub ni toucher a update.json. Sert a tester une
+# branche (merge d'Ezz, nouvelle feature) avant de la fusionner dans main.
+# La release reste faite par alterbo3-release.yml (tag v* ou dispatch).
+
+on:
+  push:
+    branches:
+      - beta-merge
+      - friends-ezz-sync
+      - 'test/**'
+      - 'merge/**'
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'tools/**'
+      - 'old-dll/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  # Groupe par commit : un push sur une branche qui a une PR ouverte
+  # declenche push ET pull_request pour le meme commit ; on n'en garde qu'un.
+  group: alterbo3-build-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build AlterBO3 (Release)
+    # Ezz compile en C++23 complet : VS 2026 (runner windows-2025), premake
+    # "vs2026" et la solution au format .slnx, comme alterbo3-release.yml.
+    runs-on: windows-2025
+    steps:
+      - name: Check out files
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          lfs: false
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: "[18.0,)"
+
+      - name: Install premake5
+        uses: Jarod42/install-premake5@v7
+        with:
+          msdev: vs2026
+
+      - name: Generate project files
+        run: premake5 vs2026
+
+      - name: Set up problem matching
+        uses: ammaraskar/msvc-problem-matcher@master
+
+      - name: Build Release
+        run: msbuild /m /v:minimal /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=ClangCL build/boiii.slnx
+
+      - name: Stage AlterBO3 package
+        shell: bash
+        run: |
+          mkdir -p package
+          cp build/bin/x64/Release/boiii.exe package/AlterBOIII.exe
+          cp -r data package/data
+          rm -rf package/data/launcher
+          cd package
+          7z a -tzip ../AlterBO3.zip ./*
+          cd ..
+          cp build/bin/x64/Release/boiii.exe AlterBOIII.exe
+
+      - name: Artifact name
+        id: artifact
+        shell: bash
+        run: |
+          # Sur une PR, github.ref_name vaut "3/merge" : le "/" est interdit
+          # dans un nom d'artefact. On prend la branche source et on remplace
+          # tout caractere interdit par "-".
+          ref="${{ github.head_ref || github.ref_name }}"
+          safe=$(printf '%s' "$ref" | tr '/\\:<>|*?"' '---------')
+          echo "name=AlterBO3-${safe}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            AlterBO3.zip
+            AlterBOIII.exe
+            build/bin/x64/Release/boiii.pdb
+          retention-days: 14

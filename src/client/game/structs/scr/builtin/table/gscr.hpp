@@ -348,10 +348,10 @@ union BuiltinFunctionTable {
     BuiltinFunctionDef PROTECTED(SetBGBUnlocked);
     BuiltinFunctionDef PROTECTED(GetBGBUnlocked);
   };
-  static inline constexpr size_t COUNT = 336;
+  static inline constexpr size_t COUNT = 0x150;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
 };
@@ -705,10 +705,10 @@ union BuiltinMethodTable {
     BuiltinMethodDef QueueMeleeActionState;
     BuiltinMethodDef StopJukeMove;
   };
-  static inline constexpr size_t COUNT = 345;
+  static inline constexpr size_t COUNT = 0x159;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);

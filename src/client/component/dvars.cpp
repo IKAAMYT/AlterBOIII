@@ -2,6 +2,7 @@
 
 #include <loader/component_loader.hpp>
 
+#include "dvars.hpp"
 #include "scheduler.hpp"
 #include <game/game.hpp>
 
@@ -83,28 +84,18 @@ void copy_dvar_names_to_pool() {
   for (int i = 0; i < *game::g_dvarCount; ++i) {
     game::EngineDependentDvarMut dvar = pool[i];
 
-    if (!dvar.debugName()) {
-      if (dvar_hash_name_map.contains(dvar.name())) {
-        dvar.debugName() =
-            game::sl::CopyString(dvar_hash_name_map[dvar.name()].data());
-      }
+    if (!dvar.debugName() && dvar_hash_name_map.contains(dvar.name())) {
+      dvar.debugName() =
+          game::sl::CopyString(dvar_hash_name_map[dvar.name()].data());
     }
   }
 }
 
-std::string get_config_file_path() { return "boiii_players/user/config.cfg"; }
-
-bool is_archive_dvar(game::EngineDependentDvar dvar) {
-  if (!dvar.debugName()) {
-    return false;
-  }
-
-  return dvar.flags().archive;
+inline bool is_archive_dvar(game::EngineDependentDvar dvar) {
+  return dvar.debugName() && dvar.flags().archive && !dvar.flags().cheat;
 }
 
 void write_archive_dvars() {
-  const std::string path = get_config_file_path();
-
   std::string config_buffer;
   game::EngineDependentDvarPool pool = game::dvar_pool();
 
@@ -119,11 +110,9 @@ void write_archive_dvars() {
     }
   }
 
-  if (config_buffer.empty()) {
-    return;
+  if (!config_buffer.empty()) {
+    utils::io::write_file(CONFIG_FILE_PATH, config_buffer);
   }
-
-  utils::io::write_file(path, config_buffer);
 }
 
 void schedule_dvar_write() {
@@ -141,6 +130,13 @@ void schedule_dvar_write() {
 
 void dvar_set_variant_stub(game::EngineDependentDvar dvar,
                            game::DvarValue *value, game::DvarSetSource source) {
+  if (dvar.type() == game::dvarType_t::INT && dvar.debugName() &&
+      !dvar.domain().contains(value->integer()) &&
+      (std::string_view(dvar.debugName()) == "sv_maxclients" ||
+       std::string_view(dvar.debugName()) == "com_maxclients")) {
+    return;
+  }
+
   dvar_set_variant_hook.invoke(dvar, value, source);
 
   if (initial_config_read && is_archive_dvar(dvar)) {
@@ -149,44 +145,36 @@ void dvar_set_variant_stub(game::EngineDependentDvar dvar,
 }
 
 void read_archive_dvars() {
-  const std::string path = get_config_file_path();
+  if (utils::io::file_exists(CONFIG_FILE_PATH)) {
+    std::string filedata;
+    utils::io::read_file(CONFIG_FILE_PATH, &filedata);
 
-  if (!utils::io::file_exists(path)) {
+    game::cbuf::Cbuf_ExecuteBuffer(game::LOCAL_CLIENT_0,
+                                   game::ControllerIndex_t::CONTROLLER_INDEX_0,
+                                   filedata.c_str());
     initial_config_read = true;
-    return;
+    scheduler::execute(scheduler::pipeline::dvars_loaded);
+    schedule_dvar_write();
+  } else {
+    initial_config_read = true;
   }
-
-  std::string filedata;
-  utils::io::read_file(path, &filedata);
-
-  game::cbuf::Cbuf_ExecuteBuffer(game::LOCAL_CLIENT_0,
-                                 game::ControllerIndex_t::CONTROLLER_INDEX_0,
-                                 filedata.c_str());
-  initial_config_read = true;
-  scheduler::execute(scheduler::pipeline::dvars_loaded);
 }
 } // namespace
 
 class component final : public generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "dvars"; }
-#endif
+  DEFINE_COMPONENT_NAME("dvars");
 
 public:
   void post_unpack() override {
     if (game::is_client()) {
       scheduler::once(read_archive_dvars,
                       scheduler::pipeline::dvars_flags_patched);
-      // TODO: this should be a symbol
-      dvar_set_variant_hook.create(game::select(0x14226C510, 0x1422C9030, 0x0),
+      dvar_set_variant_hook.create(game::Dvar_SetVariant.get(),
                                    dvar_set_variant_stub);
 
       // Show all known dvars in console
-      // TODO: this should be a symbol
-      utils::hook::jump(game::select(0x142260310, 0x1422BCE30, 0x0),
-                        dvar_for_each_name_stub);
-      // TODO: this should be a symbol
-      utils::hook::jump(game::select(0x142260260, 0x1422BCD80, 0x0),
+      utils::hook::jump(game::Dvar_ForEachName.get(), dvar_for_each_name_stub);
+      utils::hook::jump(game::Dvar_ForEachNameClientNum.get(),
                         dvar_for_each_name_client_num_stub);
     }
 

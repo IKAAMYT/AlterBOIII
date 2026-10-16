@@ -264,10 +264,10 @@ union BuiltinFunctionTable {
     BuiltinFunctionDef EnableVR;
   };
 
-  static inline constexpr size_t COUNT = 251;
+  static inline constexpr size_t COUNT = 0xFB;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -532,10 +532,10 @@ union BuiltinMethodTable {
     BuiltinMethodDef SuppressRagdollSelfCollision;
   };
 
-  static inline constexpr size_t COUNT = 246;
+  static inline constexpr size_t COUNT = 0xF6;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -652,10 +652,10 @@ union GfxFunctionTable {
     BuiltinFunctionDef Umbra_ClearPersistentTomeTrigger;
   };
 
-  static inline constexpr size_t COUNT = 106;
+  static inline constexpr size_t COUNT = 0x6A;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -707,10 +707,10 @@ union GfxMethodTable {
     BuiltinMethodDef TmodeSetFlag;
     BuiltinMethodDef TmodeClearFlag;
   };
-  static inline constexpr size_t COUNT = 42;
+  static inline constexpr size_t COUNT = 0x2A;
 
   BuiltinMethodDef methods[COUNT];
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -730,10 +730,10 @@ union MathFunctionTable {
     BuiltinFunctionDef GetBitsForAngle;
   };
 
-  static inline constexpr size_t COUNT = 9;
+  static inline constexpr size_t COUNT = 0x9;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -775,10 +775,10 @@ union SoundFunctionTable {
     BuiltinFunctionDef ForceAmbientRoom;
   };
 
-  static inline constexpr size_t COUNT = 31;
+  static inline constexpr size_t COUNT = 0x1F;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -797,10 +797,10 @@ union SoundMethodTable {
     BuiltinMethodDef SetLoopState;
   };
 
-  static inline constexpr size_t COUNT = 8;
+  static inline constexpr size_t COUNT = 0x8;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -831,10 +831,10 @@ union UIFunctionTable {
     BuiltinFunctionDef SetExtraCamRenderReady;
   };
 
-  static inline constexpr size_t COUNT = 20;
+  static inline constexpr size_t COUNT = 0x14;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -864,10 +864,10 @@ union UtilFunctionTable {
     BuiltinFunctionDef GetLightingState;
   };
 
-  static inline constexpr size_t COUNT = 19;
+  static inline constexpr size_t COUNT = 0x13;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -881,9 +881,9 @@ union UtilMethodTable {
     BuiltinMethodDef GetControllerPosition;
   };
 
-  static inline constexpr size_t COUNT = 2;
+  static inline constexpr size_t COUNT = 0x2;
   BuiltinMethodDef methods[COUNT];
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);

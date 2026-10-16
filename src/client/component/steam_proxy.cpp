@@ -331,9 +331,7 @@ void evaluate_ownership_state(const ownership_state state) {
 } // namespace
 
 struct component final : client_component {
-#ifndef NDEBUG
-  std::string name() override { return "steam_proxy"; }
-#endif
+  DEFINE_COMPONENT_NAME("steam_proxy");
 
   void post_load() override {
     load_client();
@@ -546,7 +544,7 @@ void access_steam_friends(
       if (id == 0)
         continue;
 
-      steam_id sid{};
+      steam::steam_id sid{};
       sid.bits = id;
       const int state =
           client_friends.invoke<int>("GetFriendPersonaState", sid);
@@ -560,30 +558,6 @@ void access_steam_friends(
   } catch (...) {
   }
   callback(result);
-}
-
-void invite_friend(uint64_t xuid, const std::string &connect_string) {
-  steam_id sid{};
-  sid.bits = xuid;
-
-  // set rich presence invite key so receiver can detect it via RP polling
-  set_rich_presence("boiii_invite",
-                    utils::string::va("%llu:%s", xuid, connect_string.c_str()));
-
-  if (steam_friends_real) {
-    try {
-      steam_friends_real.invoke<bool>(49, sid, connect_string.c_str());
-      return;
-    } catch (...) {
-    }
-  }
-  if (client_friends) {
-    try {
-      client_friends.invoke<bool>("InviteUserToGame", sid,
-                                  connect_string.c_str());
-    } catch (...) {
-    }
-  }
 }
 
 std::string get_pending_game_invite(uint64_t *out_friend_id) {
@@ -636,21 +610,6 @@ std::string get_pending_game_invite(uint64_t *out_friend_id) {
 
 std::string get_pending_game_invite() {
   return get_pending_game_invite(nullptr);
-}
-
-std::string get_steam_friend_name(uint64_t friend_steam_id) {
-  if (!client_friends || friend_steam_id == 0)
-    return "";
-  try {
-    steam_id sid{};
-    sid.bits = friend_steam_id;
-    const char *name =
-        client_friends.invoke<const char *>("GetFriendPersonaName", sid);
-    if (name && name[0])
-      return name;
-  } catch (...) {
-  }
-  return "";
 }
 
 uint64_t get_own_steam_id() {
@@ -744,33 +703,6 @@ uint64_t get_own_steam_id() {
   const uint64_t emulated =
       steam::SteamUser() ? steam::SteamUser()->GetSteamID().bits : 0;
   return accept(emulated);
-}
-
-std::string get_friend_rich_presence(uint64_t friend_id,
-                                     const std::string &key) {
-  if (!steam_friends_real || friend_id == 0)
-    return "";
-  try {
-    steam_id sid{};
-    sid.bits = friend_id;
-    const char *val =
-        steam_friends_real.invoke<const char *>(45, sid, key.c_str());
-    if (val && val[0])
-      return val;
-  } catch (...) {
-  }
-  return "";
-}
-
-void request_friend_rich_presence(uint64_t friend_id) {
-  if (!steam_friends_real || friend_id == 0)
-    return;
-  try {
-    steam_id sid{};
-    sid.bits = friend_id;
-    steam_friends_real.invoke<void>(48, sid);
-  } catch (...) {
-  }
 }
 
 void clear_invite_presence() { set_rich_presence("boiii_invite", ""); }

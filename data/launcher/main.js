@@ -41,6 +41,19 @@
     'Maintenance': 'Maintenance',
     'AlterCOD Team': 'AlterCOD Team',
 
+    // Stockage / sauvegardes (beta Ezz)
+    'Stockage': 'Storage',
+    'Espace utilisé par AlterBOIII': 'Disk space used by AlterBOIII',
+    'Rapports de crash, logs, sauvegardes et poids de chaque mod ou map installé. Un rapport de crash peut peser plusieurs centaines de Mo.': 'Crash reports, logs, backups and the size of each installed mod or map. A single crash report can take several hundred MB.',
+    'Analyser': 'Check',
+    'Purger les crashs > 7 jours': 'Delete crash reports > 7 days',
+    'Lance l\'analyse pour voir ce qui prend de la place.': 'Run the check to see what is using disk space.',
+    'Sauvegardes de profil': 'Profile backups',
+    'Sauvegarder boiii_players': 'Back up boiii_players',
+    'Stats, réglages, binds et amis, en zip dans le dossier backups. Restaurer une sauvegarde met d\'abord le profil actuel de côté.': 'Stats, settings, binds and friends, zipped into the backups folder. Restoring a backup saves the current profile first.',
+    'Sauvegarder': 'Back up',
+    'Aucune sauvegarde pour le moment.': 'No backups yet.',
+
     // Options de lancement
     'Options de lancement': 'Launch options',
     'Mode sans échec': 'Safe mode',
@@ -141,30 +154,20 @@
     'Plus anciens': 'Oldest',
     'Alphabétique': 'Alphabetical',
 
-    // Amis
+    // Amis (systeme local par code ami, meme base que le launcher d'Ezz)
+    'Ta liste locale, celle que le jeu utilise pour le menu social.': 'Your local list, the one the in-game social menu uses.',
+    'Ton code ami AlterBOIII': 'Your AlterBOIII Friend Code',
+    'Ton identité AlterBOIII': 'Your AlterBOIII identity',
+    'Donne-le à tes potes : c\'est ce code qu\'ils collent ci-dessous pour t\'ajouter.': 'Give it to your friends: this is the code they paste below to add you.',
+    'Copier': 'Copy',
     'Ajouter un ami': 'Add a friend',
-    'Entre le pseudo de la personne pour lui envoyer une demande.': 'Enter someone\'s username to send them a request.',
-    'Envoyer': 'Send',
-    'Mes amis': 'My friends',
-    'Demandes reçues': 'Received requests',
-    'Rechercher': 'Search',
-    'Rechercher un ami...': 'Search a friend...',
-    'Se connecter avec le forum': 'Sign in with the forum',
-    'Se déconnecter': 'Sign out',
-    'Connecté en tant que': 'Signed in as',
+    'Entre un pseudo et le code ami de ton pote.': 'Enter a display name and your friend\'s AlterBOIII Friend Code.',
+    'Pseudo': 'Display name',
+    'Code ami AlterBOIII': 'AlterBOIII Friend Code',
+    'Ajouter': 'Add',
+    'Aucun ami enregistré': 'No friends added yet',
+    'Aucun ami pour le moment': 'No friends yet',
     'En ligne': 'Online',
-    'Connecte-toi à AlterCOD': 'Sign in to AlterCOD',
-    'Utilise ton compte du forum pour retrouver tes amis en jeu.': 'Use your forum account to find your friends in-game.',
-    'Crée-le sur le forum': 'Create one on the forum',
-    'Ouverture du navigateur... autorise la connexion puis reviens ici.': 'Opening your browser... authorize the connection then come back here.',
-    'Serveur injoignable.': 'Server unreachable.',
-    '0 ami': '0 friends',
-
-    // WIP (en cours de creation)
-    'Système d\'amis en cours de création': 'Friends system under construction',
-    'Connexion via le forum, demandes d\'amis, présence en jeu et statut "en partie" : tout ça arrive bientôt pour retrouver ta communauté directement depuis le launcher.': 'Forum sign-in, friend requests, in-game presence and "in match" status: it\'s all coming soon so you can find your community right from the launcher.',
-    'Retour du développement début août': 'Development resumes early August',
-    'En développement': 'In development',
 
     // Modes de jeu
     'Multijoueur': 'Multiplayer',
@@ -4876,6 +4879,7 @@ fetchReleases();
    ───────────────────────────────────────────────────────────── */
 (function initAmis() {
   var codeEl    = document.getElementById('amisCode');
+  var nomEl     = document.getElementById('amisNom');
   var copierBtn = document.getElementById('amisCopierBtn');
   var compteEl  = document.getElementById('amisCompte');
   var listeEl   = document.getElementById('amisListe');
@@ -4908,8 +4912,12 @@ fetchReleases();
 
     var d = parseJson(brut);
     if (!d) return;
-    monCode = d.friend_code || '';
+    monCode = d.friend_code ? String(d.friend_code) : '';
     if (codeEl) codeEl.textContent = monCode || 'indisponible';
+    // Comme le launcher d'Ezz : le pseudo courant s'affiche au-dessus du
+    // code, pour qu'on sache sous quel nom les potes nous verront.
+    if (nomEl && d.name) nomEl.textContent = d.name;
+    if (copierBtn) copierBtn.disabled = !monCode;
   }
 
   function chargerAmis() {
@@ -5091,19 +5099,187 @@ fetchReleases();
   if (addCode) addCode.onkeydown = surEntree;
   if (addNom)  addNom.onkeydown  = surEntree;
 
-  /* Recharge en entrant sur la page, et toutes les 20 s si elle est ouverte :
-     le jeu reecrit friends.json quand la presence change. */
+  /* Recharge en entrant sur la page, et toutes les 5 s si elle est ouverte
+     et visible (meme cadence que le launcher d'Ezz) : le jeu reecrit
+     friends.json quand un ami est ajoute/retire depuis le menu social. */
   var setPageOrig = setPage;
   setPage = function(cible) {
     setPageOrig(cible);
     if (cible === 'friends') { chargerIdentite(); chargerAmis(); }
   };
   setInterval(function() {
+    if (document.hidden) return;
     var page = document.getElementById('friendsPage');
-    if (page && page.className.indexOf('active') !== -1) chargerAmis();
-  }, 20000);
+    if (page && page.className.indexOf('active') !== -1) {
+      chargerIdentite();
+      chargerAmis();
+    }
+  }, 5000);
 
   setTimeout(function() { chargerIdentite(); chargerAmis(); }, 1200);
+})();
+
+/* ─────────────────────────────────────────────────────────────
+   STOCKAGE + SAUVEGARDES DE PROFIL
+   Port des sections "Storage" et "Profile Backups" du launcher de la
+   beta d'Ezz. Callbacks C++ : getStorageUsage, deleteOldCrashReports,
+   listProfileBackups, backUpProfile, restoreProfileBackup,
+   openBackupsFolder. ES5 uniquement.
+   ───────────────────────────────────────────────────────────── */
+(function initStockage() {
+  var resultats = document.getElementById('storageResults');
+  var listeSauv = document.getElementById('profileBackupList');
+  if (!resultats && !listeSauv) return;
+
+  function appel(nom, arg) {
+    var ex = getExternal();
+    if (!ex || typeof ex[nom] !== 'function') return null;
+    return arg === undefined ? ex[nom]() : ex[nom](arg);
+  }
+
+  function ligne(conteneur, nom, taille, bouton) {
+    var l = document.createElement('div');
+    l.className = 'stockage-ligne';
+    var n = document.createElement('div');
+    n.className = 'stockage-nom';
+    n.textContent = nom;
+    n.title = nom;
+    l.appendChild(n);
+    var t = document.createElement('div');
+    t.className = 'stockage-taille';
+    t.textContent = taille || '';
+    l.appendChild(t);
+    if (bouton) l.appendChild(bouton);
+    conteneur.appendChild(l);
+  }
+
+  function vide(conteneur, texte) {
+    conteneur.innerHTML = '';
+    var v = document.createElement('div');
+    v.className = 'stockage-vide';
+    v.textContent = texte;
+    conteneur.appendChild(v);
+  }
+
+  /* ── Stockage ── */
+  function analyser() {
+    if (!resultats) return;
+    vide(resultats, 'Analyse en cours…');
+    setTimeout(function() {
+      var brut = null;
+      try { brut = appel('getStorageUsage'); } catch (e) { brut = null; }
+      var u = null;
+      try { u = brut ? JSON.parse(brut) : null; } catch (e) { u = null; }
+      if (!u) { vide(resultats, 'Impossible d\'analyser le stockage.'); return; }
+
+      resultats.innerHTML = '';
+      ligne(resultats, 'Rapports de crash',
+        (u.crashCount || 0) + ' fichier' + ((u.crashCount || 0) > 1 ? 's' : '') +
+        ', ' + (u.crashSize || '0 B') +
+        ' (' + (u.oldCrashCount || 0) + ' de plus de 7 jours, ' + (u.oldCrashSize || '0 B') + ')');
+      ligne(resultats, 'Logs', u.logsSize || '0 B');
+      ligne(resultats, 'Sauvegardes de profil', u.backupsSize || '0 B');
+      var items = u.items || [];
+      for (var i = 0; i < items.length; i++) {
+        ligne(resultats, items[i].name || '?', items[i].size || '');
+      }
+      if (!items.length) {
+        ligne(resultats, 'Mods et maps installés', 'aucun');
+      }
+    }, 0);
+  }
+
+  var btnAnalyser = document.getElementById('storageCheckBtn');
+  if (btnAnalyser) btnAnalyser.onclick = analyser;
+
+  var btnPurger = document.getElementById('storageCleanBtn');
+  if (btnPurger) {
+    btnPurger.onclick = function() {
+      showConfirm('Purger les rapports de crash',
+        'Supprimer les rapports de crash de plus de 7 jours ? Les récents sont conservés au cas où tu devrais encore les envoyer.',
+        function() {
+          var res = '';
+          try { res = appel('deleteOldCrashReports') || '0'; } catch (e) { res = ''; }
+          if (res === '') {
+            showMessage('Purger les rapports de crash', 'Les rapports n\'ont pas pu être supprimés.');
+            return;
+          }
+          var parts = String(res).split(' ');
+          var n = parseInt(parts[0], 10) || 0;
+          showMessage('Purger les rapports de crash',
+            n ? n + ' rapport' + (n > 1 ? 's' : '') + ' supprimé' + (n > 1 ? 's' : '') +
+                ', ' + parts.slice(1).join(' ') + ' libérés.'
+              : 'Aucun rapport de crash de plus de 7 jours.');
+          analyser();
+        });
+    };
+  }
+
+  /* ── Sauvegardes de profil ── */
+  function chargerSauvegardes() {
+    if (!listeSauv) return;
+    var sauv = [];
+    try { sauv = JSON.parse(appel('listProfileBackups') || '[]'); } catch (e) { sauv = []; }
+    if (!sauv || typeof sauv.length !== 'number' || !sauv.length) {
+      vide(listeSauv, 'Aucune sauvegarde pour le moment.');
+      return;
+    }
+    listeSauv.innerHTML = '';
+    for (var i = 0; i < sauv.length; i++) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = 'Restaurer';
+      btn.onclick = (function(fichier) {
+        return function() {
+          showConfirm('Restaurer le profil',
+            'Remplacer boiii_players par <b>' + String(fichier).replace(/</g, '&lt;') +
+            '</b> ? Le profil actuel est d\'abord sauvegardé.',
+            function() {
+              var r = 'error';
+              try { r = appel('restoreProfileBackup', fichier) || 'error'; } catch (e) { r = 'error'; }
+              if (r === 'game_running') {
+                showMessage('Restaurer le profil', 'Ferme le jeu avant de restaurer un profil.');
+              } else if (r === 'ok') {
+                try { if (typeof loadBinds === 'function') loadBinds(); } catch (e) {}
+                showMessage('Restaurer le profil', 'Profil restauré.');
+              } else {
+                showMessage('Restaurer le profil', 'Le profil n\'a pas pu être restauré depuis cette sauvegarde.');
+              }
+              chargerSauvegardes();
+            });
+        };
+      })(sauv[i].file);
+      ligne(listeSauv, sauv[i].file || '?', sauv[i].size || '', btn);
+    }
+  }
+
+  var btnSauver = document.getElementById('profileBackupBtn');
+  if (btnSauver) {
+    btnSauver.onclick = function() {
+      var fichier = '';
+      try { fichier = appel('backUpProfile') || ''; } catch (e) { fichier = ''; }
+      showMessage('Sauvegarder le profil',
+        fichier ? 'Profil sauvegardé dans ' + fichier + '.'
+                : 'Il n\'y a pas encore de profil à sauvegarder.');
+      chargerSauvegardes();
+    };
+  }
+
+  var btnDossier = document.getElementById('profileBackupsFolderBtn');
+  if (btnDossier) {
+    btnDossier.onclick = function() {
+      try { appel('openBackupsFolder'); } catch (e) {}
+    };
+  }
+
+  // Liste chargee en entrant sur la page Reglages.
+  var setPageOrigStockage = setPage;
+  setPage = function(cible) {
+    setPageOrigStockage(cible);
+    if (cible === 'settings') chargerSauvegardes();
+  };
+  setTimeout(chargerSauvegardes, 1500);
 })();
 
 /* ─────────────────────────────────────────────────────────────

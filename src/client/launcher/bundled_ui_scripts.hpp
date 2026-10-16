@@ -12,9 +12,13 @@ namespace launcher {
 // ecraser nos traductions avec les fichiers d'Ezz). Resultat : personne ne
 // les installait, les joueurs gardaient d'anciens scripts ou n'en avaient pas.
 //
-// Cette fonction recopie donc <dossier exe>\data\ui_scripts vers
-// %LOCALAPPDATA%\boiii\data\ui_scripts a chaque lancement du client. Si le
-// dossier source est absent (exe copie seul), elle ne fait rien.
+// Cette fonction installe donc nos scripts dans
+// %LOCALAPPDATA%\boiii\data\ui_scripts a chaque lancement du client. La
+// source est la ressource UI_SCRIPTS embarquee dans l'exe (generee par
+// premake5.lua depuis data/ui_scripts), ce qui marche meme quand l'exe est
+// lance seul ; a defaut, le dossier <dossier exe>\data\ui_scripts du zip.
+// Les anciens dossiers de scripts remplaces depuis (alter_social, kick_menu...)
+// sont retires, y compris de <dossier exe>\boiii\ui_scripts.
 void install_bundled_ui_scripts() noexcept;
 
 // Miroir de `source` vers `target` : copie ce qui manque ou differe, puis

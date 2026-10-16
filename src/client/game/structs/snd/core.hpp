@@ -25,31 +25,85 @@ typedef uint32_t SndAliasId;
 typedef int64_t SndPlaybackHandle;
 
 enum class SndGameMode : int32_t {
-  SND_GAME_MODE_MULTIPLAYER = 0x0,
-  SND_GAME_MODE_ZOMBIES = 0x1,
-  SND_GAME_MODE_CAMPAIGN = 0x2,
-  SND_GAME_MODE_CAMPAIGN_ZOMBIES = 0x3,
+  MULTIPLAYER = 0x0,
+  ZOMBIES = 0x1,
+  CAMPAIGN = 0x2,
+  CAMPAIGN_ZOMBIES = 0x3,
 };
+
+inline constexpr const char *serialize(const SndGameMode mode) {
+  switch (mode) {
+  case SndGameMode::MULTIPLAYER:
+    return "SND_MODE_MULTIPLAYER";
+  case SndGameMode::ZOMBIES:
+    return "SND_MODE_ZOMBIES";
+  case SndGameMode::CAMPAIGN:
+    return "SND_MODE_CAMPAIGN";
+  case SndGameMode::CAMPAIGN_ZOMBIES:
+    return "SND_MODE_CAMPAIGN_ZOMBIES";
+  default:
+    return "SND_MODE_INVALID";
+  }
+}
 
 enum class SndStopSoundFlags : int32_t {
-  SND_STOP_ALL = 0x0,
-  SND_STOP_PAUSED = 0x1,
-  SND_STOP_DEATH = 0x2,
+  ALL = 0x0,
+  PAUSED = 0x1,
+  DEATH = 0x2,
 };
+
+inline constexpr const char *serialize(const SndStopSoundFlags flags) {
+  switch (flags) {
+  case SndStopSoundFlags::ALL:
+    return "SND_STOP_ALL";
+  case SndStopSoundFlags::PAUSED:
+    return "SND_STOP_PAUSED";
+  case SndStopSoundFlags::DEATH:
+    return "SND_STOP_DEATH";
+  default:
+    return "SND_STOP_INVALID";
+  }
+}
 
 enum class SndGfutzLocation : int32_t {
-  SND_GFUTZ_LOCATION_SCRIPT = 0x0,
-  SND_GFUTZ_LOCATION_GDT = 0x1,
-  SND_GFUTZ_LOCATION_COUNT = 0x2,
+  SCRIPT = 0x0,
+  GDT = 0x1,
+  COUNT = 0x2,
 };
 
+inline constexpr const char *serialize(const SndGfutzLocation loc) {
+  switch (loc) {
+  case SndGfutzLocation::SCRIPT:
+    return "GFUTZ_SCRIPT";
+  case SndGfutzLocation::GDT:
+    return "GFUTZ_GDT";
+  default:
+    return "GFUTZ_INVALID";
+  }
+}
+
 enum class SndLimitType : int32_t {
-  SND_LIMIT_NONE = 0x0,
-  SND_LIMIT_OLDEST = 0x1,
-  SND_LIMIT_REJECT = 0x2,
-  SND_LIMIT_PRIORITY = 0x3,
-  SND_LIMIT_COUNT = 0x4,
+  NONE = 0x0,
+  OLDEST = 0x1,
+  REJECT = 0x2,
+  PRIORITY = 0x3,
+  COUNT = 0x4,
 };
+
+inline constexpr const char *serialize(const SndLimitType type) {
+  switch (type) {
+  case SndLimitType::NONE:
+    return "LIMIT_NONE";
+  case SndLimitType::OLDEST:
+    return "LIMIT_OLDEST";
+  case SndLimitType::REJECT:
+    return "LIMIT_REJECT";
+  case SndLimitType::PRIORITY:
+    return "LIMIT_PRIORITY";
+  default:
+    return "LIMIT_INVALID";
+  }
+}
 
 /**
  * @brief Defines the lifecycle of a Sound Bank loading process.
@@ -126,6 +180,31 @@ enum class SndBankState : int32_t {
   SND_BANK_STATE_ERROR = 0x8,
 };
 
+inline constexpr const char *serialize(const SndBankState state) {
+  switch (state) {
+  case SndBankState::SND_BANK_STATE_NEW:
+    return "BANK_STATE_NEW";
+  case SndBankState::SND_BANK_STATE_STREAM_HEADER:
+    return "BANK_STATE_STREAM_HEADER";
+  case SndBankState::SND_BANK_STATE_STREAM_TOC:
+    return "BANK_STATE_STREAM_TOC";
+  case SndBankState::SND_BANK_STATE_LOADED_HEADER:
+    return "BANK_STATE_LOADED_HEADER";
+  case SndBankState::SND_BANK_STATE_LOADED_TOC:
+    return "BANK_STATE_LOADED_TOC";
+  case SndBankState::SND_BANK_STATE_LOADED_ASSET_WAIT:
+    return "BANK_STATE_LOADED_ASSET_WAIT";
+  case SndBankState::SND_BANK_STATE_LOADED_ASSETS:
+    return "BANK_STATE_LOADED_ASSETS";
+  case SndBankState::SND_BANK_STATE_READY_TO_USE:
+    return "BANK_STATE_READY_TO_USE";
+  case SndBankState::SND_BANK_STATE_ERROR:
+    return "BANK_STATE_ERROR";
+  default:
+    return "BANK_STATE_INVALID";
+  }
+}
+
 enum class SndDuckCategoryType : uint32_t {
   SND_DUCK_CATEGORY_ALIAS = 0x0,
   SND_DUCK_CATEGORY_AMBIENT = 0x1,
@@ -144,40 +223,144 @@ enum class SndDuckCategoryType : uint32_t {
   SND_DUCK_CATEGORY_COUNT = 0xE,
 };
 
+inline constexpr const char *serialize(const SndDuckCategoryType type) {
+  switch (type) {
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_ALIAS:
+    return "DUCK_CAT_ALIAS";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_AMBIENT:
+    return "DUCK_CAT_AMBIENT";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_SCRIPT:
+    return "DUCK_CAT_SCRIPT";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_SHELLSHOCK:
+    return "DUCK_CAT_SHELLSHOCK";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_BREATH:
+    return "DUCK_CAT_BREATH";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_ADS:
+    return "DUCK_CAT_ADS";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_MENU:
+    return "DUCK_CAT_MENU";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_ENEMIES:
+    return "DUCK_CAT_ENEMIES";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_HEALTH:
+    return "DUCK_CAT_HEALTH";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_DEBUG:
+    return "DUCK_CAT_DEBUG";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_LEVELFADE:
+    return "DUCK_CAT_LEVELFADE";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_MOVIE:
+    return "DUCK_CAT_MOVIE";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_HIPFIRE:
+    return "DUCK_CAT_HIPFIRE";
+  case SndDuckCategoryType::SND_DUCK_CATEGORY_XCAM:
+    return "DUCK_CAT_XCAM";
+  default:
+    return "DUCK_CAT_INVALID";
+  }
+}
+
 enum class SndLengthType : uint32_t {
-  SND_LENGTH_NOTIFY_NONE = 0x0,
-  SND_LENGTH_NOTIFY_SCRIPT = 0x1,
-  SND_LENGTH_NOTIFY_SUBTITLE = 0x2,
-  SND_LENGTH_NOTIFY_COUNT = 0x3,
+  NONE = 0x0,
+  SCRIPT = 0x1,
+  SUBTITLE = 0x2,
+  COUNT = 0x3,
 };
+
+inline constexpr const char *serialize(const SndLengthType type) {
+  switch (type) {
+  case SndLengthType::NONE:
+    return "LENGTH_NONE";
+  case SndLengthType::SCRIPT:
+    return "LENGTH_SCRIPT";
+  case SndLengthType::SUBTITLE:
+    return "LENGTH_SUBTITLE";
+  default:
+    return "LENGTH_INVALID";
+  }
+}
 
 enum class SndCallLocation : int32_t {
-  SND_CALL_LOCATION_CLIENTSCRIPT = 0x0,
-  SND_CALL_LOCATION_SERVER = 0x1,
-  SND_CALL_LOCATION_GDT = 0x2,
-  SND_CALL_LOCATION_FX = 0x3,
-  SND_CALL_LOCATION_CODE = 0x4,
-  SND_CALL_LOCATION_UNKNOWN = 0x5,
-  SND_CALL_LOCATION_COUNT = 0x6,
+  CLIENTSCRIPT = 0x0,
+  SERVER = 0x1,
+  GDT = 0x2,
+  FX = 0x3,
+  CODE = 0x4,
+  UNKNOWN = 0x5,
+  COUNT = 0x6,
 };
+
+inline constexpr const char *serialize(const SndCallLocation loc) {
+  switch (loc) {
+  case SndCallLocation::CLIENTSCRIPT:
+    return "CALL_CLIENTSCRIPT";
+  case SndCallLocation::SERVER:
+    return "CALL_SERVER";
+  case SndCallLocation::GDT:
+    return "CALL_GDT";
+  case SndCallLocation::FX:
+    return "CALL_FX";
+  case SndCallLocation::CODE:
+    return "CALL_CODE";
+  case SndCallLocation::UNKNOWN:
+    return "CALL_UNKNOWN";
+  default:
+    return "CALL_INVALID";
+  }
+}
 
 enum class SndEntityUpdate : uint32_t {
-  SND_ENTITY_UPDATE_ALWAYS = 0x0,
-  SND_ENTITY_UPDATE_NEVER = 0x1,
+  ALWAYS = 0x0,
+  NEVER = 0x1,
 };
 
+inline constexpr const char *serialize(const SndEntityUpdate update) {
+  switch (update) {
+  case SndEntityUpdate::ALWAYS:
+    return "ENTITY_UPDATE_ALWAYS";
+  case SndEntityUpdate::NEVER:
+    return "ENTITY_UPDATE_NEVER";
+  default:
+    return "ENTITY_UPDATE_INVALID";
+  }
+}
+
 enum class SndMenuCategory : uint32_t {
-  SND_CATEGORY_SFX = 0x0,
-  SND_CATEGORY_MUSIC = 0x1,
-  SND_CATEGORY_VOICE = 0x2,
-  SND_CATEGORY_UI = 0x3,
-  SND_CATEGORY_CINEMATIC = 0x4,
-  SND_CATEGORY_COUNT = 0x5,
+  SFX = 0x0,
+  MUSIC = 0x1,
+  VOICE = 0x2,
+  UI = 0x3,
+  CINEMATIC = 0x4,
+  COUNT = 0x5,
 };
+
+inline constexpr const char *serialize(const SndMenuCategory cat) {
+  switch (cat) {
+  case SndMenuCategory::SFX:
+    return "MENU_CAT_SFX";
+  case SndMenuCategory::MUSIC:
+    return "MENU_CAT_MUSIC";
+  case SndMenuCategory::VOICE:
+    return "MENU_CAT_VOICE";
+  case SndMenuCategory::UI:
+    return "MENU_CAT_UI";
+  case SndMenuCategory::CINEMATIC:
+    return "MENU_CAT_CINEMATIC";
+  default:
+    return "MENU_CAT_INVALID";
+  }
+}
 
 enum class SndAssetBankVersion : uint32_t {
   V15 = 0x15,
 };
+
+inline constexpr const char *serialize(const SndAssetBankVersion ver) {
+  switch (ver) {
+  case SndAssetBankVersion::V15:
+    return "VERSION_V15";
+  default:
+    return "VERSION_INVALID";
+  }
+}
 
 constexpr std::string_view SndAssetFormatNames[] = {
     "PCMS16",  "PCMS24", "PCMS32", "IEEE",      "XMA4", "MP3",
@@ -218,6 +401,26 @@ PACKED(struct SndAssetBankHeader {
   */
   uint32_t padding0;
   uint8_t padding[1366];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"magic\": 0x{:08X}, \"version\": {}, \"entrySize\": {}, "
+        "\"checksumSize\": {}, "
+        "\"dependencySize\": {}, \"entryCount\": {}, \"dependencyCount\": {}, "
+        "\"pad32\": 0x{:08X}, "
+        "\"fileSize\": {}, \"entryOffset\": {}, \"checksumOffset\": {}, "
+        "\"checksumChecksum\": {}, "
+        "\"dependencies\": {}, \"SourceChecksumOffset\": {}, "
+        "\"AssetNameOffset\": {}, \"zoneName\": {}, "
+        "\"platform\": {}, \"language\": {}, \"convertedAssetVersion\": "
+        "{:08X}, \"padding0\": 0x{:08X} }}",
+        magic, game::snd::serialize(version), entrySize, checksumSize,
+        dependencySize, entryCount, dependencyCount, pad32, fileSize,
+        entryOffset, checksumOffset, ::serialize(checksumChecksum),
+        ::serialize(dependencies), SourceChecksumOffset, AssetNameOffset,
+        ::serialize(zoneName), ::serialize(platform), ::serialize(language),
+        convertedAssetVersion, padding0);
+  }
 });
 ASSERT_SIZE(SndAssetBankHeader, 0x800);
 
@@ -244,6 +447,20 @@ PACKED(struct SndAssetBankEntry {
   uint8_t EnvelopeLoudness3;
   uint16_t EnvelopeTime1;
   uint16_t EnvelopeTime2;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"id\": 0x{:08X}, \"size\": {}, \"frameCount\": {}, \"order\": {}, "
+        "\"offset\": {}, \"frameRateIndex\": {}, \"channelCount\": {}, "
+        "\"looping\": {}, "
+        "\"format\": {}, \"EnvelopeLoudness0\": {}, \"EnvelopeLoudness1\": {}, "
+        "\"EnvelopeLoudness2\": {}, \"EnvelopeLoudness3\": {}, "
+        "\"EnvelopeTime1\": {}, "
+        "\"EnvelopeTime2\": {} }}",
+        id, size, frameCount, order, offset, frameRateIndex, channelCount,
+        looping, format, EnvelopeLoudness0, EnvelopeLoudness1,
+        EnvelopeLoudness2, EnvelopeLoudness3, EnvelopeTime1, EnvelopeTime2);
+  }
 });
 ASSERT_SIZE(SndAssetBankEntry, 0x24);
 
@@ -255,6 +472,16 @@ PACKED(struct SndAssetBankLoad {
   stream::stream_fileid fileHandle;
   qboolean indicesLoaded;
   qboolean indicesAllocated;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"header\": {}, \"filename\": {}, \"entries\": "
+                       "{}, \"entryCount\": {}, "
+                       "\"fileHandle\": 0x{:08X}, \"indicesLoaded\": {}, "
+                       "\"indicesAllocated\": {} }}",
+                       header.serialize(), ::serialize(filename),
+                       ::serialize(entries, entryCount), entryCount, fileHandle,
+                       indicesLoaded.serialize(), indicesAllocated.serialize());
+  }
 });
 ASSERT_SIZE(SndAssetBankLoad, 0x918);
 
@@ -268,17 +495,37 @@ PACKED(struct SndVolumeGroup {
   SndMenuCategory category;
   uint16_t attenuationSp;
   uint16_t attenuationMp;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"parentName\": {}, \"id\": 0x{:08X}, "
+        "\"parentIndex\": "
+        "{}, "
+        "\"category\": {}, \"attenuationSp\": {}, \"attenuationMp\": {} }}",
+        ::serialize(name), ::serialize(parentName), id, parentIndex,
+        game::snd::serialize(category), attenuationSp, attenuationMp);
+  }
 });
 
 PACKED(struct SndCurve {
   name_t name;
   uint32_t id;
   array<game::vec2_t, 8> points;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"id\": 0x{:08X}, \"points\": {} }}",
+                       ::serialize(name), id, ::serialize(points));
+  }
 });
 
 PACKED(struct SndDuckGroup {
   name_t name;
   uint32_t id;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"id\": 0x{:08X} }}",
+                       ::serialize(name), id);
+  }
 });
 
 // Unverified
@@ -347,11 +594,53 @@ PACKED(struct SndMaster {
   int32_t hdrfxCompE;
   int32_t voiceEqE;
   int32_t voiceCompE;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"lowE\": {}, \"lowG\": {}, "
+        "\"lowF\": {}, \"lowQ\": {}, \"peak1E\": {}, \"peak1G\": {}, "
+        "\"peak1F\": {}, \"peak1Q\": {}, \"peak2E\": {}, \"peak2G\": {}, "
+        "\"peak2F\": {}, \"peak2Q\": {}, \"hiE\": {}, \"hiG\": {}, "
+        "\"hiF\": {}, \"hiQ\": {}, \"eqG\": {}, \"compE\": {}, "
+        "\"compPG\": {}, \"compMG\": {}, \"compT\": {}, \"compR\": {}, "
+        "\"compTA\": {}, \"compTR\": {}, \"compITU1770\": {}, \"limitE\": {}, "
+        "\"limitPG\": {}, \"limitMG\": {}, \"limitT\": {}, \"limitR\": {}, "
+        "\"limitTA\": {}, \"limitTR\": {}, \"limitITU1770\": {}, "
+        "\"busNearVerbG\": {}, "
+        "\"busFarVerbG\": {}, \"busEarlyVerbG\": {}, \"busNearverbG\": {}, "
+        "\"busFarverbG\": {}, "
+        "\"busFxG\": {}, \"busVoiceG\": {}, \"busPfutzG\": {}, \"busHdrfxG\": "
+        "{}, "
+        "\"busUiG\": {}, \"busMusicG\": {}, \"busMovieG\": {}, \"busVcsG\": "
+        "{}, "
+        "\"busMasterG\": {}, \"busNearVerbE\": {}, \"busFarVerbE\": {}, "
+        "\"busEarlyVerbE\": {}, "
+        "\"busNearverbE\": {}, \"busFarverbE\": {}, \"busFxE\": {}, "
+        "\"busVoiceE\": {}, "
+        "\"busPfutzE\": {}, \"busHdrfxE\": {}, \"busUiE\": {}, \"busMusicE\": "
+        "{}, "
+        "\"busMovieE\": {}, \"hdrfxCompE\": {}, \"voiceEqE\": {}, "
+        "\"voiceCompE\": {} }}",
+        ::serialize(name), id, lowE, lowG, lowF, lowQ, peak1E, peak1G, peak1F,
+        peak1Q, peak2E, peak2G, peak2F, peak2Q, hiE, hiG, hiF, hiQ, eqG, compE,
+        compPG, compMG, compT, compR, compTA, compTR, compITU1770, limitE,
+        limitPG, limitMG, limitT, limitR, limitTA, limitTR, limitITU1770,
+        busNearVerbG, busFarVerbG, busEarlyVerbG, busNearverbG, busFarverbG,
+        busFxG, busVoiceG, busPfutzG, busHdrfxG, busUiG, busMusicG, busMovieG,
+        busVcsG, busMasterG, busNearVerbE, busFarVerbE, busEarlyVerbE,
+        busNearverbE, busFarverbE, busFxE, busVoiceE, busPfutzE, busHdrfxE,
+        busUiE, busMusicE, busMovieE, hdrfxCompE, voiceEqE, voiceCompE);
+  }
 });
 
 PACKED(struct SndContext {
   uint32_t type;
   uint32_t values[8];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"type\": 0x{:08X}, \"values\": {} }}", type,
+                       ::serialize(values));
+  }
 });
 
 PACKED(struct SndPan {
@@ -363,6 +652,13 @@ PACKED(struct SndPan {
   float lfe;
   float left;
   float right;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"front\": {}, \"back\": {}, "
+        "\"center\": {}, \"lfe\": {}, \"left\": {}, \"right\": {} }}",
+        ::serialize(name), id, front, back, center, lfe, left, right);
+  }
 });
 
 PACKED(struct SndFutz {
@@ -384,6 +680,18 @@ PACKED(struct SndFutz {
   uint32_t startAliasId;
   uint32_t stopAliasId;
   uint32_t loopAliasId;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"bpfF\": {}, \"bpfQ\": {}, "
+        "\"lsG\": {}, \"lsF\": {}, \"lsQ\": {}, \"dist\": {}, "
+        "\"preG\": {}, \"postG\": {}, \"th\": {}, \"tg\": {}, "
+        "\"clippre\": {}, \"clippost\": {}, \"blend\": {}, \"startAliasId\": "
+        "{:08X}, "
+        "\"stopAliasId\": 0x{:08X}, \"loopAliasId\": 0x{:08X} }}",
+        ::serialize(name), id, bpfF, bpfQ, lsG, lsF, lsQ, dist, preG, postG, th,
+        tg, clippre, clippost, blend, startAliasId, stopAliasId, loopAliasId);
+  }
 });
 
 PACKED(struct SndDriverGlobals {
@@ -409,6 +717,24 @@ PACKED(struct SndDriverGlobals {
   uint32_t futzCount;
   uint8_t _padding6C[4];
   SndFutz *futzes;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"groupCount\": {}, \"groups\": {}, "
+        "\"curveCount\": {}, "
+        "\"curves\": {}, \"panCount\": {}, \"pans\": {}, "
+        "\"duckGroupCount\": {}, "
+        "\"duckGroups\": {}, \"contextCount\": {}, \"contexts\": {}, "
+        "\"masterCount\": {}, "
+        "\"masters\": {}, \"futzCount\": {}, \"futzes\": {} }}",
+        ::serialize(name), groupCount, ::serialize(groups, groupCount),
+        curveCount, ::serialize(curves, curveCount), panCount,
+        ::serialize(pans, panCount), duckGroupCount,
+        ::serialize(duckGroups, duckGroupCount), contextCount,
+        ::serialize(contexts, contextCount), masterCount,
+        ::serialize(masters, masterCount), futzCount,
+        ::serialize(futzes, futzCount));
+  }
 });
 ASSERT_SIZE(SndDriverGlobals, 0x78);
 
@@ -420,6 +746,14 @@ PACKED(struct SndOcclusionTrace {
   int32_t cache[5];
   float occlusion;
   uint8_t _padding38[8];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"id\": {}, \"voiceIndex\": {}, \"listener\": {}, "
+                       "\"playback\": {}, "
+                       "\"cache\": {}, \"occlusion\": {} }}",
+                       id, voiceIndex, listener.serialize(),
+                       playback.serialize(), ::serialize(cache), occlusion);
+  }
 });
 ASSERT_SIZE(SndOcclusionTrace, 0x40);
 
@@ -431,6 +765,15 @@ PACKED(struct SndQueue {
   cmd::SndCommandBuffer *submitted;
   cmd::SndQueueBuffers *buffers;
   SND_QueueCallback processNotify;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"active\": {:p}, \"submitted\": {:p}, \"buffers\": "
+                       "{:p}, \"processNotify\": {:p} }}",
+                       reinterpret_cast<const void *>(active),
+                       reinterpret_cast<const void *>(submitted),
+                       reinterpret_cast<const void *>(buffers),
+                       reinterpret_cast<const void *>(processNotify));
+  }
 });
 ASSERT_SIZE(SndQueue, 0x38);
 
@@ -586,16 +929,71 @@ PACKED(struct SndAlias {
   uint8_t duckGroup;
   uint8_t bus;
   uint8_t _paddingD7[1];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"subtitle\": {}, "
+        "\"secondaryname\": "
+        "{}, "
+        "\"secondaryid\": 0x{:08X}, \"stopAliasName\": {}, \"stopAliasID\": "
+        "{:08X}, "
+        "\"facialAnimation\": 0x{:08X}, \"assetId\": 0x{:08X}, "
+        "\"assetFileName\": "
+        "{}, "
+        "\"assetIdSustain\": 0x{:08X}, \"assetFileNameSustain\": {}, "
+        "\"assetIdRelease\": 0x{:08X}, "
+        "\"assetFileNameRelease\": {}, \"flags0\": 0x{:08X}, \"flags1\": "
+        "0x{:08X}, "
+        "\"duck\": 0x{:08X}, \"contextType\": 0x{:08X}, \"contextValue\": "
+        "0x{:08X}, "
+        "\"contextType1\": 0x{:08X}, \"contextValue1\": 0x{:08X}, "
+        "\"contextType2\": 0x{:08X}, "
+        "\"contextValue2\": 0x{:08X}, \"contextType3\": 0x{:08X}, "
+        "\"contextValue3\": 0x{:08X}, "
+        "\"stopOnPlay\": 0x{:08X}, \"futzPatch\": 0x{:08X}, \"reverbSend\": "
+        "{}, "
+        "\"centerSend\": {}, \"volMin\": {}, \"volMax\": {}, "
+        "\"envelopPercentage\": {}, "
+        "\"fluxTime\": {}, \"startDelay\": {}, \"pitchMin\": {}, \"pitchMax\": "
+        "{}, "
+        "\"distMin\": {}, \"distMax\": {}, \"distReverbMax\": {}, "
+        "\"envelopMin\": {}, "
+        "\"envelopMax\": {}, \"distanceLpfMin\": {}, \"distanceLpfMax\": {}, "
+        "\"fadeIn\": {}, "
+        "\"fadeOut\": {}, \"dopplerScale\": {}, \"minPriorityThreshold\": {}, "
+        "\"maxPriorityThreshold\": {}, "
+        "\"probability\": {}, \"occlusionLevel\": {}, \"minPriority\": {}, "
+        "\"maxPriority\": {}, "
+        "\"pan\": {}, \"limitCount\": {}, \"entityLimitCount\": {}, "
+        "\"duckGroup\": {}, \"bus\": {} }}",
+        ::serialize(name), id, ::serialize(subtitle),
+        ::serialize(secondaryname), secondaryid, ::serialize(stopAliasName),
+        stopAliasID, facialAnimation, assetId, ::serialize(assetFileName),
+        assetIdSustain, ::serialize(assetFileNameSustain), assetIdRelease,
+        ::serialize(assetFileNameRelease), flags0, flags1, duck, contextType,
+        contextValue, contextType1, contextValue1, contextType2, contextValue2,
+        contextType3, contextValue3, stopOnPlay, futzPatch, reverbSend,
+        centerSend, volMin, volMax, envelopPercentage, fluxTime, startDelay,
+        pitchMin, pitchMax, distMin, distMax, distReverbMax, envelopMin,
+        envelopMax, distanceLpfMin, distanceLpfMax, fadeIn, fadeOut,
+        dopplerScale, minPriorityThreshold, maxPriorityThreshold, probability,
+        occlusionLevel, minPriority, maxPriority, pan, limitCount,
+        entityLimitCount, duckGroup, bus);
+  }
 });
 
 // Verified
 PACKED(struct SndIndexEntry {
   uint16_t value;
   uint16_t next;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"value\": {}, \"next\": {} }}", value, next);
+  }
 });
 
 // Verified
-PACKED(struct SndAliasList : db::xasset::NamedXAsset {
+PACKED(struct SndAliasList : public db::xasset::NamedXAsset {
   SndAliasId id;
   uint8_t _padding0C[4];
   SndAlias *head; // Verified
@@ -603,13 +1001,34 @@ PACKED(struct SndAliasList : db::xasset::NamedXAsset {
   uint32_t sequence;
   float cullDistance;
   qboolean spatial;
+
+  /*
+     Bit of an odd serialization, because the fields printed are not _exactly_
+     the same as the struct. Instead of printing `head`, we print the linked
+     list as field named `list`. Using `head` for the field name containing the
+     entire linked list seemed more confusing than using an incorrect field
+     name.
+  */
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"id\": 0x{:08X}, \"list\": {}, "
+                       "\"count\": {}, \"sequence\": {}, "
+                       "\"cullDistance\": {}, \"spatial\": {} }}",
+                       ::serialize(name), id, ::serialize(head, count), count,
+                       sequence, cullDistance, spatial.serialize());
+  }
 });
 ASSERT_SIZE(SndAliasList, 0x28);
 
 // Verified
-PACKED(struct SndPatch : db::xasset::NamedXAsset {
+PACKED(struct SndPatch : public db::xasset::NamedXAsset {
   uint64_t elementCount;
   uint32_t *elements;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"elementCount\": {}, \"elements\": {} }}",
+        ::serialize(name), elementCount, ::serialize(elements, elementCount));
+  }
 });
 ASSERT_SIZE(SndPatch, 0x18);
 
@@ -617,6 +1036,11 @@ PACKED(struct SndAliasLookupNode {
   SndStringHash id;
   uint8_t _padding04[4];
   SndAliasList *list;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"id\": 0x{:08X}, \"list\": {} }}", id,
+                       ::serialize(list));
+  }
 });
 ASSERT_SIZE(SndAliasLookupNode, 0x10);
 
@@ -626,6 +1050,12 @@ PACKED(struct SndAliasLookupCache {
   uint32_t collision;
   uint8_t _padding0C[4];
   SndAliasLookupNode cache[4065];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"hit\": {}, \"miss\": {}, \"collision\": {}, \"cache\": {} }}",
+        hit, miss, collision, ::serialize(cache));
+  }
 });
 ASSERT_SIZE(SndAliasLookupCache, 0xFE20);
 
@@ -634,6 +1064,19 @@ enum class SndFileLoadingState : int32_t {
   LOADING = 0x1,
   LOADED = 0x2,
 };
+
+inline constexpr const char *serialize(const SndFileLoadingState state) {
+  switch (state) {
+  case SndFileLoadingState::UNLOADED:
+    return "FILE_UNLOADED";
+  case SndFileLoadingState::LOADING:
+    return "FILE_LOADING";
+  case SndFileLoadingState::LOADED:
+    return "FILE_LOADED";
+  default:
+    return "FILE_INVALID";
+  }
+}
 
 PACKED(union SndEntHandle {
   struct {
@@ -648,7 +1091,12 @@ PACKED(union SndEntHandle {
     uint64_t pad : 15;
   } field;
   uint64_t handle;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"handle\": 0x{:016X} }}", handle);
+  }
 });
+ASSERT_SIZE(SndEntHandle, sizeof(uint64_t));
 
 // Unverified
 PACKED(struct SndAmbient {
@@ -674,6 +1122,28 @@ PACKED(struct SndAmbient {
   SndStringHash entityContextValue2;
   SndStringHash globalContextType;
   SndStringHash globalContextValue;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"defaultRoom\": {}, \"reverb\": "
+        "{:08X}, "
+        "\"reverbName\": {}, \"nearVerb\": 0x{:08X}, \"nearVerbName\": {}, "
+        "\"farVerb\": 0x{:08X}, "
+        "\"farVerbName\": {}, \"reverbDryLevel\": {}, \"reverbWetLevel\": {}, "
+        "\"loop\": 0x{:08X}, "
+        "\"duck\": {}, \"duckId\": 0x{:08X}, \"entityContextType0\": 0x{:08X}, "
+        "\"entityContextValue0\": 0x{:08X}, "
+        "\"entityContextType1\": 0x{:08X}, \"entityContextValue1\": 0x{:08X}, "
+        "\"entityContextType2\": 0x{:08X}, "
+        "\"entityContextValue2\": 0x{:08X}, \"globalContextType\": 0x{:08X}, "
+        "\"globalContextValue\": 0x{:08X} }}",
+        ::serialize(name), id, defaultRoom.serialize(), reverb,
+        ::serialize(reverbName), nearVerb, ::serialize(nearVerbName), farVerb,
+        ::serialize(farVerbName), reverbDryLevel, reverbWetLevel, loop,
+        ::serialize(duck), duckId, entityContextType0, entityContextValue0,
+        entityContextType1, entityContextValue1, entityContextType2,
+        entityContextValue2, globalContextType, globalContextValue);
+  }
 });
 
 struct SndEntState;
@@ -690,6 +1160,20 @@ PACKED(struct SndEntState {
   vec3_t velocity;
   uint32_t lastUsed;
   uint32_t hasPosition;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"contexts\": {}, \"handle\": {}, \"next\": {:p}, "
+        "\"ambientRoom\": {:p}, "
+        "\"ambientRoomId\": 0x{:08X}, \"orientation\": {}, \"origin\": {}, "
+        "\"velocity\": {}, "
+        "\"lastUsed\": {}, \"hasPosition\": 0x{:08X} }}",
+        ::serialize(contexts), handle.serialize(),
+        reinterpret_cast<const void *>(next),
+        reinterpret_cast<const void *>(ambientRoom), ambientRoomId,
+        ::serialize(orientation), origin.serialize(), velocity.serialize(),
+        lastUsed, hasPosition);
+  }
 });
 
 PACKED(struct SndListener {
@@ -701,6 +1185,16 @@ PACKED(struct SndListener {
   team_t team;
   float distanceTraveled;
   uint8_t _padding4C[4];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"entHandle\": {}, \"orient\": {}, \"clientNum\": {}, "
+        "\"controllerNum\": {}, "
+        "\"active\": {}, \"team\": {}, \"distanceTraveled\": {} }}",
+        entHandle.serialize(), orient.serialize(), game::serialize(clientNum),
+        game::serialize(controllerNum), active.serialize(),
+        game::serialize(team), distanceTraveled);
+  }
 });
 
 PACKED(struct SndDuck {
@@ -721,6 +1215,23 @@ PACKED(struct SndDuck {
   float aliasAttenuation;
   float aliasLpf;
   SndStringHash duckAlias;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"fadeIn\": {}, \"fadeOut\": {}, "
+        "\"startDelay\": {}, \"distance\": {}, \"length\": {}, "
+        "\"fadeInCurve\": 0x{:08X}, "
+        "\"fadeOutCurve\": 0x{:08X}, \"attenuation\": {}, \"filter\": {}, "
+        "\"updateWhilePaused\": {}, "
+        "\"trackAmplitude\": {}, \"disableInSplitscreen\": {}, "
+        "\"aliasAttenuation\": {}, "
+        "\"aliasLpf\": {}, \"duckAlias\": 0x{:08X} }}",
+        ::serialize(name), id, fadeIn, fadeOut, startDelay, distance, length,
+        fadeInCurve, fadeOutCurve, ::serialize(attenuation),
+        ::serialize(filter), updateWhilePaused.serialize(),
+        trackAmplitude.serialize(), disableInSplitscreen.serialize(),
+        aliasAttenuation, aliasLpf, duckAlias);
+  }
 });
 
 struct SndVoice;
@@ -738,6 +1249,8 @@ PACKED(struct SndDuckActive {
   float amount;
   float effect;
   float amplitude;
+
+  std::string serialize() const noexcept;
 });
 
 PACKED(struct SndPlayState {
@@ -760,27 +1273,68 @@ PACKED(struct SndPlayState {
   uint32_t fireTimeMs;
   SndCallLocation location;
   int32_t gpadFlags;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"entHandle\": {}, \"position\": {}, \"direction\": {}, "
+        "\"aliasId\": 0x{:08X}, "
+        "\"fadeTimeMs\": {}, \"startAttenuation\": {}, \"notify\": {}, "
+        "\"startPaused\": {}, "
+        "\"setScriptValues\": {}, \"pitch\": {}, \"pitchRate\": {}, "
+        "\"attenuation\": {}, "
+        "\"attenuationRate\": {}, \"continueLoop\": {}, \"magic\": 0x{:08X}, "
+        "\"fireTimeMs\": {}, "
+        "\"location\": {}, \"gpadFlags\": 0x{:08X} }}",
+        entHandle.serialize(), position.serialize(), direction.serialize(),
+        aliasId, fadeTimeMs, startAttenuation, notify.serialize(),
+        startPaused.serialize(), setScriptValues.serialize(), pitch, pitchRate,
+        attenuation, attenuationRate, continueLoop.serialize(), magic,
+        fireTimeMs, game::snd::serialize(location), gpadFlags);
+  }
 });
+ASSERT_SIZE(SndPlayState, 0x60);
 
 typedef void *SndLengthNotifyData;
 PACKED(struct SndLengthNotifyInfo {
   SndLengthType id[4];
   SndLengthNotifyData data[4];
   int32_t count;
-  uint8_t _padding[4];
+  uint8_t _padding34[4];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"id\": {}, \"data\": {}, \"count\": {} }}", ::serialize(id),
+        ::serialize(reinterpret_cast<const uintptr_t *const>(data), count),
+        count);
+  }
 });
+ASSERT_SIZE(SndLengthNotifyInfo, 0x38);
 
 PACKED(struct SndFader {
   float value;
   float goal;
   float rate;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"value\": {}, \"goal\": {}, \"rate\": {} }}", value,
+                       goal, rate);
+  }
 });
+ASSERT_SIZE(SndFader, 0xC);
 
 PACKED(struct SndSpeakerMap {
   int32_t inputChannelCount;
   int32_t outputChannelCount;
   float volumes[16];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"inputChannelCount\": {}, \"outputChannelCount\": "
+                       "{}, \"volumes\": {} }}",
+                       inputChannelCount, outputChannelCount,
+                       ::serialize(volumes));
+  }
 });
+ASSERT_SIZE(SndSpeakerMap, 0x48);
 
 // Verified
 struct SndPlayback;
@@ -793,14 +1347,19 @@ PACKED(struct SndPlayback {
   int32_t use;
   SndEntHandle entHandle;
   SndPlayback *next;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"id\": {}, \"attenuation\": {}, \"lengthMs\": {}, \"playedMs\": "
+        "{}, "
+        "\"aliasId\": 0x{:08X}, \"use\": {}, \"entHandle\": {}, \"next\": {} "
+        "}}",
+        id, attenuation, lengthMs, playedMs, aliasId, use,
+        entHandle.serialize(), ::serialize(next));
+  }
 });
 ASSERT_SIZE(SndPlayback, 0x28);
 
-/*
-   Length known correct, and all but the SndFade fields are verified to be
-   correct, though not necessarily the fields contained within structs
-   included by pointers here; see those structs for verification progress.
-*/
 PACKED(struct SndVoice {
   SndPlayState state;
   SndFileLoadingState loadingState;
@@ -808,6 +1367,7 @@ PACKED(struct SndVoice {
   int32_t assetFrameRate;
   int32_t assetEndTime;
   int32_t assetTotalMsec;
+  uint8_t _padding6C[4];
   SndEntHandle sndEnt;
   SndEntityUpdate entity_update;
   int32_t group;
@@ -816,13 +1376,15 @@ PACKED(struct SndVoice {
   uint32_t startFrame;
   int32_t looptime;
   int32_t totalMsec;
+  uint8_t _padding94[4];
   SndPlayback *playback;
   SndPlaybackId playbackId;
   SndPlaybackId firstPlaybackId;
   SndPlaybackId secondaryId;
   SndPlaybackId primaryId;
   SndLengthNotifyInfo lengthNotifyInfo;
-  qboolean isDiscontinuous;
+  bool isDiscontinuous;
+  uint8_t _paddingE9[7];
   const SndAlias *alias;
   vec3_t offset;
   vec3_t position;
@@ -848,7 +1410,8 @@ PACKED(struct SndVoice {
   SndFader duckAttenuation;
   SndFader duckLpf;
   int32_t traceCache[5];
-  qboolean needsToStop;
+  bool needsToStop;
+  uint8_t _padding1E9[3];
   SndMenuCategory category;
   int32_t closestListenerIndex;
   int32_t voiceStartTime;
@@ -859,9 +1422,11 @@ PACKED(struct SndVoice {
   float earlyTimes[4];
   float futzBlend;
   SndSpeakerMap pan;
+  uint8_t _padding264[4];
   int64_t played;
   int64_t length;
   float amplitude;
+  uint8_t _padding27C[4];
   const SndDuck *duck;
   SndDuckActive *activeDuck;
   bool paused;
@@ -873,13 +1438,91 @@ PACKED(struct SndVoice {
   bool continueLoop;
   bool softStop;
   bool isSilent;
-});
+  bool gpadSound;
+  uint8_t _padding29A[2];
+  int32_t gpadFlags;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"state\": {}, \"loadingState\": {}, \"assetChannelCount\": {}, "
+        "\"assetFrameRate\": {}, "
+        "\"assetEndTime\": {}, \"assetTotalMsec\": {}, \"sndEnt\": {}, "
+        "\"entity_update\": {}, "
+        "\"group\": {}, \"startDelay\": {}, \"startTime\": {}, \"startFrame\": "
+        "{}, "
+        "\"looptime\": {}, \"totalMsec\": {}, \"playback\": {}, "
+        "\"playbackId\": {}, "
+        "\"firstPlaybackId\": {}, \"secondaryId\": {}, \"primaryId\": {}, "
+        "\"lengthNotifyInfo\": {}, "
+        "\"isDiscontinuous\": {}, \"alias\": {}, \"offset\": {}, "
+        "\"position\": {}, "
+        "\"velocity\": {}, \"orientation\": {}, \"direction\": {}, "
+        "\"fluxVelocity\": {}, "
+        "\"baseDistance\": {}, \"distanceAttenuation\": {}, "
+        "\"reverbAttenuation\": {}, \"earlyAttenuation\": {}, "
+        "\"volModSeed\": {}, \"volModStart\": {}, \"pitchModSeed\": {}, "
+        "\"globalPriority\": {}, "
+        "\"groupScalar\": {}, \"nearFar\": {}, \"doppler\": {}, \"fade\": {}, "
+        "\"script_fade\": {}, \"script_pitch\": {}, \"losOcclusion\": {}, "
+        "\"duckAttenuation\": {}, "
+        "\"duckLpf\": {}, \"traceCache\": {}, \"needsToStop\": {}, "
+        "\"category\": {}, "
+        "\"closestListenerIndex\": {}, \"voiceStartTime\": {}, \"dryLevel\": "
+        "{}, \"nearLevel\": {}, "
+        "\"farLevel\": {}, \"earlyLevel\": {}, \"earlyTimes\": {}, "
+        "\"futzBlend\": {}, "
+        "\"pan\": {}, \"played\": {}, \"length\": {}, \"amplitude\": {}, "
+        "\"duck\": {}, \"activeDuck\": {}, \"paused\": {}, "
+        "\"startPaused\": {}, "
+        "\"timescale\": {}, \"positionUpdated\": {}, \"pitchShift\": {}, "
+        "\"aliasFadeOut\": {}, "
+        "\"continueLoop\": {}, \"softStop\": {}, \"isSilent\": {}, "
+        "\"gpadSound\": {}, "
+        "\"gpadFlags\": 0x{:08X} }}",
+        state.serialize(), game::snd::serialize(loadingState),
+        assetChannelCount, assetFrameRate, assetEndTime, assetTotalMsec,
+        sndEnt.serialize(), game::snd::serialize(entity_update), group,
+        startDelay, startTime, startFrame, looptime, totalMsec,
+        ::serialize(playback), playbackId, firstPlaybackId, secondaryId,
+        primaryId, lengthNotifyInfo.serialize(), ::serialize(isDiscontinuous),
+        ::serialize(alias), offset.serialize(), position.serialize(),
+        velocity.serialize(), ::serialize(orientation), direction.serialize(),
+        fluxVelocity.serialize(), baseDistance, distanceAttenuation,
+        reverbAttenuation, earlyAttenuation, volModSeed, volModStart,
+        pitchModSeed, globalPriority, groupScalar, nearFar, doppler.serialize(),
+        fade.serialize(), script_fade.serialize(), script_pitch.serialize(),
+        losOcclusion.serialize(), duckAttenuation.serialize(),
+        duckLpf.serialize(), ::serialize(traceCache), ::serialize(needsToStop),
+        game::snd::serialize(category), closestListenerIndex, voiceStartTime,
+        dryLevel, nearLevel, farLevel, earlyLevel, ::serialize(earlyTimes),
+        futzBlend, pan.serialize(), played, length, amplitude,
+        ::serialize(duck), ::serialize(activeDuck), ::serialize(paused),
+        ::serialize(startPaused), ::serialize(timescale),
+        ::serialize(positionUpdated), ::serialize(pitchShift),
+        ::serialize(aliasFadeOut), ::serialize(continueLoop),
+        ::serialize(softStop), ::serialize(isSilent), ::serialize(gpadSound),
+        gpadFlags);
+  }
+};);
+// Verified
+ASSERT_SIZE(SndVoice, 0x2A8);
 
 // Verified
 enum class SndMusicStateStatus : uint32_t {
   SND_MUSIC_STATE_INACTIVE = 0x0,
   SND_MUSIC_STATE_ACTIVE = 0x1,
 };
+
+inline constexpr const char *serialize(const SndMusicStateStatus status) {
+  switch (status) {
+  case SndMusicStateStatus::SND_MUSIC_STATE_INACTIVE:
+    return "MUSIC_STATE_INACTIVE";
+  case SndMusicStateStatus::SND_MUSIC_STATE_ACTIVE:
+    return "MUSIC_STATE_ACTIVE";
+  default:
+    return "MUSIC_STATE_INVALID";
+  }
+}
 
 // Unverified.
 PACKED(struct SndMusicAsset {
@@ -903,6 +1546,26 @@ PACKED(struct SndMusicAsset {
   int32_t stopFadeBeats;
   int32_t startOffsetFrames;
   int32_t meter;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"alias\": {}, \"aliasId\": 0x{:08X}, \"looping\": "
+                       "{}, \"completeLoop\": {}, "
+                       "\"removeAfterPlay\": {}, \"firstRandom\": {}, "
+                       "\"startSync\": {}, \"stopSync\": {}, "
+                       "\"completeOnStop\": {}, \"loopStartOffset\": {}, "
+                       "\"bpm\": {}, \"assetType\": {}, "
+                       "\"loopNumber\": {}, \"order\": {}, "
+                       "\"startDelayBeats\": {}, \"startFadeBeats\": {}, "
+                       "\"stopDelayBeats\": {}, \"stopFadeBeats\": {}, "
+                       "\"startOffsetFrames\": {}, \"meter\": {} }}",
+                       ::serialize(alias), aliasId, looping.serialize(),
+                       completeLoop.serialize(), removeAfterPlay.serialize(),
+                       firstRandom.serialize(), startSync.serialize(),
+                       stopSync.serialize(), completeOnStop.serialize(),
+                       loopStartOffset, bpm, assetType, loopNumber, order,
+                       startDelayBeats, startFadeBeats, stopDelayBeats,
+                       stopFadeBeats, startOffsetFrames, meter);
+  }
 });
 ASSERT_SIZE(SndMusicAsset, 0x8C);
 
@@ -925,6 +1588,17 @@ PACKED(struct SndMusicState {
   uint8_t _padding16F[1];
   SndMusicStateStatus status;
   uint8_t _padding174[4];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"id\": 0x{:08X}, \"intro\": {}, \"exit\": {}, "
+        "\"loopCount\": {}, \"loops\": {}, \"order\": {}, \"isRandom\": {}, "
+        "\"isSequential\": {}, \"skipPreviousExit\": {}, \"status\": {} }}",
+        ::serialize(name), id, intro.serialize(), exit.serialize(), loopCount,
+        ::serialize(loops, loopCount), order, ::serialize(isRandom),
+        ::serialize(isSequential), ::serialize(skipPreviousExit),
+        game::snd::serialize(status));
+  }
 });
 ASSERT_SIZE(SndMusicState, 0x178);
 
@@ -934,6 +1608,13 @@ struct SndMusicSet {
   SndStringHash id;
   uint32_t stateCount;
   SndMusicState *states;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"id\": 0x{:08X}, \"stateCount\": {}, "
+                       "\"states\": {} }}",
+                       ::serialize(name), id, stateCount,
+                       ::serialize(states, stateCount));
+  }
 };
 ASSERT_SIZE(SndMusicSet, 0x50);
 
@@ -942,6 +1623,12 @@ PACKED(struct SndAmbientBspVolume {
   uint32_t id;
   int32_t planeIndex;
   int32_t planeCount;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"id\": 0x{:08X}, \"planeIndex\": {}, \"planeCount\": {} }}", id,
+        planeIndex, planeCount);
+  }
 });
 ASSERT_SIZE(SndAmbientBspVolume, 0xC);
 
@@ -951,6 +1638,12 @@ PACKED(struct SndAmbientBspTrigger {
   int32_t priority;
   SndStringHash roomId;
   str64_t roomName;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"id\": 0x{:08X}, \"priority\": {}, \"roomId\": "
+                       "{:08X}, \"roomName\": {} }}",
+                       id, priority, roomId, ::serialize(roomName));
+  }
 });
 ASSERT_SIZE(SndAmbientBspTrigger, 0x4C);
 
@@ -961,6 +1654,13 @@ PACKED(struct SndAmbientBspNode {
   int32_t backIndex;
   int32_t frontCount;
   int32_t backCount;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"split\": {}, \"frontIndex\": {}, \"backIndex\": "
+                       "{}, \"frontCount\": {}, \"backCount\": {} }}",
+                       split.serialize(), frontIndex, backIndex, frontCount,
+                       backCount);
+  }
 });
 ASSERT_SIZE(SndAmbientBspNode, 0x20);
 
@@ -975,6 +1675,17 @@ PACKED(struct SndAmbientBsp {
   SndAmbientBspTrigger triggers[1024];
   int32_t numTriggers;
   uint8_t __padding2201C[4];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"nodes\": {}, \"numNodes\": {}, \"planes\": {}, "
+                       "\"numPlanes\": {}, "
+                       "\"volumes\": {}, \"numVolumes\": {}, \"triggers\": {}, "
+                       "\"numTriggers\": {} }}",
+                       ::serialize(&nodes[0], numNodes), numNodes,
+                       ::serialize(&planes[0], numPlanes), numPlanes,
+                       ::serialize(&volumes[0], numVolumes), numVolumes,
+                       ::serialize(&triggers[0], numTriggers), numTriggers);
+  }
 });
 ASSERT_SIZE(SndAmbientBsp, 0x22020);
 
@@ -986,6 +1697,13 @@ PACKED(struct SndReverbEarly {
   float smear;
   float baseDelayMs;
   float returnDB;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"preDelayMs\": {}, \"inputLpf\": {}, \"feedback\": {}, \"smear\": "
+        "{}, \"baseDelayMs\": {}, \"returnDB\": {} }}",
+        preDelayMs, inputLpf, feedback, smear, baseDelayMs, returnDB);
+  }
 });
 ASSERT_SIZE(SndReverbEarly, 0x18);
 
@@ -999,6 +1717,15 @@ PACKED(struct SndReverbLate {
   float decayTime;
   float smear;
   float preDelayMs;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"inputLpf\": {}, \"feedback\": {}, \"returnDB\": "
+                       "{}, \"lowDamp\": {}, "
+                       "\"highDamp\": {}, \"decayTime\": {}, \"smear\": {}, "
+                       "\"preDelayMs\": {} }}",
+                       inputLpf, feedback, returnDB, lowDamp, highDamp,
+                       decayTime, smear, preDelayMs);
+  }
 });
 ASSERT_SIZE(SndReverbLate, 0x20);
 
@@ -1010,6 +1737,15 @@ PACKED(struct SndReverb {
   SndReverbEarly earlyVerb;
   SndReverbLate nearVerb;
   SndReverbLate farVerb;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"id\": 0x{:08X}, \"masterReturn\": "
+                       "{}, \"earlyVerb\": "
+                       "{}, \"nearVerb\": {}, \"farVerb\": {} }}",
+                       ::serialize(name), id, masterReturn,
+                       earlyVerb.serialize(), nearVerb.serialize(),
+                       farVerb.serialize());
+  }
 });
 ASSERT_SIZE(SndReverb, 0xA0);
 
@@ -1017,11 +1753,16 @@ ASSERT_SIZE(SndReverb, 0xA0);
 PACKED(struct SndDialogScriptIdLookup {
   SndStringHash scriptId;
   SndStringHash aliasId;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"scriptId\": 0x{:08X}, \"aliasId\": 0x{:08X} }}",
+                       scriptId, aliasId);
+  }
 });
 ASSERT_SIZE(SndDialogScriptIdLookup, 0x8);
 
 // Verified
-PACKED(struct SndBank : db::xasset::NamedXAsset {
+PACKED(struct SndBank : public db::xasset::NamedXAsset {
   const char *zone;
   const char *gameLanguage;
   const char *soundLanguage;
@@ -1046,6 +1787,8 @@ PACKED(struct SndBank : db::xasset::NamedXAsset {
   uint32_t musicSetCount;
   uint8_t _padding220A4[4];
   SndMusicSet *musicSets;
+
+  std::string serialize() const noexcept;
 });
 ASSERT_SIZE(SndBank, 0x220B0);
 typedef SndBank *SndBankPtr;
@@ -1079,6 +1822,24 @@ PACKED(struct SndBankLoad {
     return bank && bank->zone ? std::optional(std::string_view(bank->zone))
                               : std::nullopt;
   }
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"bank\": {}, \"streamAssetBank\": {}, \"loadAssetBank\": {}, "
+        "\"loadedEntries\": {}, "
+        "\"loadedData\": {:p}, \"loadedAssetCount\": {}, \"loadedAssetTotal\": "
+        "{}, \"loadedEntryCount\": {}, "
+        "\"loadedDataSize\": {}, \"priority\": {}, \"patchZone\": {}, "
+        "\"streamRequestId\": 0x{:08X}, "
+        "\"pendingIo\": {}, \"ioError\": {}, \"state\": {}, "
+        "\"pendingIoCount\": {} }}",
+        ::serialize(bank), streamAssetBank.serialize(),
+        loadAssetBank.serialize(), ::serialize(loadedEntries, loadedEntryCount),
+        reinterpret_cast<const void *>(loadedData), loadedAssetCount,
+        loadedAssetTotal, loadedEntryCount, loadedDataSize, priority,
+        patchZone.serialize(), streamRequestId, pendingIo.serialize(),
+        ioError.serialize(), game::snd::serialize(state), pendingIoCount);
+  }
 });
 
 ASSERT_SIZE(SndBankLoad, 0x1278);
@@ -1100,15 +1861,39 @@ PACKED(struct SndBankGlobals {
   uint32_t headerMagic;
   float assetLoadPercent;
   uint8_t _padding317F8[8];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"bankMagic\": 0x{:08X}, \"bankCount\": {}, \"patchCount\": {}, "
+        "\"banks\": {}, \"patches\": {}, \"aliasCache\": {}, "
+        "\"missingAliasCache\": {}, \"loads\": {}, "
+        "\"loadGate\": {}, \"assetLoadIndex\": {}, \"assetLoadId\": 0x{:08X}, "
+        "\"sequentialReadInProgress\": {}, "
+        "\"bankHeader\": {}, \"headerMagic\": 0x{:08X}, \"assetLoadPercent\": "
+        "{} "
+        "}}",
+        bankMagic, bankCount, patchCount, ::serialize(banks, bankCount),
+        ::serialize(patches, patchCount), aliasCache.serialize(),
+        ::serialize(missingAliasCache), ::serialize(loads),
+        loadGate.serialize(), assetLoadIndex, assetLoadId,
+        ::serialize(sequentialReadInProgress), bankHeader.serialize(),
+        headerMagic, assetLoadPercent);
+  }
 });
 ASSERT_SIZE(SndBankGlobals, 0x39594);
 
 // Not yet verified to be correct.
 PACKED(struct snd_fire_manager {
-  int active;
+  int32_t active;
   vec3_t location;
   float level;
-  int id;
+  int32_t id;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"active\": {}, \"location\": {}, \"level\": {}, \"id\": {} }}",
+        active, location.serialize(), level, id);
+  }
 });
 ASSERT_SIZE(snd_fire_manager, 0x18);
 
@@ -1129,6 +1914,24 @@ PACKED(struct snd_weapon_shot {
   bool doubleTap;
   bool fakeFire;
   bool firstShotOfBurst;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"localClientNum\": {}, \"shooter\": {}, \"weapon\": {}, "
+        "\"origin\": {}, "
+        "\"direction\": {}, \"tagName\": 0x{:08X}, \"burstCount\": {}, "
+        "\"shooterIsPlayer\": {}, "
+        "\"shooterIsLocalPlayer\": {}, \"leftGun\": {}, \"isLastShotInClip\": "
+        "{}, \"isTurret\": {}, "
+        "\"doubleTap\": {}, \"fakeFire\": {}, \"firstShotOfBurst\": {} }}",
+        game::serialize(localClientNum), shooter.serialize(),
+        weapon.serialize(), origin.serialize(), direction.serialize(), tagName,
+        burstCount, ::serialize(shooterIsPlayer),
+        ::serialize(shooterIsLocalPlayer), ::serialize(leftGun),
+        ::serialize(isLastShotInClip), ::serialize(isTurret),
+        ::serialize(doubleTap), ::serialize(fakeFire),
+        ::serialize(firstShotOfBurst));
+  }
 });
 ASSERT_SIZE(snd_weapon_shot, 0x40);
 
@@ -1141,6 +1944,15 @@ PACKED(struct snd_autosim {
   uint16_t eventCount;
   int32_t used;
   int32_t isNew;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"shot\": {}, \"lastPing\": {}, \"lastShot\": {}, \"fireTime\": "
+        "{}, "
+        "\"shotCount\": {}, \"eventCount\": {}, \"used\": {}, \"isNew\": {} }}",
+        shot.serialize(), lastPing, lastShot, fireTime, shotCount, eventCount,
+        used, isNew);
+  }
 });
 ASSERT_SIZE(snd_autosim, 0x58);
 
@@ -1148,21 +1960,43 @@ PACKED(struct snd_autosim_play {
   uint32_t frame;
   uint8_t _padding04[4];
   snd_weapon_shot shot;
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"frame\": {}, \"shot\": {} }}", frame,
+                       shot.serialize());
+  }
 });
 ASSERT_SIZE(snd_autosim_play, 0x48);
 
-PACKED(struct EntityImpactPositions { uint32_t entityImpactPositions[6]; });
+PACKED(struct EntityImpactPositions {
+  uint32_t entityImpactPositions[6];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"entityImpactPositions\": {} }}",
+                       ::serialize(entityImpactPositions));
+  }
+});
 ASSERT_SIZE(EntityImpactPositions, 0x18);
 
 PACKED(struct EntitySoundImpacts {
   const char *name;
   EntityImpactPositions entityImpacts[11];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"entityImpacts\": {} }}",
+                       ::serialize(name), ::serialize(entityImpacts));
+  }
 });
 ASSERT_SIZE(EntitySoundImpacts, 0x110);
 
 PACKED(struct SurfaceSoundDef {
   const char *name;
   snd::SndAliasId surfaceSound[40];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"name\": {}, \"surfaceSound\": {} }}",
+                       ::serialize(name), ::serialize(surfaceSound));
+  }
 });
 ASSERT_SIZE(SurfaceSoundDef, 0xA8);
 
@@ -1174,6 +2008,14 @@ PACKED(struct SoundsImpactTable {
   SurfaceSoundDefPtr surfaceSoundTable;
   EntitySoundImpactsPtr entitySoundImpacts;
   EntitySoundImpactsPtr victimSoundImpacts;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"name\": {}, \"surfaceSoundTable\": {}, \"entitySoundImpacts\": "
+        "{}, \"victimSoundImpacts\": {} }}",
+        ::serialize(name), ::serialize(surfaceSoundTable),
+        ::serialize(entitySoundImpacts), ::serialize(victimSoundImpacts));
+  }
 });
 ASSERT_SIZE(SoundsImpactTable, 0x20);
 
@@ -1185,6 +2027,12 @@ PACKED(struct SndEntLoop {
   SndEntHandle handle;
   vec3_t origin;
   int32_t fade;
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"id\": 0x{:08X}, \"handle\": {}, \"origin\": {}, \"fade\": {} }}",
+        id, handle.serialize(), origin.serialize(), fade);
+  }
 });
 ASSERT_SIZE(SndEntLoop, 0x20);
 
@@ -1193,6 +2041,11 @@ PACKED(struct SndOcclusionStartCache {
   float value;
   bool valid;
   uint8_t _padding11[3];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"position\": {}, \"value\": {}, \"valid\": {} }}",
+                       position.serialize(), value, ::serialize(valid));
+  }
 });
 ASSERT_SIZE(SndOcclusionStartCache, 0x14);
 
@@ -1203,16 +2056,38 @@ enum class SndMusicAssetPlaybackState : int32_t {
   SND_MUSIC_PLAYBACK_COUNT = 0x3,
 };
 
+inline constexpr const char *serialize(const SndMusicAssetPlaybackState state) {
+  switch (state) {
+  case SndMusicAssetPlaybackState::SND_MUSIC_PLAYBACK_STOPPING:
+    return "MUSIC_PLAYBACK_STOPPING";
+  case SndMusicAssetPlaybackState::SND_MUSIC_PLAYBACK_STOPPED:
+    return "MUSIC_PLAYBACK_STOPPED";
+  case SndMusicAssetPlaybackState::SND_MUSIC_PLAYBACK_STARTED:
+    return "MUSIC_PLAYBACK_STARTED";
+  default:
+    return "MUSIC_PLAYBACK_INVALID";
+  }
+}
+
 PACKED(struct SndMusicAssetInstance {
   const SndMusicAsset *asset;
   const SndMusicState *state;
   SndPlaybackId id;
   SndMusicAssetPlaybackState playbackState;
-  int startFrame;
-  int loopNumber;
-  int queuedNextLoop;
-
+  int32_t startFrame;
+  int32_t loopNumber;
+  int32_t queuedNextLoop;
   uint8_t _padding24[4];
+
+  inline std::string serialize() const noexcept {
+    return std::format(
+        "{{ \"asset\": {}, \"state\": {}, \"id\": {}, \"playbackState\": "
+        "{}, "
+        "\"startFrame\": {}, \"loopNumber\": {}, \"queuedNextLoop\": {} }}",
+        ::serialize(asset), ::serialize(state), id,
+        game::snd::serialize(playbackState), startFrame, loopNumber,
+        queuedNextLoop);
+  }
 });
 ASSERT_SIZE(SndMusicAssetInstance, 0x28);
 
@@ -1220,6 +2095,10 @@ PACKED(struct LoopSoundInfo {
   SndAliasId id;
   int16_t fade;
   uint8_t _padding06[2];
+
+  inline std::string serialize() const noexcept {
+    return std::format("{{ \"id\": {:8X}, \"fade\": {} }}", id, fade);
+  }
 });
 ASSERT_SIZE(LoopSoundInfo, 0x8);
 

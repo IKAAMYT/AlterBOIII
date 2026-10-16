@@ -31,36 +31,39 @@ static concurrent_hash_map<uint32_t, connect_attempt> connect_attempts;
 constexpr int MAX_CONNECT_ATTEMPTS = 5;
 constexpr auto RATE_LIMIT_WINDOW = std::chrono::seconds(10);
 
-bool rate_limited(uint32_t ip) {
-  const std::chrono::time_point now = std::chrono::steady_clock::now();
-
-  const connect_attempt new_val = {ip, now, 1};
+bool rate_limited(const game::net::netadr_t &adr) {
   bool result = false;
-  if (connect_attempts.try_emplace_l(
-          ip,
-          [now, &ip, &result](auto &v) {
-            auto &attempt = v.second;
-            if ((now - attempt.last_attempt) > RATE_LIMIT_WINDOW) {
-              attempt.attempts = 1;
-              attempt.last_attempt = now;
-              result = false;
-            } else {
+  if (adr.type != game::net::NA_BOT) {
+    const std::chrono::time_point now = std::chrono::steady_clock::now();
 
-              attempt.attempts++;
-              attempt.last_attempt = now;
+    const connect_attempt new_val = {adr.addr, now, 1};
+    if (connect_attempts.try_emplace_l(
+            adr.addr,
+            [now, &adr, &result](auto &v) {
+              auto &attempt = v.second;
+              if ((now - attempt.last_attempt) > RATE_LIMIT_WINDOW) {
+                attempt.attempts = 1;
+                attempt.last_attempt = now;
+                result = false;
+              } else {
 
-              if (attempt.attempts > MAX_CONNECT_ATTEMPTS) {
-                fprintf(stderr,
-                        "[Security] Rate limited connection from IP 0x%08X (%d "
-                        "attempts)\n",
-                        ip, attempt.attempts);
-                fflush(stderr);
-                result = true;
+                attempt.attempts++;
+                attempt.last_attempt = now;
+
+                if (attempt.attempts > MAX_CONNECT_ATTEMPTS) {
+                  fprintf(
+                      stderr,
+                      "[Security] Rate limited connection from IP 0x%08X (%d "
+                      "attempts)\n",
+                      adr.addr, attempt.attempts);
+                  fflush(stderr);
+                  result = true;
+                }
               }
-            }
-          },
-          new_val)) {
-    return false;
+            },
+            new_val)) {
+      return false;
+    }
   }
 
   return result;
@@ -138,12 +141,11 @@ void G_Say_Sanitize(game::level::gentity_s *ent, game::level::gentity_s *target,
 // Hook for SV_DirectConnect to rate limit connections
 utils::hook::detour SV_DirectConnect_hook;
 void SV_DirectConnect_RateLimited(game::net::netadr_t adr) {
-  if (rate_limited(adr.addr)) {
+  if (rate_limited(adr)) {
     fprintf(stderr, "[Security] Rejected connection from rate-limited IP\n");
-    return;
+  } else {
+    SV_DirectConnect_hook.invoke(adr);
   }
-
-  SV_DirectConnect_hook.invoke(adr);
 }
 
 utils::hook::detour SV_LiveRemoveAllClientsFromAddress_hook;
@@ -151,6 +153,11 @@ void SV_LiveRemoveAllClientsFromAddress_RemoveSingle(game::sv::client_s *client,
                                                      const char *reason) {
   // Skip disconnecting other clients from the same IP -
   // just free the disconnected client's slot, and return.
+  game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER,
+                        game::consoleLabel_e::DEFAULT,
+                        "Client '%s' (%llX) disconnected: %s\n", client->name,
+                        static_cast<unsigned long long>(client->xuid),
+                        reason ? reason : "no reason given");
   game::sv::SV_Live_RemoveClient(client, reason);
 }
 
@@ -268,9 +275,7 @@ void disable_unused_asset_loads() {
 } // namespace
 
 struct component final : server_component {
-#ifndef NDEBUG
-  std::string name() override { return "networking"; }
-#endif
+  DEFINE_COMPONENT_NAME("networking");
 
   void post_unpack() override {
 

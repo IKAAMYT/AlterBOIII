@@ -408,6 +408,7 @@
           <div class="amis-identite-ic"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.4" y="4.6" width="13.2" height="7.4" rx="3.2" stroke="currentColor" stroke-width="1.35"/><path d="M4.6 7.2v2.2M3.5 8.3h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="10.9" cy="7.9" r=".85" fill="currentColor"/><circle cx="12.4" cy="9.4" r=".85" fill="currentColor"/></svg></div>
           <div class="amis-identite-txt">
             <div class="amis-identite-label">Ton code ami AlterBOIII</div>
+            <div class="amis-identite-nom" id="amisNom">Ton identité AlterBOIII</div>
             <div class="amis-code" id="amisCode">—</div>
             <div class="amis-identite-aide">Donne-le à tes potes : c'est ce code qu'ils collent ci-dessous pour t'ajouter.</div>
           </div>
@@ -518,6 +519,40 @@
                   <div class="settings-row-desc">Contrôle l'intégrité des fichiers de Black Ops III et détecte les fichiers manquants ou corrompus</div>
                 </div>
                 <button type="button" class="btn" id="verifyGameFilesBtn"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7.2" cy="7.2" r="4.6" stroke="currentColor" stroke-width="1.4"/><path d="M10.6 10.6 14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>&nbsp; Vérifier</button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Stockage</div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Espace utilisé par AlterBOIII</div>
+                  <div class="settings-row-desc">Rapports de crash, logs, sauvegardes et poids de chaque mod ou map installé. Un rapport de crash peut peser plusieurs centaines de Mo.</div>
+                </div>
+                <div class="stockage-actions">
+                  <button type="button" class="btn" id="storageCheckBtn">Analyser</button>
+                  <button type="button" class="btn btn-danger" id="storageCleanBtn">Purger les crashs &gt; 7 jours</button>
+                </div>
+              </div>
+              <div class="stockage-resultats" id="storageResults">
+                <div class="stockage-vide">Lance l'analyse pour voir ce qui prend de la place.</div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Sauvegardes de profil</div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Sauvegarder boiii_players</div>
+                  <div class="settings-row-desc">Stats, réglages, binds et amis, en zip dans le dossier backups. Restaurer une sauvegarde met d'abord le profil actuel de côté.</div>
+                </div>
+                <div class="stockage-actions">
+                  <button type="button" class="btn btn-primary" id="profileBackupBtn">Sauvegarder</button>
+                  <button type="button" class="btn" id="profileBackupsFolderBtn">Ouvrir le dossier</button>
+                </div>
+              </div>
+              <div class="stockage-resultats" id="profileBackupList">
+                <div class="stockage-vide">Aucune sauvegarde pour le moment.</div>
               </div>
             </div>
 

@@ -1,16 +1,17 @@
 #pragma once
 
 // Re-export common structs
-#include "level/level.hpp" // IWYU pragma: export
-
 #include <structs/structs.hpp> // IWYU pragma: export
+
+#include "level/level.hpp" // IWYU pragma: export
+#include "lua/lua.hpp"     // IWYU pragma: export
 
 #include "ai.hpp"          // IWYU pragma: export
 #include "asm.hpp"         // IWYU pragma: export
 #include "atomic.hpp"      // IWYU pragma: export
 #include "bg/bg.hpp"       // IWYU pragma: export
 #include "cg.hpp"          // IWYU pragma: export
-#include "cl.hpp"          // IWYU pragma: export
+#include "cl/cl.hpp"       // IWYU pragma: export
 #include "cm.hpp"          // IWYU pragma: export
 #include "cmd.hpp"         // IWYU pragma: export
 #include "core.hpp"        // IWYU pragma: export
@@ -29,7 +30,6 @@
 #include "live/live.hpp"   // IWYU pragma: export
 #include "lobby/lobby.hpp" // IWYU pragma: export
 #include "loot.hpp"        // IWYU pragma: export
-#include "lua/lua.hpp"     // IWYU pragma: export
 #include "macros.hpp"      // IWYU pragma: export
 #include "math.hpp"        // IWYU pragma: export
 #include "mem.hpp"         // IWYU pragma: export
@@ -50,4 +50,5 @@
 #include "ui/ui.hpp"       // IWYU pragma: export
 #include "user.hpp"        // IWYU pragma: export
 #include "vehicle.hpp"     // IWYU pragma: export
+#include "voice.hpp"       // IWYU pragma: export
 #include "weapon.hpp"      // IWYU pragma: export

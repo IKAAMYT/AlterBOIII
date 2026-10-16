@@ -11,9 +11,7 @@ nul
 /**/*.cscc
 /**/*.cscasm
 /**/*.luac
-
-2-envoyer.bat
-1-installer-git.bat
+/**/*.aps
 
 2-envoyer.bat
 1-installer-git.bat
@@ -21,3 +19,6 @@ publication.log
 finalisation.log
 restauration.log
 Claude outputs/
+
+# Genere par premake5.lua (scripts Lua embarques dans l exe)
+src/client/resources/ui_scripts.bin

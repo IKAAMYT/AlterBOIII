@@ -20,7 +20,7 @@ end
 -- Converts tags in "vX.X.X" format and given revision number Y to an array of numbers {X,X,X,Y}.
 -- In the case where the format does not work fall back to padding with zeroes and just ending with the revision number.
 -- partscount can be either 3 or 4.
-function vertonumarr(value, vernumber, partscount)
+local function vertonumarr(value, vernumber, partscount)
   local vernum = {}
   for num in string.gmatch(value or "", "%d+") do
     if #vernum < 3 then
@@ -140,7 +140,7 @@ newaction({
     if oldVersion ~= gitDescribeOutputQuoted then
       -- get current git hash and write to version.txt (used by the preliminary updater)
       -- TODO - remove once proper updater and release versioning exists
-      local proc = assert(io.popen("git rev-parse HEAD", "r"))
+      proc = assert(io.popen("git rev-parse HEAD", "r"))
       local gitCommitHash = assert(proc:read("*a")):gsub("%s+", "")
       proc:close()
 
@@ -159,9 +159,9 @@ newaction({
 
       -- AlterBO3 (IKAAM): force the displayed product version. The auto-generated
       -- version came from the latest git tag. We override it here so the launcher
-      -- and in-game branding always read "2.1.0". To change the shown version
+      -- and in-game branding always read "2.4.0". To change the shown version
       -- later, edit the value below.
-      tagName = "2.1.0"
+      tagName = "2.4.0"
 
       -- get current branch name
       proc = assert(io.popen("git branch --show-current"))
@@ -263,6 +263,37 @@ newaction({
 
 dependencies.load()
 
+-- AlterBO3 (IKAAM) : les scripts Lua de data/ui_scripts sont embarques dans
+-- l'exe (ressource UI_SCRIPTS). Ainsi l'exe installe toujours ses propres
+-- scripts, meme lance sans le dossier data du zip ou par-dessus une vieille
+-- installation. Format : pour chaque fichier, taille du chemin (u32 LE),
+-- chemin relatif, taille du contenu (u32 LE), contenu.
+local function write_ui_scripts_bundle()
+  local function u32(n)
+    return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+  end
+
+  local prefix = "data/ui_scripts/"
+  local files = os.matchfiles(prefix .. "**")
+  table.sort(files)
+
+  local parts = {}
+  for _, file in ipairs(files) do
+    local handle = assert(io.open(file, "rb"))
+    local content = handle:read("*a")
+    handle:close()
+    local relative = file:sub(#prefix + 1)
+    table.insert(parts, u32(#relative) .. relative .. u32(#content) .. content)
+  end
+
+  local bundle = assert(io.open("src/client/resources/ui_scripts.bin", "wb"))
+  bundle:write(table.concat(parts))
+  bundle:close()
+  print(string.format("Bundled %d ui_scripts files into the client", #files))
+end
+
+write_ui_scripts_bundle()
+
 workspace("boiii")
 if os.host() == "windows" then
   toolset("msc-clangcl")
@@ -288,6 +319,7 @@ staticruntime("On")
 editandcontinue("Off")
 warnings("Extra")
 characterset("ASCII")
+manifest("Off")
 
 if _OPTIONS["dev-build"] then
   defines({ "DEV_BUILD" })
@@ -326,6 +358,7 @@ buildoptions({
   "-Wno-format",
   "-Wno-sign-compare",
   "/clang:-march=x86-64",
+  "/clang:-fbracket-depth=1024",
   -- Only used after positive test for support at runtime.
   -- We need to compile with these CPU features regardless of end-user
   -- support to ensure that SSE4.2 and AES ISA extension ASM instructions
@@ -375,6 +408,7 @@ filter({ "configurations:Debug", "toolset:msc*" })
 buildoptions({
   "/MDd",
   "/clang:-march=x86-64",
+  "/clang:-fbracket-depth=1024",
   -- Only used after positive test for support at runtime.
   -- We need to compile with these CPU features regardless of end-user
   -- support to ensure that SSE4.2 and AES ISA extension ASM instructions

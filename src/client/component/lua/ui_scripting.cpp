@@ -13,23 +13,15 @@
 #include "ui_scripting.hpp"
 
 #include <component/command.hpp>
-#include <component/currency.hpp>
-#include <component/discord.hpp>
-#include <component/friends.hpp>
 #include <component/getinfo.hpp>
-#include <component/name.hpp>
 #include <component/scheduler.hpp>
 #include <component/script.hpp>
 #include <component/toast.hpp>
-
-#include <steam/interfaces/matchmaking_servers.hpp>
-#include <steam/steam.hpp>
 
 #include "utils/pe.hpp"
 #include <utils/finally.hpp>
 #include <utils/flags.hpp>
 #include <utils/hook.hpp>
-#include <utils/http.hpp>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
 
@@ -56,6 +48,9 @@ static std::atomic<bool> unsafe_function_called_message_shown = false;
 static std::atomic<bool> unsafe_lua_approved_for_session = false;
 
 bool show_unsafe_lua_dialog() {
+  if (game::allow_unsafe_lua()) {
+    return true;
+  }
   bool not_loaded = false;
   if (!unsafe_function_called_message_shown.compare_exchange_strong(not_loaded,
                                                                     true)) {
@@ -276,6 +271,13 @@ int hot_reload_check_files() {
 
   return 1;
 }
+} // namespace
+
+void check_hot_reload() {
+  if (hot_reload_running.load(std::memory_order_acquire)) {
+    hot_reload_check_files();
+  }
+}
 
 void start_hot_reload(const std::string &path) {
   hot_reload_path = path;
@@ -303,6 +305,8 @@ void start_hot_reload(const std::string &path) {
                         game::consoleLabel_e::DEFAULT,
                         "^2Hot Reload: Watching '%s'\n", path.c_str());
 }
+
+namespace {
 
 void stop_hot_reload() {
   if (!hot_reload_running.load(std::memory_order_acquire)) {
@@ -567,387 +571,6 @@ void load_scripts(const std::string &script_dir) {
   }
 }
 
-void setup_functions() {
-  const table lua = get_globals();
-  lua["game"] = table();
-
-  lua["game"]["getfriendcount"] = function(
-      convert_function([]() -> int32_t { return friends::get_friend_count(); }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["getfriend"] =
-      function(convert_function([](int index) -> table {
-                 const friends::friend_entry f =
-                     friends::get_friend_by_index(index);
-                 table t = table();
-                 t.set("steam_id", utils::string::va("%llu", f.steam_id));
-                 t.set("name", std::string(f.name));
-                 t.set("status", static_cast<int>(f.state));
-                 t.set("server", std::string(f.server_address));
-                 return t;
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["refreshfriends"] =
-      function(convert_function([] { friends::refresh_presence(); }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["addfriend"] =
-      function(convert_function([](const std::string &steam_id_str,
-                                   const std::string &name) {
-                 uint64_t steam_id = 0;
-                 try {
-                   steam_id = std::stoull(steam_id_str);
-                 } catch (...) {
-                   return;
-                 }
-                 friends::add_friend(steam_id, name);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["removefriend"] =
-      function(convert_function([](const std::string &steam_id_str) {
-                 uint64_t steam_id = 0;
-                 try {
-                   steam_id = std::stoull(steam_id_str);
-                 } catch (...) {
-                   return;
-                 }
-                 friends::remove_friend(steam_id);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["invitefriend"] =
-      function(convert_function([](const std::string &id_str) -> bool {
-                 uint64_t id = 0;
-                 try {
-                   id = std::stoull(id_str);
-                 } catch (...) {
-                   return false;
-                 }
-                 return friends::invite_to_game(id);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["connecttofriend"] =
-      function(convert_function([](const std::string &id_str) -> bool {
-                 uint64_t id = 0;
-                 try {
-                   id = std::stoull(id_str);
-                 } catch (...) {
-                   return false;
-                 }
-                 return friends::connect_to_friend(id);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["issocialfriend"] =
-      function(convert_function([](const std::string &id_hex) -> bool {
-                 try {
-                   return friends::is_friend(std::stoull(id_hex, nullptr, 16));
-                 } catch (...) {
-                   return false;
-                 }
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["connectsocialfriend"] = function(
-      convert_function([](const std::string &id_hex) -> bool {
-        try {
-          return friends::connect_to_friend(std::stoull(id_hex, nullptr, 16));
-        } catch (...) {
-          return false;
-        }
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["getkickableplayers"] =
-      function(convert_function([]() -> table {
-                 table players{};
-                 if (!getinfo::is_host())
-                   return players;
-
-                 int list_index = 1;
-                 game::foreach_connected_client([&players, &list_index](
-                                                    game::sv::client_s &client,
-                                                    const size_t client_index) {
-                   if (client_index == 0 ||
-                       game::sv::SV_IsTestClient(
-                           static_cast<game::ClientNum_t>(client_index))) {
-                     return;
-                   }
-
-                   char name_buffer[64]{};
-                   std::string display_name;
-                   if (game::cl::CL_GetClientName(
-                           game::LOCAL_CLIENT_0, static_cast<int>(client_index),
-                           name_buffer, sizeof(name_buffer), false) &&
-                       name_buffer[0]) {
-                     display_name = name_buffer;
-                   } else if (client.name[0]) {
-                     display_name = client.name;
-                   } else {
-                     display_name = "Player " + std::to_string(client_index);
-                   }
-
-                   table player{};
-                   player.set("client_num", static_cast<int>(client_index));
-                   player.set("name", display_name);
-                   players.set(list_index++, player);
-                 });
-                 return players;
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["ishost"] =
-      function(convert_function([]() -> bool { return getinfo::is_host(); }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["purchasecodpoints"] = function(
-      convert_function([](const game::ControllerIndex_t controller,
-                          const uint32_t amount) -> int32_t {
-        constexpr std::array allowed_amounts{200, 1100, 2400, 5000, 13000};
-        if (std::find(allowed_amounts.begin(), allowed_amounts.end(), amount) ==
-            allowed_amounts.end()) {
-          return -1;
-        }
-
-        const std::optional<uint32_t> balance =
-            currency::add_cod_points(controller, amount);
-        return balance ? static_cast<int>(*balance) : -1;
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["purchasevials"] = function(
-      convert_function([](const game::ControllerIndex_t controller,
-                          const int32_t cost, const int32_t amount) -> bool {
-        if (cost <= 0 || amount <= 0) {
-          return false;
-        }
-        return currency::purchase_vials(controller, cost, amount);
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["purchasedistills"] =
-      function(convert_function([](const game::ControllerIndex_t controller,
-                                   const std::string &kind,
-                                   const uint32_t payment) -> bool {
-                 return currency::purchase_distills(controller, kind, payment);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["getfreedistillcooldown"] =
-      function(convert_function([]() -> uint32_t {
-                 return currency::free_distill_cooldown();
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["getdistillbalance"] =
-      function(convert_function([](const bool free) -> int {
-                 return currency::distill_balance(free);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["cookgobblegumrecipe"] = function(
-      convert_function([](const game::ControllerIndex_t controller,
-                          const int recipe, const bool free_distills) -> bool {
-        return currency::cook_recipe(controller, recipe, free_distills);
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["resetgobblegums"] = function(
-      convert_function([](const game::ControllerIndex_t controller) -> bool {
-        return currency::reset_gobblegums(controller);
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["setcurrenciesmaxed"] =
-      function(convert_function([](const game::ControllerIndex_t controller,
-                                   const bool maxed) -> bool {
-                 return currency::set_currencies_maxed(controller, maxed);
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["savestats"] = function(
-      convert_function(
-          [](const game::ControllerIndex_t controller, const int mode) -> bool {
-            if (controller < 0 || controller >= 2 || mode < 0 || mode > 2 ||
-                game::com::Com_IsInGame()) {
-              return false;
-            }
-
-            const bool online = game::com::Com_SessionMode_GetNetworkMode() ==
-                                game::eNetworkModes::ONLINE;
-            game::StorageFileType file;
-            if (mode == static_cast<int>(game::eModes::ZOMBIES)) {
-              file = online ? game::StorageFileType::ZM_STATS_ONLINE
-                            : game::StorageFileType::ZM_STATS_OFFLINE;
-            } else if (mode == static_cast<int>(game::eModes::MULTIPLAYER)) {
-              file = online ? game::StorageFileType::MP_STATS_ONLINE
-                            : game::StorageFileType::MP_STATS_OFFLINE;
-            } else {
-              file = online ? game::StorageFileType::CP_STATS_ONLINE
-                            : game::StorageFileType::CP_STATS_OFFLINE;
-            }
-            return game::live::storage::Storage_Write(
-                static_cast<game::ControllerIndex_t>(controller), file, 0);
-          }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["kickplayer"] = function(
-      convert_function([](const int client_num) -> bool {
-        if (!getinfo::is_host() || client_num <= 0)
-          return false;
-
-        bool kicked = false;
-        std::string player_name;
-        game::access_connected_client(
-            static_cast<size_t>(client_num), [&](game::sv::client_s &client) {
-              if (game::sv::SV_IsTestClient(
-                      static_cast<game::ClientNum_t>(client_num))) {
-                return;
-              }
-              player_name = client.name;
-              game::sv::SV_DropClient(&client, "EXE_PLAYERKICKED", true, true);
-              kicked = true;
-            });
-
-        if (kicked)
-          toast::warn("PLAYER KICKED", player_name + " was removed.");
-        return kicked;
-      }),
-      HksObjectType::TCFUNCTION);
-
-  // HTTP functions
-  lua["game"]["httpget"] =
-      function(convert_function([](const std::string &url) -> std::string {
-                 const std::optional<std::string> result =
-                     utils::http::get_data(url);
-                 return result.value_or("");
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["httppost"] =
-      function(convert_function([](const std::string &url,
-                                   const std::string &body) -> std::string {
-                 const std::optional<std::string> result =
-                     utils::http::post_data(url, body);
-                 return result.value_or("");
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["setDiscordPlayerScore"] = function(
-      convert_function([](int score) { discord::set_player_score(score); }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["setDiscordEnemyScore"] = function(
-      convert_function([](int score) { discord::set_enemy_score(score); }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["setDiscordRoundsPlayed"] = function(
-      convert_function([](int round) { discord::set_rounds_played(round); }),
-      HksObjectType::TCFUNCTION);
-
-  // Hot reload functions (callable from Lua timers)
-  lua["game"]["hotreloadcheck"] =
-      function(convert_function([]() {
-                 if (hot_reload_running.load(std::memory_order_acquire)) {
-                   hot_reload_check_files();
-                 }
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["hotreloadstart"] = function(
-      convert_function([](const std::string &path) { start_hot_reload(path); }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["getappdatapath"] =
-      function(convert_function([]() -> std::string {
-                 return game::get_appdata_path().generic_string();
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["getclientoverridename"] = function(
-      convert_function([](const game::ClientNum_t client_num) -> std::string {
-        if (!game::valid_client_num(client_num) ||
-            !name::has_name_override(client_num)) {
-          return "";
-        }
-
-        return name::get_name_override(client_num).value_or("");
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["getclientoverridetag"] = function(
-      convert_function([](const game::ClientNum_t client_num) -> std::string {
-        if (!game::valid_client_num(client_num) ||
-            !name::has_clan_abbrev_override(client_num)) {
-          return "";
-        }
-
-        return name::get_clan_abbrev_override(client_num).value_or("");
-      }),
-      HksObjectType::TCFUNCTION);
-
-  lua["game"]["getrawservercount"] =
-      function(convert_function([]() -> int32_t {
-                 return steam::get_raw_internet_server_count();
-               }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["isserverlistrefreshing"] =
-      function(convert_function(
-                   []() -> bool { return steam::is_server_list_refreshing(); }),
-               HksObjectType::TCFUNCTION);
-
-  lua["game"]["getrawserverinfo"] =
-      function(convert_function([](const int32_t index) -> table {
-                 table t = table();
-                 const steam::gameserveritem_t *item =
-                     steam::get_raw_internet_server_item(index);
-                 if (!item) {
-                   return t;
-                 }
-
-                 t.set("name", std::string(item->m_szServerName));
-                 t.set("map", std::string(item->m_szMap));
-                 t.set("desc", std::string(item->m_szGameDescription));
-                 t.set("ping", item->m_nPing);
-                 t.set("playerCount", item->m_nPlayers);
-                 t.set("maxPlayers", item->m_nMaxPlayers);
-                 t.set("botCount", item->m_nBotPlayers);
-                 t.set("password", item->m_bPassword);
-                 t.set("secure", item->m_bSecure);
-
-                 const std::string tags = std::string(item->m_szGameTags);
-                 const auto get_tag = [&](const char *key) -> std::string {
-                   const char *val =
-                       game::info::Info_ValueForKey(tags.c_str(), key);
-                   return val ? val : "";
-                 };
-
-                 t.set("gametype", get_tag("gametype"));
-                 t.set("dedicated", get_tag("dedicated") == "true");
-                 t.set("ranked", get_tag("ranked") == "true");
-                 t.set("hardcore", get_tag("hardcore") == "true");
-                 t.set("zombies", get_tag("zombies") == "true");
-                 t.set("campaign", get_tag("campaign") == "true" ? 1 : 0);
-                 t.set("rounds", std::atoi(get_tag("rounds").c_str()));
-                 t.set("modName", get_tag("modName"));
-
-                 const uint32_t ip = item->m_NetAdr.m_unIP;
-                 const uint16_t port = item->m_NetAdr.m_usConnectionPort;
-                 t.set("connectAddr",
-                       utils::string::va("%u.%u.%u.%u:%u", (ip >> 24) & 0xFF,
-                                         (ip >> 16) & 0xFF, (ip >> 8) & 0xFF,
-                                         ip & 0xFF, port));
-                 t.set("serverIndex", index);
-
-                 return t;
-               }),
-               HksObjectType::TCFUNCTION);
-}
-
 void enable_globals() {
   const table lua = get_globals();
   const std::string code = "local g = getmetatable(_G)\n"
@@ -1010,8 +633,6 @@ void setup_lua_globals() {
 
   const table lua = get_globals();
   enable_globals();
-
-  setup_functions();
 
   if (!game::is_server()) {
     lua["print"] =
@@ -1079,6 +700,7 @@ void ui_init_stub(lua_Alloc allocFunction, void *outOfMemoryFunction) {
 
 std::atomic<bool> doneFirstSnapshot = false;
 std::atomic<unsigned int> frontend_scripts_generation = 0;
+std::atomic<bool> refresh_after_frontend_load = false;
 
 void ui_cod_init_stub(const bool frontend) {
   ui_cod_init_hook.invoke(frontend);
@@ -1092,6 +714,9 @@ void ui_cod_init_stub(const bool frontend) {
     load_local_script_files(
         (game::get_appdata_path() / "data/ui_scripts/").string());
     load_local_script_files((host.get_folder() / "boiii/ui_scripts/").string());
+    return;
+  }
+  if (!game::is_server() && !game::com::Com_IsInGame()) {
     return;
   }
   try_start();
@@ -1114,6 +739,9 @@ void ui_cod_lobbyui_init_stub() {
                 generation &&
             game::com::Com_IsRunningUILevel()) {
           try_start();
+          if (refresh_after_frontend_load.exchange(false)) {
+            fire_debug_reload("UIRootFull");
+          }
         }
       },
       scheduler::main, 500ms);
@@ -1387,8 +1015,9 @@ template <typename F> cclosure *convert_function(F f) {
 }
 
 namespace {
-thread_local char getinfo_name_buf[256]{};
+thread_local char getinfo_name_buf[512]{};
 thread_local char getinfo_source_buf[512]{};
+thread_local bool describing_error = false;
 
 const char *resolve_c_function_name(lua_CFunction *c_func_ptr) {
   if (c_func_ptr) {
@@ -1445,96 +1074,238 @@ const char *resolve_source_from_rawfiles(uintptr_t bytecode_header) {
   return ctx.found;
 }
 
+HksObject *frame_function(lua_State *s, const lua_Debug *ar) {
+  const CallStack &callstack = s->m_callStack;
+  if (!callstack.m_records || !callstack.m_current) {
+    return nullptr;
+  }
+
+  const int32_t level = ar->callstack_level;
+  const int32_t num_records =
+      static_cast<int32_t>(callstack.m_current - callstack.m_records);
+  if (level < 0 || level > num_records) {
+    return nullptr;
+  }
+
+  HksObject *base = level == num_records
+                        ? s->m_apistack.base
+                        : callstack.m_records[level + 1].m_base;
+  return base ? base - 1 : nullptr;
+}
+
+constexpr int32_t FUNCTION_SEARCH_DEPTH = 3;
+constexpr uint32_t FUNCTION_SEARCH_BUDGET = 200000;
+
+bool find_in_table(const HashTable *table, const HksClosure *closure,
+                   const int32_t depth, const char **keys, uint32_t &budget) {
+  if (!table || !table->m_hashPart) {
+    return false;
+  }
+  for (hksUint32 i = 0; i <= table->m_mask && budget; ++i, --budget) {
+    const HashTable::Node &node = table->m_hashPart[i];
+    if (node.m_key.type() != HksObjectType::TSTRING || !node.m_key.v.str) {
+      continue;
+    }
+    const char *key = node.m_key.v.str->m_data;
+    if (depth == 1) {
+      if (node.m_value.type() == HksObjectType::TIFUNCTION &&
+          node.m_value.v.closure == closure) {
+        keys[0] = key;
+        return true;
+      }
+    } else if (node.m_value.type() == HksObjectType::TTABLE &&
+               strcmp(key, "_G") != 0 &&
+               find_in_table(node.m_value.v.table, closure, depth - 1, keys + 1,
+                             budget)) {
+      keys[0] = key;
+      return true;
+    }
+  }
+  return false;
+}
+
+const char *stored_function_name(const HksClosure *closure) {
+  const char *keys[FUNCTION_SEARCH_DEPTH]{};
+  uint32_t budget = FUNCTION_SEARCH_BUDGET;
+  __try {
+    for (int32_t depth = 1; depth <= FUNCTION_SEARCH_DEPTH; ++depth) {
+      if (find_in_table(closure->m_env, closure, depth, keys, budget)) {
+        size_t length = 0;
+        for (int32_t i = 0; i < depth && length < sizeof(getinfo_name_buf);
+             ++i) {
+          length += snprintf(getinfo_name_buf + length,
+                             sizeof(getinfo_name_buf) - length, "%s%s",
+                             i ? "." : "", keys[i]);
+        }
+        return getinfo_name_buf;
+      }
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+  return nullptr;
+}
+
+std::string describe_value(const HksObject &value) {
+  switch (value.type()) {
+  case HksObjectType::TNIL:
+    return "nil";
+  case HksObjectType::TBOOLEAN:
+    return value.v.boolean ? "true" : "false";
+  case HksObjectType::TNUMBER:
+    return std::format("{}", value.v.number);
+  case HksObjectType::TSTRING:
+    return value.v.str
+               ? std::format("\"{}\"",
+                             std::string_view(value.v.str->m_data,
+                                              strnlen(value.v.str->m_data, 32)))
+               : "string";
+  case HksObjectType::TTABLE:
+    return "table";
+  case HksObjectType::TIFUNCTION:
+  case HksObjectType::TCFUNCTION:
+    return "function";
+  default:
+    return "userdata";
+  }
+}
+
+std::string frame_arguments(const HksObject *func_obj,
+                            const hksByte num_params) {
+  std::string arguments;
+  for (hksByte i = 0; i < num_params; ++i) {
+    if (i > 0) {
+      arguments += ", ";
+    }
+    arguments += describe_value(func_obj[1 + i]);
+  }
+  return arguments;
+}
+
+const char *resolve_chunk_source(lua_State *s, lua_Debug *ar) {
+  const hksInstruction *pc = getPC(s, ar);
+  if (!pc) {
+    return nullptr;
+  }
+  uintptr_t scan =
+      reinterpret_cast<uintptr_t>(pc) & ~static_cast<uintptr_t>(0xF);
+  for (int i = 0; i < 0x10000; i++, scan -= 0x10) {
+    if (*reinterpret_cast<uint32_t *>(scan) == 0x61754C1B) {
+      return resolve_source_from_rawfiles(scan);
+    }
+  }
+  return nullptr;
+}
+
 int hksi_lua_getinfo_stub(lua_State *s, const char *what, lua_Debug *ar) {
   const int32_t result = hksi_lua_getinfo_detour.invoke<int32_t>(s, what, ar);
-  if (!result || !s || !ar) {
-    return result;
-  }
-  if (!what || !strchr(what, 'n')) {
+  if (!describing_error || !result || !s || !ar || !what || ar->is_tail_call) {
     return result;
   }
 
-  CallStack *callstack = &s->m_callStack;
-  if (!callstack->m_records || !callstack->m_current) {
+  const HksObject *func_obj = frame_function(s, ar);
+  if (!func_obj || !func_obj->v.ptr) {
     return result;
   }
 
-  const int32_t stack_level = ar->callstack_level;
-  const int32_t num_records =
-      static_cast<int32_t>((reinterpret_cast<uintptr_t>(callstack->m_current) -
-                            reinterpret_cast<uintptr_t>(callstack->m_records)) /
-                           sizeof(CallStack::ActivationRecord));
-
-  HksObject *func_obj = nullptr;
-  if (stack_level >= num_records) {
-    if (s->m_apistack.bottom) {
-      func_obj = s->m_apistack.bottom - 1;
-    }
-  } else if (stack_level + 1 <= num_records) {
-    CallStack::ActivationRecord *next_record =
-        &callstack->m_records[stack_level + 1];
-    if (next_record->m_base) {
-      func_obj = next_record->m_base - 1;
-    }
-  }
-
-  if (!func_obj) {
-    return result;
-  }
-
-  const HksObjectType obj_type = func_obj->t;
-  const HksValue obj_value = func_obj->v;
-  if (!obj_value.cClosure) {
-    return result;
-  }
-
-  if (obj_type == HksObjectType::TCFUNCTION) {
-    const char *resolved =
-        resolve_c_function_name(obj_value.cClosure->m_function);
-    if (resolved && resolved[0]) {
-      ar->name = resolved;
-    } else if (!ar->name || !ar->name[0]) {
-      ar->name = "(luaC_unknown)";
-    }
-  } else if (obj_type == HksObjectType::TIFUNCTION) {
-    Method *proto = obj_value.closure->m_method;
-    if (proto) {
-
-      if (proto->m_debug && proto->m_debug->name) {
-        ar->name = proto->m_debug->name->m_data;
-      } else if (proto->hash &&
-                 (!ar->name || strcmp(ar->name, "(*stripped)") == 0 ||
-                  !ar->name[0])) {
-        snprintf(getinfo_name_buf, sizeof(getinfo_name_buf), "func_%X(%d)",
-                 proto->hash, proto->num_params);
-        ar->name = getinfo_name_buf;
+  if (func_obj->type() == HksObjectType::TCFUNCTION) {
+    if (strchr(what, 'n')) {
+      const char *resolved =
+          resolve_c_function_name(func_obj->v.cClosure->m_function);
+      if (resolved && resolved[0]) {
+        ar->name = resolved;
+      } else if (!ar->name || !ar->name[0]) {
+        ar->name = "(luaC_unknown)";
       }
+    }
+    return result;
+  }
 
-      const hksInstruction *pc = getPC(s, ar);
+  if (func_obj->type() != HksObjectType::TIFUNCTION) {
+    return result;
+  }
 
-      const char *resolved_source = nullptr;
-      if (pc) {
-        uintptr_t scan =
-            reinterpret_cast<uintptr_t>(pc) & ~static_cast<uintptr_t>(0xF);
-        for (int i = 0; i < 0x10000; i++, scan -= 0x10) {
-          // Scan for bytecode magic
-          if (*reinterpret_cast<uint32_t *>(scan) == 0x61754C1B) {
-            resolved_source = resolve_source_from_rawfiles(scan);
-            break;
-          }
-        }
+  const Method *proto = func_obj->v.closure->m_method;
+  const bool has_debug_info = proto && proto->m_debug;
+
+  if (strchr(what, 'n')) {
+    std::string name = ar->name ? ar->name : "";
+    if (!has_debug_info || !proto->m_debug->name) {
+      if (const char *stored = stored_function_name(func_obj->v.closure)) {
+        name = stored;
+      } else if (name.empty() || name == "(*stripped)") {
+        name = has_debug_info && proto->m_debug->line_defined > 0
+                   ? std::format("<line {}>", proto->m_debug->line_defined)
+                   : "?";
       }
+    }
+    if (name != "?" && proto && proto->num_params > 0) {
+      name += "(" + frame_arguments(func_obj, proto->num_params) + ")";
+    }
+    snprintf(getinfo_name_buf, sizeof(getinfo_name_buf), "%s", name.c_str());
+    ar->name = getinfo_name_buf;
+  }
 
-      if (resolved_source) {
-        snprintf(getinfo_source_buf, sizeof(getinfo_source_buf), "%s",
-                 resolved_source);
-        ar->source = getinfo_source_buf;
-        snprintf(ar->short_src, sizeof(ar->short_src), "%s", resolved_source);
-      }
+  if (strchr(what, 'S') && (!has_debug_info || !proto->m_debug->source)) {
+    if (const char *source = resolve_chunk_source(s, ar)) {
+      snprintf(getinfo_source_buf, sizeof(getinfo_source_buf), "%s", source);
+      ar->source = getinfo_source_buf;
+      snprintf(ar->short_src, sizeof(ar->short_src), "%s", source);
     }
   }
 
   return result;
+}
+
+std::string clean_traceback(const std::string_view traceback) {
+  constexpr std::string_view unknown_function = " in function '?'";
+  std::string cleaned;
+  size_t start = 0;
+  while (start <= traceback.size()) {
+    const size_t end = std::min(traceback.find('\n', start), traceback.size());
+    std::string_view line = traceback.substr(start, end - start);
+    start = end + 1;
+
+    if (line.find_first_not_of(" \t") != std::string_view::npos &&
+        line.substr(line.find_first_not_of(" \t")) == "(tail call): ?") {
+      continue;
+    }
+    if (line.ends_with(unknown_function)) {
+      line.remove_suffix(unknown_function.size());
+      if (line.ends_with(':')) {
+        line.remove_suffix(1);
+      }
+    }
+    if (!cleaned.empty()) {
+      cleaned += '\n';
+    }
+    cleaned += line;
+  }
+  return cleaned;
+}
+
+utils::hook::detour hks_traceback_hook;
+void hks_traceback_stub(lua_State *target, lua_State *traced,
+                        const int32_t start_level, const hksInt32 max_levels) {
+  describing_error = true;
+  hks_traceback_hook.invoke<void>(target, traced, start_level, max_levels);
+  describing_error = false;
+
+  const HksObject *top = target->m_apistack.top - 1;
+  if (top < target->m_apistack.base || top->type() != HksObjectType::TSTRING ||
+      !top->v.str) {
+    return;
+  }
+  const std::string cleaned = clean_traceback(top->v.str->m_data);
+  --target->m_apistack.top;
+  hksi_lua_pushlstring(target, cleaned.data(),
+                       static_cast<hksUint32>(cleaned.size()));
+}
+
+utils::hook::detour hks_where_hook;
+void hks_where_stub(lua_State *s, const int32_t level) {
+  describing_error = true;
+  hks_where_hook.invoke<void>(s, level);
+  describing_error = false;
 }
 
 std::string colorize_lua_error(const char *error_loc, const char *error_stack) {
@@ -1586,8 +1357,6 @@ std::string colorize_lua_error(const char *error_loc, const char *error_stack) {
       } else {
         result += "\t<^1native^7>: " + trimmed + "\n";
       }
-    } else if (trimmed.find("(tail call)") != std::string::npos) {
-      result += "\t^7(tail call): ?\n";
     } else {
       size_t first_colon = trimmed.find(':');
       if (first_colon != std::string::npos) {
@@ -1822,6 +1591,7 @@ inline void lui_reload() {
                  game::ControllerIndex_t::CONTROLLER_INDEX_0),
              "main", -1, *primary_luaVM);
 
+  refresh_after_frontend_load.store(true);
   UI_CoD_LobbyUI_Init();
 }
 
@@ -1843,7 +1613,45 @@ std::filesystem::path sanitize_rawfile_path(const std::string &name) {
   return result;
 }
 
+std::unordered_map<int32_t, std::string> custom_key_functions;
+
+void run_custom_key_function(const int32_t key, const int32_t down) {
+  if (down) {
+    if (const auto function = custom_key_functions.find(key);
+        function != custom_key_functions.end()) {
+      execute_raw_lua(
+          std::format("if CoD.Mod and CoD.Mod.CallCustomFunction then "
+                      "CoD.Mod.CallCustomFunction(\"{}\") end",
+                      function->second),
+          "customkeymap");
+    }
+  }
+}
+
+void *CL_KeyEvent_CustomKeymap() {
+  return utils::hook::assemble([](utils::hook::assembler &a) {
+    a.pushad64();
+    a.get().mov(ecx, edx);
+    a.get().mov(edx, r8d);
+    a.call_aligned(run_custom_key_function);
+    a.popad64();
+    a.jmp(game::cl::CL_KeyEvent.get());
+  });
+}
+
 inline void register_lui_commands() {
+  command::add("customkeymap", [](const command::params &params) {
+    if (params.size() < 3) {
+      return;
+    }
+    const std::string name = params.get(1);
+    if (std::ranges::all_of(name, [](const char c) {
+          return std::isalnum(static_cast<uint8_t>(c)) || c == '_';
+        })) {
+      custom_key_functions[std::atoi(params.get(2))] = name;
+    }
+  });
+
   command::add("luadump", [](const command::params &params) {
     if (params.size() >= 2 && params.get(1) == std::string("reset")) {
       stock_lua_baseline.clear();
@@ -2047,7 +1855,7 @@ inline void register_lui_commands() {
     // Find the mod's content folder from the workshop pool
     std::string mod_content_path;
     for (uint32_t i = 0; i < game::ugc::modsPool.count; ++i) {
-      const game::ugc::WorkshopData *mod_data = &game::ugc::modsPool.data[i];
+      const game::ugc::UGCItem *mod_data = &game::ugc::modsPool.data[i];
       if (mod_data->publisherId == mod_id || mod_data->internalName == mod_id) {
         mod_content_path = mod_data->absolutePathContentDirectory;
         break;
@@ -2184,12 +1992,12 @@ Lua_CoD_FFReader_EnforceOverride(lua_State *luaVM, RawFile *ud, size_t *size) {
 // TODO: how and why does this happen? How do scripts arrive here if not fetched
 // with `DB_FindXAssetHeader`?
 #ifndef NDEBUG
-      game::trace(
-          "Rawfile override failed for script \"{}\". Override buffer: {:p}, "
-          "original buffer: {:p}, override len: 0x{:016X}, original len: "
-          "0x{:016X}",
-          ud->name, static_cast<void *>(override->buffer),
-          static_cast<void *>(ud->buffer), override->len, ud->len);
+      game::trace("[Lua][Load][FF] WARNING: rawfile header override failed for "
+                  "Lua script \"{}\". Override buffer: {:p}, original buffer: "
+                  "{:p}, override len: 0x{:016X}, original len: "
+                  "0x{:016X}. Overriding in Lua_CoD_FFReader instead.",
+                  ud->name, static_cast<void *>(override->buffer),
+                  static_cast<void *>(ud->buffer), override->len, ud->len);
 #endif
       ud->buffer = override->buffer;
       ud->len = override->len;
@@ -2230,32 +2038,38 @@ void R_CopyTextureRegionMips_Safe(void *a1, void *a2, uint32_t a3, int32_t a4,
 
 #ifndef NDEBUG
 void print_info(game::consoleLabel_e label, const std::string_view &msg) {
-  game::trace("[Lua][Info] {}", msg);
-  fprintf(stdout, "[Lua][Info] %s\n", msg.data());
+  const char *log = utils::string::va("[Lua][Info][%s] %s",
+                                      game::serialize(label), msg.data());
+  game::trace("{}", log);
+  fprintf(stdout, "%s\n", log);
   fflush(stdout);
   game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER, label,
-                        "%s\n", msg.data());
+                        "%s\n", log);
 }
 
 void print_error(game::consoleLabel_e label, const std::string_view &msg) {
-  game::trace("[Lua][Error] {}", msg);
-  fprintf(stderr, "[Lua][Error] %s\n", msg.data());
+  const char *log = utils::string::va("[Lua][Error][%s] %s",
+                                      game::serialize(label), msg.data());
+  game::trace("{}", log);
+  fprintf(stderr, "%s\n", log);
   fflush(stderr);
   game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER, label,
-                        "%s\n", msg.data());
+                        "%s\n", log);
 }
 
 void print_warning(game::consoleLabel_e label, const std::string_view &msg) {
-  game::trace("[Lua][Warn] {}", msg);
-  fprintf(stdout, "[Lua][Warn] %s\n", msg.data());
+  const char *log = utils::string::va("[Lua][Warn][%s] %s",
+                                      game::serialize(label), msg.data());
+  game::trace("{}", log);
+  fprintf(stdout, "%s\n", log);
   fflush(stdout);
   game::com::Com_Printf(game::consoleChannel_e::CHANNEL_DONT_FILTER, label,
-                        "%s\n", msg.data());
+                        "%s\n", log);
 }
 
 std::string concat_string_args(lua_State *s, hksInt32 startIdx = 1) {
   std::string text;
-  for (hksInt32 i = startIdx; i <= lua_gettop(s); ++i) {
+  for (hksInt32 i = startIdx; i <= lua_gettop(s) && lua_isstring(s, i); ++i) {
     text += lua_tostring(s, i);
   }
   return text;
@@ -2503,8 +2317,8 @@ luaReturnCount_e LobbyVM_CallFunc_Redirect(lua_State *luaVM) {
     if (func && func[0]) {
       const std::string_view func_view = func;
 #ifndef NDEBUG
-      game::trace("LobbyVM_CallFunc called with func: {}, argc: {}", func_view,
-                  lua_gettop(luaVM));
+      game::trace("[Lua] LobbyVM_CallFunc called with func: {}, argc: {}",
+                  func_view, lua_gettop(luaVM));
 #endif
       if (LOBBYVM_CALLFUNC_HANDLERS.contains(func_view)) {
         LobbyVM_CallFunc_Handler handler =
@@ -2520,16 +2334,50 @@ luaReturnCount_e LobbyVM_CallFunc_Redirect(lua_State *luaVM) {
   return LobbyVM_CallFunc_hook.invoke<luaReturnCount_e>(luaVM);
 }
 
-class component final : public generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "ui_scripting"; }
+utils::hook::detour Lua_CoD_LuaCall_GetHeroName_hook;
+luaReturnCount_e Lua_CoD_LuaCall_GetHeroName_Safe(lua_State *luaVM) {
+#ifndef GETHERONAME_RETURN_EMPTY_STRING
+#define GETHERONAME_RETURN_EMPTY_STRING()                                      \
+  lua_pushstring(luaVM, "");                                                   \
+  return luaReturnCount_e::ONE;
 #endif
+
+  if (lua_gettop(luaVM) < 2 || !lua_isnumber(luaVM, 1) ||
+      !lua_isnumber(luaVM, 2)) {
+    GETHERONAME_RETURN_EMPTY_STRING();
+  }
+
+  const game::eModes mode = static_cast<game::eModes>(lua_tointeger(luaVM, 1));
+  const uint32_t playerRoleTemplateIndex =
+      static_cast<uint32_t>(lua_tointeger(luaVM, 2));
+  switch (mode) {
+  case game::eModes::ZOMBIES:
+  case game::eModes::INVALID: {
+    GETHERONAME_RETURN_EMPTY_STRING();
+  }
+  default: {
+    const game::db::xasset::CharacterBodyType *bodyType =
+        game::bg::BG_GetCharacterBodyType(mode, playerRoleTemplateIndex);
+    if (!game::nonnull(bodyType) || !game::nonnull(bodyType->displayName)) {
+      GETHERONAME_RETURN_EMPTY_STRING();
+    }
+    break;
+  }
+  }
+
+  return Lua_CoD_LuaCall_GetHeroName_hook.invoke<luaReturnCount_e>(luaVM);
+}
+
+class component final : public generic_component {
+  DEFINE_COMPONENT_NAME("lua/ui_scripting");
 
 public:
   void post_unpack() override {
 #ifndef NDEBUG
     Lua_CoD_LuaCall_PrintInfo_hook.create(api::Lua_CoD_LuaCall_PrintInfo,
                                           Lua_CoD_LuaCall_PrintInfo_AllOutputs);
+    Lua_CoD_LuaCall_GetHeroName_hook.create(api::Lua_CoD_LuaCall_GetHeroName,
+                                            Lua_CoD_LuaCall_GetHeroName_Safe);
     if (game::is_client()) {
       Lua_CoD_LuaCall_PrintError_hook.create(
           api::Lua_CoD_LuaCall_PrintError,
@@ -2542,8 +2390,8 @@ public:
 
     /*
        Spoof client build info returned to lua scripts to
-       circumvent build info checks in mod scripts intended to disable usage of
-       boiii
+       circumvent build info checks in mod scripts intended to disable usage
+       of boiii
     */
     Com_GetBuildIntField_hook.create(game::com::Com_GetBuildIntField,
                                      game::com::Com_GetBuildIntField_Impl);
@@ -2564,35 +2412,30 @@ public:
                       hks_load_stub);
     load_dll_hook.create(load_dll, load_dll_skip_blacklisted);
 
-    // TODO: these inline offsets should be a symbol - strongly typed, named,
-    // and properly namespaced.
-    hks_package_require_hook.create(
-        game::select(0x141D1C6C0, 0x141D28EF0, 0x1403D7FC0),
-        hks_package_require_stub);
+    hks_package_require_hook.create(package_require.get(),
+                                    hks_package_require_stub);
     ui_cod_init_hook.create(UI_CoD_Init, ui_cod_init_stub);
     ui_cod_lobbyui_init_hook.create(UI_CoD_LobbyUI_Init,
                                     ui_cod_lobbyui_init_stub);
-    // TODO: these inline offsets should be a symbol - strongly typed, named,
-    // and properly namespaced.
-    ui_shutdown_hook.create(game::select(0x142694C90, 0x14270DE00, 0x1404A1280),
-                            ui_shutdown_stub);
+    // The dedicated server has no UI, but its lobby VM runs our Lua too
+    ui_shutdown_hook.create(
+        game::is_server() ? game::lua::lobby::vm::LobbyVM_OnErrorShutdown.get()
+                          : UI_Shutdown.get(),
+        ui_shutdown_stub);
     lua_cod_getrawfile_hook.create(Lua_CoD_GetRawFile.get(),
                                    lua_cod_getrawfile_stub);
 
-    // TODO: these inline offsets should be a symbol - strongly typed, named,
-    // and properly namespaced.
-    hksi_lua_getinfo_detour.create(
-        game::select(0x141D40E40, 0x141D4D8D0, 0x1403F64B0),
-        hksi_lua_getinfo_stub);
+    hksi_lua_getinfo_detour.create(hksi_lua_getinfo.get(),
+                                   hksi_lua_getinfo_stub);
 
     if (game::is_client()) {
+      hks_traceback_hook.create(hksi_hks_traceback.get(), hks_traceback_stub);
+      hks_where_hook.create(hksi_luaL_where.get(), hks_where_stub);
       ui_init_hook.create(UI_Init.get(), ui_init_stub);
       cl_first_snapshot_hook.create(game::cl::CL_FirstSnapshot.get(),
                                     cl_first_snapshot_stub);
 
-      // TODO: these inline offsets should be a symbol - strongly typed, named,
-      // and properly namespaced.
-      lua_error_hook.create(game::select(0x141F05620, 0x141F11DA0, 0x0),
+      lua_error_hook.create(Lua_CoD_LuaStateManager_Error.get(),
                             lua_cod_luastatemanager_error_stub);
 
       scheduler::once(
@@ -2604,6 +2447,10 @@ public:
             game::ui_error_report_delay->set(true);
           },
           scheduler::pipeline::renderer);
+
+      if (!game::is_legacy_client()) {
+        utils::hook::call(0x1420EC3E2_g, CL_KeyEvent_CustomKeymap());
+      }
 
       register_lui_commands();
       patch_unsafe_lua_functions();

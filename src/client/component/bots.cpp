@@ -1,6 +1,7 @@
 #include <std_include.hpp>
 
 #include <game/game.hpp>
+#include <game/utils.hpp>
 
 #include <component/command.hpp>
 #include <component/getinfo.hpp>
@@ -9,19 +10,21 @@
 
 #include <utils/hook.hpp>
 #include <utils/io.hpp>
+#include <utils/nt.hpp>
 #include <utils/string.hpp>
 
 #include <str.hpp>
 
 namespace bots {
 namespace {
-constexpr const char bot_format_string[] =
+constexpr const char BOT_CONNECT_PACKET_INFOSTRING_FMT[] =
     "connect "
-    "\"\\invited\\1\\cg_predictItems\\1\\cl_"
-    "anonymous\\0\\color\\4\\head\\default\\model\\multi\\snaps\\20\\rate\\"
-    "5000\\name\\%s\\clanAbbrev\\%s\\xuid\\%s\\xnaddr\\%"
-    "s\\natType\\2\\protocol\\%d\\netfieldchk\\%d\\sessionmode\\%s\\qport\\%"
-    "d\"";
+    "\"\\invited\\1\\cg_predictItems\\1"
+    "\\cl_anonymous\\0\\color\\4\\head\\default"
+    "\\model\\multi\\snaps\\20\\rate\\5000\\name\\%s"
+    "\\clanAbbrev\\%s\\xuid\\%s\\xnaddr\\%s\\natType\\2\\protocol"
+    "\\%d\\netfieldchk\\%d\\sessionmode\\%s\\qport\\%d\"";
+constexpr char DEFAULT_BOT_CLAN_ABBREV[] = "3arc";
 
 struct BotName {
   game::playerName_t name;
@@ -69,36 +72,36 @@ std::vector<BotName> load_bots_names() {
   };
 
   std::string buffer;
-  if (!utils::io::read_file("boiii/bots.txt", &buffer) || buffer.empty()) {
-    return std::vector(std::begin(DEFAULT_BOT_NAMES),
-                       std::end(DEFAULT_BOT_NAMES));
-  }
-
   std::vector<BotName> bot_names;
-  std::vector<std::string> data = utils::string::split(buffer, '\n');
-  for (std::string &entry : data) {
-    utils::string::replace(entry, "\r", "");
-    utils::string::trim(entry);
+  if (utils::io::read_file(utils::nt::library{}.get_folder() / "boiii/bots.txt",
+                           &buffer) &&
+      !buffer.empty()) {
+    std::vector<std::string> data = utils::string::split(buffer, '\n');
+    for (std::string &entry : data) {
+      utils::string::replace(entry, "\r", "");
+      utils::string::trim(entry);
 
-    if (!entry.empty()) {
-      std::string clan_abbrev;
-      // Check if there is a clan tag
-      const size_t pos = entry.find(',');
-      if (pos != std::string::npos) {
-        // Only start copying over from non-null characters (otherwise it can be
-        // "<=")
-        if ((pos + 1) < entry.size()) {
-          clan_abbrev = entry.substr(pos + 1);
+      if (!entry.empty()) {
+        std::string clan_abbrev;
+        // Check if there is a clan tag
+        const size_t pos = entry.find(',');
+        if (pos != std::string::npos) {
+          // Only start copying over from non-null characters (otherwise it can
+          // be
+          // "<=")
+          if ((pos + 1) < entry.size()) {
+            clan_abbrev = entry.substr(pos + 1);
+          }
+
+          entry = entry.substr(0, pos);
         }
 
-        entry = entry.substr(0, pos);
+        BotName name;
+        strscpy(name.name, entry);
+        strscpy(name.clan_abbrev, clan_abbrev);
+
+        bot_names.emplace_back(name);
       }
-
-      BotName name;
-      strscpy(name.name, entry);
-      strscpy(name.clan_abbrev, clan_abbrev);
-
-      bot_names.emplace_back(name);
     }
   }
 
@@ -121,11 +124,16 @@ const std::vector<BotName> &get_bot_names() {
 }
 
 const char *get_bot_name() {
-  static size_t current = 0;
+  static std::atomic<size_t> current = 0;
   const std::vector<BotName> &names = get_bot_names();
 
-  current = (current + 1) % names.size();
-  return names.at(current).name;
+  current.store((current.load(std::memory_order_acquire) + 1) % names.size(),
+                std::memory_order_release);
+  const char *result = names.at(current).name;
+  game::trace(
+      "[Bot][get_bot_name] returning result \"{}\" for current bot index {}",
+      result, current.load(std::memory_order_acquire));
+  return result;
 }
 const char *find_clan_name(const std::string &needle) {
   for (const BotName &entry : get_bot_names()) {
@@ -134,7 +142,7 @@ const char *find_clan_name(const std::string &needle) {
     }
   }
 
-  return "3arc";
+  return DEFAULT_BOT_CLAN_ABBREV;
 }
 
 int format_bot_string(char *buffer, [[maybe_unused]] const char *format,
@@ -142,15 +150,18 @@ int format_bot_string(char *buffer, [[maybe_unused]] const char *format,
                       int protocol, int net_field_chk, const char *session_mode,
                       int qport) {
 
-  return sprintf_s(buffer, 1024, bot_format_string, name, find_clan_name(name),
-                   xuid, xnaddr, protocol, net_field_chk, session_mode, qport);
+  game::trace("[Bot][format_bot_string] Called with name: \"{}\", xuid: "
+              "\"{}\", xnaddr: \"{}\", protocol: {}, net_field_chk: {}, "
+              "session_mode: \"{}\", qport: {}",
+              name, xuid, xnaddr, protocol, net_field_chk, session_mode, qport);
+  return sprintf_s(buffer, 0x400, BOT_CONNECT_PACKET_INFOSTRING_FMT, name,
+                   find_clan_name(name), xuid, xnaddr, protocol, net_field_chk,
+                   session_mode, qport);
 }
 } // namespace
 
 struct component final : generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "bots"; }
-#endif
+  DEFINE_COMPONENT_NAME("bots");
 
   void post_unpack() override {
     utils::hook::jump(game::select(0x141653B90, 0x141653B70, 0x1402732E0),
@@ -164,28 +175,39 @@ struct component final : generic_component {
     }
 
     command::add("spawnBot", [](const command::params &params) {
-      if (!getinfo::is_host()) {
-        return;
-      }
+      game::trace("[Bot][spawnBot] called with argc: {}, getinfo::is_host: {}",
+                  params.size(), getinfo::is_host() ? "true" : "false");
+      if (getinfo::is_host()) {
+        game::ClientNum_t count = game::ClientNum_t::CLIENT_INDEX_1;
+        if (params.size() > 1) {
+          if (params[1] == "all"s) {
+            count = game::get_com_maxclients();
+          } else {
+            count = static_cast<game::ClientNum_t>(atoi(params[1]));
+          }
+        }
 
-      size_t count = 1;
-      if (params.size() > 1) {
-        if (params[1] == "all"s) {
-          count = 18;
-        } else {
-          count = atoi(params[1]);
+        count =
+            std::min<game::ClientNum_t>(count, game::available_client_count());
+        game::trace("[Bot] spawnBot command parsed argument count: {}. "
+                    "available_client_count: {}",
+                    game::serialize(count),
+                    game::serialize(game::available_client_count()));
+
+        if (count > game::lobby::MIN_PLAYERS &&
+            count < game::lobby::MAX_PLAYERS) {
+          scheduler::once(
+              [count] {
+                for (game::ClientNum_t i =
+                         game::ClientNum_t::CLIENT_INDEX_FIRST;
+                     i < count && game::sv::SV_AddTestClient(); ++i) {
+                  game::trace("[Bot][spawnBot] Successfully spawned bot {}/{}.",
+                              +i + 1, static_cast<size_t>(count));
+                }
+              },
+              scheduler::server);
         }
       }
-
-      scheduler::once(
-          [count] {
-            for (size_t i = 0; i < count; ++i) {
-              if (!game::sv::SV_AddTestClient()) {
-                break;
-              }
-            }
-          },
-          scheduler::server);
     });
   }
 };
