@@ -1,4 +1,4 @@
-# AlterBOIII 2.2.0 — merge de la beta d'Ezz (boiii-free `f45ed84`)
+# AlterBOIII 2.4.0 — merge de la beta d'Ezz (boiii-free `f45ed84`)
 
 Base précédente : boiii-free `main` v3.0.0 (`5aa7fac`). Cette version intègre
 les 218 commits de la branche `beta` d'Ezz (au 15 oct. 2026), en conservant
@@ -62,6 +62,12 @@ AlterCOD.
 - L'updater récupère désormais les données du **canal beta** d'Ezz
   (`r2.ezz.lol/boiii/beta/`), puisque le client est construit sur la beta.
   L'exe, `data/launcher` et `data/ui_scripts` restent protégés.
+- **Mise à jour automatique de l'exe** : au lancement, AlterBOIII lit
+  `update.json` (branche `main`). Si `version` est plus récente, il télécharge
+  `exe_url` (uniquement depuis les releases du dépôt), vérifie `exe_size` et
+  `exe_sha1`, remplace l'exe (l'ancien passe en `.exe.old`, supprimé au
+  lancement suivant) puis se relance. Désactivable via le réglage « mises à
+  jour automatiques » du launcher ou `-noupdate`.
 
 ## Serveur dédié
 - Redémarrage automatique après erreur de script (`sv_errorRestartDelay`,
@@ -90,6 +96,6 @@ AlterCOD.
   redémarre la map après 5 s.
 - Protocole réseau : nouveaux paquets (`lobbyJoin`, `friendInvite`,
   `friendOnline`, `serverError`, `voice`, `nameoverride`), champ `lobby` dans
-  `getInfo`. Clients 2.1.x et 2.2.0 non interopérables pour le join d'amis.
+  `getInfo`. Clients 2.3.0 (et avant) et 2.4.0 non interopérables pour le join d'amis.
 - Build : VS 2026 / `premake5 vs2026`, `-fbracket-depth=1024`, nouveaux
   submodules `opus`, `portaudio`, `sqlite`, `sqlite_orm`, `xz`.

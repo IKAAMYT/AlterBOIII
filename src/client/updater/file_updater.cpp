@@ -10,9 +10,27 @@
 #include <utils/flags.hpp>
 #include <utils/http.hpp>
 #include <utils/io.hpp>
+#include <utils/nt.hpp>
 #include <utils/progress_ui.hpp>
 #include <utils/properties.hpp>
 #include <utils/string.hpp>
+
+#include <rapidjson/document.h>
+
+// In case of clangd compilation
+#if __has_include(<version.h>)
+#include "version.h"
+#else
+#ifndef SHORTVERSION
+#define SHORTVERSION "0"
+#endif
+#endif
+
+// AlterBO3 (IKAAM) : manifeste de mise a jour de l'exe AlterBOIII.
+#define ALTER_UPDATE_MANIFEST                                                  \
+  "https://raw.githubusercontent.com/IKAAMYT/AlterBOIII/main/update.json"
+#define ALTER_RELEASE_PREFIX                                                   \
+  "https://github.com/IKAAMYT/AlterBOIII/releases/download/"
 
 #define UPDATE_SERVER "https://r2.ezz.lol/"
 
@@ -135,6 +153,68 @@ bool is_dedicated_server() {
          (!utils::io::file_exists("BlackOps3.exe") &&
           utils::io::file_exists("BlackOps3_UnrankedDedicatedServer.exe"));
 }
+
+// "2.10.0" > "2.9.3" : comparaison numerique, composant par composant.
+bool is_newer_version(const std::string &remote, const std::string &local) {
+  const auto split = [](const std::string &version) {
+    std::vector<unsigned long> parts;
+    for (const std::string &part : utils::string::split(version, '.'))
+      parts.push_back(std::strtoul(part.c_str(), nullptr, 10));
+    return parts;
+  };
+  const std::vector<unsigned long> r = split(remote);
+  const std::vector<unsigned long> l = split(local);
+  for (size_t i = 0; i < std::max(r.size(), l.size()); ++i) {
+    const unsigned long rv = i < r.size() ? r[i] : 0;
+    const unsigned long lv = i < l.size() ? l[i] : 0;
+    if (rv != lv)
+      return rv > lv;
+  }
+  return false;
+}
+
+struct alter_release {
+  std::string version;
+  file_info exe;
+  std::string url;
+};
+
+// Lit update.json sur la branche main du depot AlterBOIII. On n'installe que
+// des exe publies dans les releases du depot, avec taille et SHA-1 connus.
+std::optional<alter_release> get_alter_release() {
+  const std::optional<std::string> json =
+      utils::http::get_data(ALTER_UPDATE_MANIFEST);
+  if (!json || json->empty())
+    return std::nullopt;
+
+  rapidjson::Document doc{};
+  if (doc.Parse(json->data(), json->size()).HasParseError() || !doc.IsObject())
+    return std::nullopt;
+
+  const auto get_string = [&doc](const char *name) -> std::string {
+    const auto member = doc.FindMember(name);
+    return member != doc.MemberEnd() && member->value.IsString()
+               ? std::string(member->value.GetString(),
+                             member->value.GetStringLength())
+               : std::string{};
+  };
+
+  alter_release release{};
+  release.version = get_string("version");
+  release.url = get_string("exe_url");
+  release.exe.name = "AlterBOIII.exe";
+  release.exe.hash = utils::string::to_lower(get_string("exe_sha1"));
+  const auto size = doc.FindMember("exe_size");
+  release.exe.size = size != doc.MemberEnd() && size->value.IsUint64()
+                         ? static_cast<size_t>(size->value.GetUint64())
+                         : 0;
+
+  if (release.version.empty() ||
+      !release.url.starts_with(ALTER_RELEASE_PREFIX) ||
+      release.exe.hash.size() != 40 || release.exe.size < 1024 * 1024)
+    return std::nullopt;
+  return release;
+}
 } // namespace
 
 file_updater::file_updater(progress_listener &listener,
@@ -185,6 +265,7 @@ void file_updater::create_config_file_if_not_exists() const {
 
 void file_updater::run() const {
   this->create_config_file_if_not_exists();
+  this->update_alter_binary();
 
   const std::vector<file_info> files = get_file_infos();
 
@@ -388,6 +469,68 @@ void file_updater::update_host_binary(
   // host-binary update path (otherwise it renames our exe to .exe.old first).
   OutputDebugStringA("Skipping host binary update (AlterBO3 custom exe)\n");
   (void)outdated_files;
+}
+
+// AlterBO3 (IKAAM) : met a jour AlterBOIII.exe depuis les releases du depot
+// quand update.json annonce une version plus recente. L'exe courant est
+// renomme en .exe.old (supprime au lancement suivant), le nouveau est ecrit a
+// sa place puis relance. En cas d'echec, l'ancien exe est remis en place.
+void file_updater::update_alter_binary() const {
+  // Une seule verification par processus : le composant updater relance une
+  // mise a jour en tache de fond pendant que le jeu demarre.
+  static std::atomic_bool checked{false};
+  if (checked.exchange(true) || is_dedicated_server() || game::is_headless() ||
+      this->process_file_.extension() != ".exe")
+    return;
+#ifndef NDEBUG
+  if (!utils::flags::has_flag("update"))
+    return;
+#endif
+
+  const std::optional<alter_release> release = get_alter_release();
+  if (!release || !is_newer_version(release->version, SHORTVERSION))
+    return;
+
+  OutputDebugStringA(("AlterBOIII " + release->version +
+                      " available, updating from " SHORTVERSION "\n")
+                         .c_str());
+
+  const file_info &exe = release->exe;
+  this->listener_.update_files({exe});
+  this->listener_.begin_file(exe);
+  const std::optional<std::string> data =
+      utils::http::get_data(release->url, {}, [&](const size_t progress) {
+        this->listener_.file_progress(exe, progress);
+      });
+  this->listener_.end_file(exe);
+  this->listener_.done_update();
+
+  if (!data || data->size() != exe.size || !data->starts_with("MZ") ||
+      utils::string::to_lower(get_hash(*data)) != exe.hash) {
+    OutputDebugStringA("AlterBOIII update: invalid download, skipped\n");
+    return;
+  }
+
+  if (!this->move_current_process_file()) {
+    OutputDebugStringA("AlterBOIII update: exe in use, skipped\n");
+    return;
+  }
+
+  std::string written{};
+  if (!utils::io::write_file_executable(this->process_file_, *data) ||
+      !utils::io::read_file(this->process_file_, &written) ||
+      written != *data) {
+    OutputDebugStringA("AlterBOIII update: write failed, restoring\n");
+    utils::io::remove_file(this->process_file_);
+    this->restore_current_process_file();
+    return;
+  }
+
+  OutputDebugStringA("AlterBOIII update installed, relaunching\n");
+  if (!utils::flags::has_flag("norelaunch")) {
+    utils::nt::relaunch_self();
+  }
+  throw update_cancelled();
 }
 
 void file_updater::update_files(

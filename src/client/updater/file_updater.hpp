@@ -29,6 +29,8 @@ private:
   [[nodiscard]] std::filesystem::path
   get_drive_filename(const file_info &file) const;
 
+  void update_alter_binary() const;
+
   [[nodiscard]] bool move_current_process_file() const;
   void restore_current_process_file() const;
   void delete_old_process_file() const;

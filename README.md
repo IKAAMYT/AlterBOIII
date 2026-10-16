@@ -3,7 +3,7 @@
 > [!IMPORTANT] Fork communautaire **AlterBO3** (IKAAM) basé sur
 > [Ezz-lol/boiii-free](https://github.com/Ezz-lol/boiii-free) avec un
 > launcher **WebView2** (OAuth ikaam.fr, système d'amis, i18n FR/EN),
-> la Rich Presence Discord et le heartbeat AlterCOD. Version **2.2.0** (base Ezz beta f45ed84).
+> la Rich Presence Discord et le heartbeat AlterCOD. Version **2.4.0** (base Ezz beta f45ed84).
 
 [![github](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/IKAAMYT/AlterBOIII)
 
