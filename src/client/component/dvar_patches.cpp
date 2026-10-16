@@ -55,26 +55,71 @@ inline void dvar_boolstring_force(EngineDependentDvarMut dvar) {
 
 template <const bool Value>
 inline void dvar_bool_force(EngineDependentDvarMut dvar) {
-  dvar.set(Value);
   Dvar_SetModifiedCallback(dvar, dvar_bool_modification_force<Value>);
+  dvar.set(Value);
+}
+
+void apply_cheats_setting(EngineDependentDvarMut) {
+  for (EngineDependentDvarMut dvar : {*sv_cheats, *dvar_cheats}) {
+    if (game::cheats()) {
+      dvar_bool_force<true>(dvar);
+    } else {
+      dvar_bool_force<false>(dvar);
+    }
+  }
 }
 
 #ifndef NDEBUG
 inline bool enable_debug_dvars() {
-  static const EngineDependentDvarMut *dependencies[] = {
-      game::g_vehicleDebug.get(), game::g_vehicleDrawSplines.get(),
-      game::g_vehicleDrawPath.get(), game::com_clientfieldsdebug.get()};
-  for (const EngineDependentDvarMut *dependency : dependencies) {
-    if (!*dependency) {
-      return scheduler::cond_continue;
-    }
-  }
 
   if (utils::flags::has_flag("vehicle-debug")) {
+    static constexpr game::symbol<game::EngineDependentDvarMut> dependencies[] =
+        {game::g_vehicleDebug, game::g_vehicleDrawSplines,
+         game::g_vehicleDrawPath, game::com_clientfieldsdebug};
+    for (const game::symbol<game::EngineDependentDvarMut> &dependency :
+         dependencies) {
+      if (!*dependency.get()) {
+        return scheduler::cond_continue;
+      }
+    }
+
     dvar_boolstring_force<"1">(*game::g_vehicleDrawPath);
     dvar_bool_force<true>(*game::g_vehicleDrawSplines);
     dvar_int_force<1>(*game::g_vehicleDebug);
   }
+  if (utils::flags::has_flag("lobby-debug")) {
+
+    static constexpr game::symbol<game::EngineDependentDvarMut> dependencies[] =
+        {game::lobby_showSVDebug,        game::lobbyDebugLogJoins,
+         game::lobbyDebugLogJoinSuccess, game::lobbymsg_prints,
+         game::ui_lobbyDebugVis,         game::ui_lobbyDebugOverlay,
+         game::ui_lobbyDebugSessionSQJ,  game::ui_lobbyDebugVoice};
+    for (const game::symbol<game::EngineDependentDvarMut> &dependency :
+         dependencies) {
+      if (!*dependency.get()) {
+        return scheduler::cond_continue;
+      }
+    }
+    dvar_bool_force<true>(*game::lobby_showSVDebug);
+    dvar_bool_force<true>(*game::lobbyDebugLogJoins);
+    dvar_bool_force<true>(*game::lobbyDebugLogJoinSuccess);
+    dvar_bool_force<true>(*game::lobbymsg_prints);
+    // 0 - 3
+    dvar_int_force<3>(*game::ui_lobbyDebugVis);
+    dvar_bool_force<true>(*game::ui_lobbyDebugOverlay);
+    dvar_bool_force<true>(*game::ui_lobbyDebugSessionSQJ);
+    dvar_bool_force<true>(*game::ui_lobbyDebugVoice);
+  }
+
+  static constexpr game::symbol<game::EngineDependentDvarMut> dependencies[] = {
+      game::com_clientfieldsdebug};
+  for (const game::symbol<game::EngineDependentDvarMut> &dependency :
+       dependencies) {
+    if (!*dependency.get()) {
+      return scheduler::cond_continue;
+    }
+  }
+
   dvar_bool_force<true>(*game::com_clientfieldsdebug);
   return scheduler::cond_end;
 }
@@ -162,18 +207,17 @@ template <const bool Value> inline void sv_cheats_force() {
   */
   {
     // R_RegisterDvars
-    utils::hook::call(game::select(0x141C9A873, 0x141CA6C43, 0x140379E80),
+    utils::hook::call(game::select(0x141C9A844, 0x141CA6C14, 0x140379E51),
                       Dvar_RegisterBool_Force<Value>);
     // SV_Init
-    utils::hook::call(0x140534DF2_g, Dvar_RegisterBool_Force<Value>);
+    utils::hook::call(0x140534DD2_g, Dvar_RegisterBool_Force<Value>);
   }
   /*
      2. sv_cheats used to enable/disable cheat dvars - controls whether cheat
      protection on a dvar to be modified is checked and respected in internal
      setters.
      Global is named `dvar_cheats` in engine.
-     This is the one that GSC scripts can modify. If not for this hook,
-     anyway.
+     This is the one that GSC scripts can modify, if not for this hook.
   */
   {
     // Dvar_Init
@@ -254,9 +298,7 @@ bool return_false() { return false; }
 } // namespace
 
 class component final : public generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "dvar_patches"; }
-#endif
+  DEFINE_COMPONENT_NAME("dvar_patches");
 
 public:
   void post_unpack() override {
@@ -311,18 +353,17 @@ public:
     utils::hook::jump(game::select(0x141116edb, 0x141116EBB, 0x0),
                       utils::hook::assemble(dof_enabled_stub));
 
-    if (game::cheats()) {
-      scheduler::schedule(
-          []() {
-            if (*sv_cheats && *dvar_cheats) {
-              dvar_bool_force<true>(*sv_cheats);
-              dvar_bool_force<true>(*dvar_cheats);
-              return scheduler::cond_end;
-            }
-            return scheduler::cond_continue;
-          },
-          scheduler::pipeline::main);
-    }
+    scheduler::schedule(
+        []() {
+          if (*sv_cheats && !*dvar_cheats) {
+            apply_cheats_setting({});
+            Dvar_SetModifiedCallback(Dvar_FindVar("boiii_allowCheats"),
+                                     apply_cheats_setting);
+            return scheduler::cond_end;
+          }
+          return scheduler::cond_continue;
+        },
+        scheduler::pipeline::main);
   }
 
   static void patch_server() {
@@ -331,6 +372,9 @@ public:
 
     // Set the flag of 'sv_network_fps'
     utils::hook::set<uint32_t>(0x140534FD8_g, game::DVAR_NONE);
+
+    // Disable `sv_pure`
+    utils::hook::call(0x140534DF2_g, Dvar_RegisterBool_Force<false>);
 
     // Enable or disable both (??) sv_cheats dvars immediately after
     // registration

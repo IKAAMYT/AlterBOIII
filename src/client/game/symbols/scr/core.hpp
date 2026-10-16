@@ -78,6 +78,19 @@ WEAK symbol<void(level::gentity_s *ent, ScrVarCanonicalName_t stringValue,
     Scr_Notify_Canon{0x141B3A130, 0x141B46500, 0x1402F5FF0};
 WEAK symbol<uint32_t(scriptInstance_t inst, const char *filename)>
     Scr_LoadScript{0x1412C8410, 0x1412C83F0, 0x140156610};
+WEAK symbol<void(scriptInstance_t inst, uint8_t *pos, uint32_t errorCode,
+                 const char *message, const char *detail)>
+    VM_RuntimeError{0x1412D4E40, 0x0, 0x140160F50};
+WEAK symbol<var::ScrVarIndex_t(
+    scriptInstance_t inst, const uint8_t *pos, uint32_t numParams,
+    var::ScrVarValue_t *returnValue, var::ScrVarIndex_t self)>
+    Scr_ExecThread{0x1412EA790, 0x1412EA770, 0x140170130};
+WEAK symbol<void(scriptInstance_t inst, var::ScrVarIndex_t threadId)>
+    Scr_FreeThread{0x1412EAB70, 0x1412EAB50, 0x140170510};
+WEAK symbol<void(scriptInstance_t inst)> Scr_InitSystem{0x1412EC340,
+                                                        0x1412EC320, 0x0};
+constexpr size_t SAVED_WORLD_OBJECT_STRIDE = 0x48040;
+WEAK symbol<uint8_t> saved_world_object_valid{0x14518E018, 0x14520D018, 0x0};
 WEAK symbol<void(scriptInstance_t inst, int32_t user)> Scr_BeginLoadScripts{
     0x1412C7E10, 0x1412C7DF0, 0x140156010};
 WEAK symbol<void(ScrString_t *to, ScrString_t from)> Scr_SetString{
@@ -167,6 +180,12 @@ WEAK symbol<void(scriptInstance_t inst, GSC_OBJ *prime_obj,
                  objFileInfo_t *fileInfo, GSC_IMPORT_ITEM *import,
                  char *errorString, int32_t errorStringLength)>
     ReportObjLinkError2{0x1412CB730, 0x1412CB710, 0x0};
+WEAK symbol<int32_t(scriptInstance_t inst, GSC_OBJ *obj,
+                    objFileInfo_t *fileInfo)>
+    GscObjResolve{0x1412CA2D0, 0x0, 0x140158510};
+WEAK symbol<bool(scriptInstance_t inst, GSC_OBJ *obj, GSC_IMPORT_ITEM *import,
+                 uint16_t index, bool isThreaded)>
+    Scr_ResolveScriptFunction{0x1412CC770, 0x0, 0x14015A7D0};
 
 WEAK symbol<ObjFileInfoPool> gObjFileInfo{0x14505D2E0, 0x1450DC2E0,
                                           0x1425DCA80};

@@ -34,6 +34,12 @@ std::filesystem::path asset_output() {
 }
 
 #ifndef NDEBUG
+
+bool voice_trace() {
+  static const bool result = utils::flags::has_flag("voice-trace");
+  return result;
+}
+
 static std::filesystem::path tracing;
 static std::once_flag tracing_flag;
 void set_tracing() {
@@ -70,16 +76,6 @@ std::ofstream &tracing_logfile() {
 }
 #endif
 
-bool ultrawide() {
-  static const bool result = utils::flags::has_flag("ultrawide");
-  return result;
-}
-
-bool cheats() {
-  static const bool result = utils::flags::has_flag("cheats");
-  return result;
-}
-
 bool disable_loadlib() {
   static const bool result = utils::flags::has_flag("disable-loadlib");
   return result;
@@ -99,4 +95,21 @@ bool is_headless() {
   static const bool headless = utils::flags::has_flag("headless");
   return headless;
 }
+
+bool scr_debug() {
+  static const bool result = utils::flags::has_flag("scr-debug");
+  return result;
+}
+
+bool allow_unsafe_lua() {
+  static const bool result = utils::flags::has_flag("unsafe-lua");
+  return result;
+}
+
+#ifndef NDEBUG
+bool vm_trace() {
+  static const bool result = utils::flags::has_flag("vm-trace");
+  return result;
+}
+#endif
 } // namespace game

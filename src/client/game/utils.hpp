@@ -123,11 +123,9 @@ EngineDependentDvarMut register_dvar_string(const char *dvar_name,
 }
 template <DvarFlagLike T>
 void dvar_add_flags(EngineDependentDvarMut dvar, const T flags) {
-  if (!dvar) {
-    return;
+  if (dvar) {
+    dvar.flags() |= flags;
   }
-
-  dvar.flags() |= flags;
 }
 template <DvarFlagLike T>
 void dvar_add_flags(const char *dvar_name, const T flags) {
@@ -140,11 +138,9 @@ void dvar_add_flags(const char *dvar_name, const T flags) {
 
 template <DvarFlagLike T>
 void dvar_set_flags(EngineDependentDvarMut dvar, const T flags) {
-  if (!dvar) {
-    return;
+  if (dvar) {
+    dvar.flags().set(flags);
   }
-
-  dvar.flags().set(flags);
 }
 
 template <DvarFlagLike T>
@@ -158,12 +154,9 @@ void dvar_set_flags(const char *dvar_name, const T flags) {
 
 template <DvarFlagLike T>
 void dvar_remove_flags(EngineDependentDvarMut dvar, const T flags) {
-
-  if (!dvar) {
-    return;
+  if (dvar) {
+    dvar.flags() &= ~flags;
   }
-
-  dvar.flags() &= ~flags;
 }
 
 template <DvarFlagLike T>
@@ -294,50 +287,89 @@ constexpr uint16_t DEFAULT_PORT = 3074;
   return *com_maxclients ? static_cast<ClientNum_t>(com_maxclients->get_int())
                          : lobby::MAX_PLAYERS;
 }
-[[nodiscard]] inline size_t get_max_client_count() {
-  return static_cast<size_t>(get_com_maxclients());
+[[nodiscard]] inline ClientNum_t get_max_client_count() {
+  return static_cast<ClientNum_t>(get_com_maxclients());
 }
 [[nodiscard]] inline std::optional<std::string_view> get_workshop_id() {
   return workshop_id ? workshop_id.get_string() : std::nullopt;
 }
 
-void foreach_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback);
-void foreach_client(const std::function<void(sv::client_s &)> &callback);
-void first_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback);
-void first_client(const std::function<bool(sv::client_s &)> &callback);
+typedef fastcall_t<void(
+    const std::function<void(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback)>
+    forEachClientIterator_t;
+
+void foreach_client(const std::function<void(sv::client_s &cl,
+                                             ClientNum_t clientNum)> &callback);
+void foreach_client(const std::function<void(sv::client_s &cl)> &callback);
+void first_client(const std::function<bool(sv::client_s &cl,
+                                           ClientNum_t clientNum)> &callback);
+void first_client(const std::function<bool(sv::client_s &cl)> &callback);
 
 void foreach_connected_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback);
+    const std::function<void(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
 void foreach_connected_client(
-    const std::function<void(sv::client_s &)> &callback);
+    const std::function<void(sv::client_s &cl)> &callback);
+inline ClientNum_t connected_client_count() {
+  ClientNum_t count = game::ClientNum_t::CLIENT_INDEX_0;
+  foreach_connected_client([&count](sv::client_s &cl) { ++count; });
+  return count;
+}
 void first_connected_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback);
+    const std::function<bool(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
 void first_connected_client(
-    const std::function<bool(sv::client_s &)> &callback);
-
+    const std::function<bool(sv::client_s &cl)> &callback);
 bool access_connected_client(
-    size_t index, const std::function<void(sv::client_s &)> &callback);
+    ClientNum_t clientNum,
+    const std::function<void(sv::client_s &cl)> &callback);
+
+void foreach_test_client(
+    const std::function<void(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
+void foreach_test_client(const std::function<void(sv::client_s &cl)> &callback);
+inline ClientNum_t test_client_count() {
+  ClientNum_t count = game::ClientNum_t::CLIENT_INDEX_0;
+  foreach_test_client([&count](sv::client_s &cl) { ++count; });
+  return count;
+}
+void first_test_client(
+    const std::function<bool(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
+void first_test_client(const std::function<bool(sv::client_s &cl)> &callback);
 
 void foreach_active_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback);
-void foreach_active_client(const std::function<void(sv::client_s &)> &callback);
+    const std::function<void(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
+void foreach_active_client(
+    const std::function<void(sv::client_s &cl)> &callback);
+inline ClientNum_t active_client_count() {
+  ClientNum_t count = game::ClientNum_t::CLIENT_INDEX_0;
+  foreach_active_client([&count](sv::client_s &cl) { ++count; });
+  return count;
+}
 void first_active_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback);
-void first_active_client(const std::function<bool(sv::client_s &)> &callback);
+    const std::function<bool(sv::client_s &cl, ClientNum_t clientNum)>
+        &callback);
+void first_active_client(const std::function<bool(sv::client_s &cl)> &callback);
+bool access_active_client(
+    ClientNum_t clientNum,
+    const std::function<void(sv::client_s &cl)> &callback);
 
-bool access_active_client(size_t index,
-                          const std::function<void(sv::client_s &)> &callback);
+inline ClientNum_t available_client_count() {
+  return static_cast<ClientNum_t>(+get_com_maxclients() -
+                                  +connected_client_count());
+}
 
 template <typename E>
 concept EnumType = std::is_enum_v<E>;
 
 template <EnumType T, const T MinValue, const T MaxValue>
-inline constexpr bool valid(T enum_val) {
+inline constexpr bool valid(const T enum_val) {
   using Underlying = std::underlying_type_t<T>;
 
-  Underlying casted = static_cast<Underlying>(enum_val);
+  const Underlying casted = static_cast<Underlying>(enum_val);
   return casted >= static_cast<Underlying>(MinValue) &&
          casted < static_cast<Underlying>(MaxValue);
 }
@@ -368,11 +400,7 @@ template <typename T>
 inline level::gentity_t *client_ent(T index) {
   level::gentity_pool *pool = get_g_entities();
   ClientNum_t clientNum = static_cast<game::ClientNum_t>(index);
-  if (valid_client_num(clientNum)) {
-    return &pool->pool[clientNum];
-  }
-
-  return nullptr;
+  return valid_client_num(clientNum) ? &pool->pool[clientNum] : nullptr;
 }
 } // namespace level
 

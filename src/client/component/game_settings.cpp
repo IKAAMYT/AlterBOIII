@@ -67,10 +67,11 @@ void cmd_exec_stub(utils::hook::assembler &a) {
 
   a.get().mov(rcx, r10);
   a.call_aligned(has_game_settings_file_on_disk);
-  a.get().cmp(rax, 1);
+  // A C++ bool return is in AL; the upper bits of RAX aren't the result
+  a.get().test(al, al);
   a.popad64();
 
-  a.get().jnz(exec_from_fastfile);
+  a.get().jz(exec_from_fastfile);
 
   a.get().bind(exec_from_disk);
   a.jmp(game::select(0x1420e0907, 0x1420ED087, 0x1404F855E));
@@ -117,9 +118,7 @@ void search_gamesettings_files_on_disk() {
 } // namespace
 
 struct component final : generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "game_settings"; }
-#endif
+  DEFINE_COMPONENT_NAME("game_settings");
 
   void post_unpack() override {
     search_gamesettings_files_on_disk();

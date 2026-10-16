@@ -46,19 +46,15 @@ bool should_skip_host_update() {
          !(utils::flags::has_flag("beta") && is_dedicated_server());
 }
 
-std::string get_update_file() {
-  if (get_selected_version() == "beta") {
-    return UPDATE_FILE_BETA;
-  }
-  return UPDATE_FILE_MAIN;
-}
+// AlterBO3 (IKAAM): le client est construit sur la branche BETA d'Ezz
+// (merge f45ed84). Les donnees que l'updater recupere (gamesettings,
+// playlists, custom_scripts, lobby_scripts, lua/lobby, zones) doivent donc
+// venir du canal beta de son serveur, sinon le cleanup efface les fichiers
+// que la beta attend (ranked.gsc des weapon kits, server_lobby_selector...).
+// L'exe, data/launcher et data/ui_scripts restent proteges plus bas.
+std::string get_update_file() { return UPDATE_FILE_BETA; }
 
-std::string get_update_folder() {
-  if (get_selected_version() == "beta") {
-    return UPDATE_FOLDER_BETA;
-  }
-  return UPDATE_FOLDER_MAIN;
-}
+std::string get_update_folder() { return UPDATE_FOLDER_BETA; }
 
 std::vector<file_info> parse_file_infos(const std::string &json) {
   rapidjson::Document doc{};

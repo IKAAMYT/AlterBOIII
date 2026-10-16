@@ -523,6 +523,40 @@
             </div>
 
             <div class="settings-section">
+              <div class="settings-section-title">Stockage</div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Espace utilisé par AlterBOIII</div>
+                  <div class="settings-row-desc">Rapports de crash, logs, sauvegardes et poids de chaque mod ou map installé. Un rapport de crash peut peser plusieurs centaines de Mo.</div>
+                </div>
+                <div class="stockage-actions">
+                  <button type="button" class="btn" id="storageCheckBtn">Analyser</button>
+                  <button type="button" class="btn btn-danger" id="storageCleanBtn">Purger les crashs &gt; 7 jours</button>
+                </div>
+              </div>
+              <div class="stockage-resultats" id="storageResults">
+                <div class="stockage-vide">Lance l'analyse pour voir ce qui prend de la place.</div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Sauvegardes de profil</div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row-label">Sauvegarder boiii_players</div>
+                  <div class="settings-row-desc">Stats, réglages, binds et amis, en zip dans le dossier backups. Restaurer une sauvegarde met d'abord le profil actuel de côté.</div>
+                </div>
+                <div class="stockage-actions">
+                  <button type="button" class="btn btn-primary" id="profileBackupBtn">Sauvegarder</button>
+                  <button type="button" class="btn" id="profileBackupsFolderBtn">Ouvrir le dossier</button>
+                </div>
+              </div>
+              <div class="stockage-resultats" id="profileBackupList">
+                <div class="stockage-vide">Aucune sauvegarde pour le moment.</div>
+              </div>
+            </div>
+
+            <div class="settings-section">
               <div class="settings-section-title">Workshop</div>
               <div class="settings-row">
                 <div>

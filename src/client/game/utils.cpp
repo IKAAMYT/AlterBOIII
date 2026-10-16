@@ -30,175 +30,114 @@ __inline_def EngineDependentDvarMut get_dvar(const char *name) {
 
 std::optional<std::string_view> get_dvar_string(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-
-  if (dvar) {
-    return dvar.get_string();
-  }
-
-  return std::nullopt;
+  return dvar ? dvar.get_string() : std::nullopt;
 }
 
 std::optional<int32_t> get_dvar_int(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-
-  if (dvar) {
-    return dvar.get_int();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_int()) : std::nullopt;
 }
 
 std::optional<int32_t> set_dvar_int(const char *dvar_name, int32_t val,
                                     bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 std::optional<uint32_t> get_dvar_uint(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.get_uint();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_uint()) : std::nullopt;
 }
 
 std::optional<uint64_t> get_dvar_uint64(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.get_uint64();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_uint64()) : std::nullopt;
 }
 
 std::optional<uint64_t> set_dvar_uint64(const char *dvar_name, uint64_t val,
                                         bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 std::optional<int64_t> get_dvar_int64(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.get_int64();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_int64()) : std::nullopt;
 }
 
 std::optional<int64_t> set_dvar_int64(const char *dvar_name, int64_t val,
                                       bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 std::optional<bool> get_dvar_bool(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.get_bool();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_bool()) : std::nullopt;
 }
 
 std::optional<bool> set_dvar_bool(const char *dvar_name, bool val,
                                   bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 std::optional<float> get_dvar_float(const char *dvar_name) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.get_float();
-  }
-
-  return std::nullopt;
+  return dvar ? std::optional(dvar.get_float()) : std::nullopt;
 }
 
 std::optional<float> set_dvar_float(const char *dvar_name, float val,
                                     bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 std::optional<std::string> set_dvar_string(const char *dvar_name,
                                            const char *val,
                                            bool execModifiedCallback) {
   EngineDependentDvarMut dvar = get_dvar(dvar_name);
-  if (dvar) {
-    return dvar.set(val, execModifiedCallback);
-  }
-  return std::nullopt;
+  return dvar ? dvar.set(val, execModifiedCallback) : std::nullopt;
 }
 
 template <typename T>
 static void foreach_client(
     T *client_states,
-    const std::function<void(sv::client_s &, size_t index)> &callback) {
-  if (!client_states || !callback) {
-    return;
-  }
-
-  for (size_t i = 0; i < get_max_client_count(); ++i) {
-    callback(client_states[i], i);
+    const std::function<void(sv::client_s &cl, ClientNum_t index)> &callback) {
+  if (client_states && callback) {
+    for (ClientNum_t i = CLIENT_INDEX_FIRST; i < get_max_client_count(); ++i) {
+      callback(client_states[i], i);
+    }
   }
 }
 
 template <typename T>
 static void first_client(
     T *client_states,
-    const std::function<bool(sv::client_s &, size_t index)> &callback) {
-  if (!client_states || !callback) {
-    return;
-  }
-
-  for (size_t i = 0; i < get_max_client_count(); ++i) {
-    if (callback(client_states[i], i)) {
-      break;
+    const std::function<bool(sv::client_s &cl, ClientNum_t index)> &callback) {
+  if (client_states && callback) {
+    for (ClientNum_t i = CLIENT_INDEX_FIRST;
+         i < get_max_client_count() && callback(client_states[i], i); ++i) {
     }
   }
 }
 
 template <typename T>
-static bool access_client(T *client_states, const size_t index,
-                          const std::function<void(sv::client_s &)> &callback) {
-  if (!client_states || !callback) {
-    return false;
+static bool
+access_client(T *client_states, const ClientNum_t index,
+              const std::function<void(sv::client_s &cl)> &callback) {
+  if (client_states && callback && index < get_max_client_count()) {
+    T &client = client_states[index];
+    if (client.state == net::clientState_t::FREE) {
+      callback(client);
+      return true;
+    }
   }
-
-  if (index >= get_max_client_count()) {
-    return false;
-  }
-
-  T &client = client_states[index];
-  if (client.state == net::clientState_t::FREE) {
-    return false;
-  }
-
-  callback(client);
-  return true;
+  return false;
 }
 
 void foreach_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback) {
+    const std::function<void(sv::client_s &cl, ClientNum_t index)> &callback) {
   if (is_server()) {
     foreach_client(*svs_clients, callback);
   } else {
@@ -207,7 +146,7 @@ void foreach_client(
 }
 
 void first_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback) {
+    const std::function<bool(sv::client_s &cl, ClientNum_t index)> &callback) {
   if (is_server()) {
     first_client(*svs_clients, callback);
   } else {
@@ -215,16 +154,19 @@ void first_client(
   }
 }
 
-void foreach_client(const std::function<void(sv::client_s &)> &callback) {
-  foreach_client([&](sv::client_s &client, size_t) { callback(client); });
+void foreach_client(const std::function<void(sv::client_s &cl)> &callback) {
+  foreach_client(
+      [&callback](sv::client_s &client, ClientNum_t) { callback(client); });
 }
-void first_client(const std::function<bool(sv::client_s &)> &callback) {
-  first_client([&](sv::client_s &client, size_t) { return callback(client); });
+void first_client(const std::function<bool(sv::client_s &cl)> &callback) {
+  first_client([&callback](sv::client_s &client, ClientNum_t) {
+    return callback(client);
+  });
 }
 
 void foreach_connected_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback) {
-  foreach_client([&](sv::client_s &client, const size_t index) {
+    const std::function<void(sv::client_s &cl, ClientNum_t index)> &callback) {
+  foreach_client([&](sv::client_s &client, const ClientNum_t index) {
     if (client.state != net::clientState_t::FREE) {
       callback(client, index);
     }
@@ -232,14 +174,14 @@ void foreach_connected_client(
 }
 
 void foreach_connected_client(
-    const std::function<void(sv::client_s &)> &callback) {
+    const std::function<void(sv::client_s &cl)> &callback) {
   foreach_connected_client(
-      [&](sv::client_s &client, size_t) { callback(client); });
+      [&callback](sv::client_s &client, ClientNum_t) { callback(client); });
 }
 
 void first_connected_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback) {
-  first_client([&](sv::client_s &client, const size_t index) {
+    const std::function<bool(sv::client_s &cl, ClientNum_t index)> &callback) {
+  first_client([&callback](sv::client_s &client, const ClientNum_t index) {
     if (client.state != net::clientState_t::FREE) {
       return callback(client, index);
     }
@@ -248,23 +190,53 @@ void first_connected_client(
 }
 
 void first_connected_client(
-    const std::function<bool(sv::client_s &)> &callback) {
-  first_connected_client(
-      [&](sv::client_s &client, size_t) { return callback(client); });
+    const std::function<bool(sv::client_s &cl)> &callback) {
+  first_connected_client([&callback](sv::client_s &client, ClientNum_t) {
+    return callback(client);
+  });
 }
 
 bool access_connected_client(
-    const size_t index, const std::function<void(sv::client_s &)> &callback) {
-  if (is_server()) {
-    return access_client(*svs_clients, index, callback);
-  }
+    const ClientNum_t index,
+    const std::function<void(sv::client_s &cl)> &callback) {
+  return is_server() ? access_client(*svs_clients, index, callback)
+                     : access_client(*svs_clients_cl, index, callback);
+}
 
-  return access_client(*svs_clients_cl, index, callback);
+void foreach_test_client(
+    const std::function<void(sv::client_s &cl, ClientNum_t index)> &callback) {
+  foreach_client([&](sv::client_s &client, const ClientNum_t index) {
+    if (client.bIsTestClient) {
+      callback(client, index);
+    }
+  });
+}
+
+void foreach_test_client(
+    const std::function<void(sv::client_s &cl)> &callback) {
+  foreach_client(
+      [&callback](sv::client_s &client, ClientNum_t) { callback(client); });
+}
+
+void first_test_client(
+    const std::function<bool(sv::client_s &cl, ClientNum_t index)> &callback) {
+  first_client([&callback](sv::client_s &client, const ClientNum_t index) {
+    if (client.bIsTestClient) {
+      return callback(client, index);
+    }
+    return false;
+  });
+}
+
+void first_test_client(const std::function<bool(sv::client_s &cl)> &callback) {
+  first_test_client([&callback](sv::client_s &client, ClientNum_t) {
+    return callback(client);
+  });
 }
 
 void foreach_active_client(
-    const std::function<void(sv::client_s &, size_t index)> &callback) {
-  foreach_client([&](sv::client_s &client, const size_t index) {
+    const std::function<void(sv::client_s &cl, ClientNum_t index)> &callback) {
+  foreach_client([&callback](sv::client_s &client, const ClientNum_t index) {
     if (client.state > net::clientState_t::CONNECTED) {
       callback(client, index);
     }
@@ -272,33 +244,31 @@ void foreach_active_client(
 }
 
 void foreach_active_client(
-    const std::function<void(sv::client_s &)> &callback) {
+    const std::function<void(sv::client_s &cl)> &callback) {
   foreach_active_client(
-      [&](sv::client_s &client, size_t) { callback(client); });
+      [&callback](sv::client_s &client, ClientNum_t) { callback(client); });
 }
 
 void first_active_client(
-    const std::function<bool(sv::client_s &, size_t index)> &callback) {
-  first_client([&](sv::client_s &client, const size_t index) {
-    if (client.state > net::clientState_t::CONNECTED) {
-      return callback(client, index);
-    }
-    return false;
+    const std::function<bool(sv::client_s &cl, ClientNum_t index)> &callback) {
+  first_client([&callback](sv::client_s &client, const ClientNum_t index) {
+    return client.state > net::clientState_t::CONNECTED &&
+           callback(client, index);
   });
 }
 
-void first_active_client(const std::function<bool(sv::client_s &)> &callback) {
-  first_active_client(
-      [&](sv::client_s &client, size_t) { return callback(client); });
+void first_active_client(
+    const std::function<bool(sv::client_s &cl)> &callback) {
+  first_active_client([&callback](sv::client_s &client, ClientNum_t) {
+    return callback(client);
+  });
 }
 
-bool access_active_client(const size_t index,
-                          const std::function<void(sv::client_s &)> &callback) {
-  if (is_server()) {
-    return access_client(*svs_clients, index, callback);
-  }
-
-  return access_client(*svs_clients_cl, index, callback);
+bool access_active_client(
+    const ClientNum_t index,
+    const std::function<void(sv::client_s &cl)> &callback) {
+  return is_server() ? access_client(*svs_clients, index, callback)
+                     : access_client(*svs_clients_cl, index, callback);
 }
 
 const std::vector<std::string> &get_registered_dvar_names() {

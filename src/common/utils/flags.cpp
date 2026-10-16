@@ -26,8 +26,20 @@ inline void add_debug_profile_arguments() {
       .help("Trace all script built-in API function and method calls.")
       .default_value(false)
       .implicit_value(true);
+  program.add_argument("-vmt", "-vm-trace", "--vm-trace")
+      .help("Trace execution of all VM opcode handlers.")
+      .default_value(false)
+      .implicit_value(true);
+  program.add_argument("-vct", "-voice-trace", "--voice-trace")
+      .help("Trace execution of all voicechat APIs")
+      .default_value(false)
+      .implicit_value(true);
   program.add_argument("-vd", "-vehicle-debug", "--vehicle-debug")
       .help("Enable vehicle debug dvars.")
+      .default_value(false)
+      .implicit_value(true);
+  program.add_argument("-ld", "-lobby-debug", "--lobby-debug")
+      .help("Enable lobby debug dvars.")
       .default_value(false)
       .implicit_value(true);
 }
@@ -156,6 +168,11 @@ int32_t parse_flags(int argc, char *argv[]) {
       .help("Disable rate limiting in dedicated server")
       .default_value(false)
       .implicit_value(true);
+  program.add_argument("-scr-debug", "--scr-debug")
+      .help("Add runtime diagnostics for common and programmatically "
+            "detectable erroneous or poorly optimised GSC logic.")
+      .default_value(false)
+      .implicit_value(true);
   program.add_argument("-quiet-crash", "--quiet-crash")
       .help("On crash, disable message box and minidump directory popups.")
       .default_value(false)
@@ -197,6 +214,10 @@ int32_t parse_flags(int argc, char *argv[]) {
       .default_value(std::string("assets"));
   program.add_argument("-nc", "-nocinematics", "--nocinematics")
       .help("Skip playing all cinematics.")
+      .implicit_value(true)
+      .default_value(false);
+  program.add_argument("-noforestcinematic", "--noforestcinematic")
+      .help("Skip the forest video that plays before joining a Zombies game.")
       .implicit_value(true)
       .default_value(false);
   program.add_argument("-ls", "-log-script-errors", "--log-script-errors")

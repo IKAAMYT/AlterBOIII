@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <loader/component_loader.hpp>
 
+#include "command.hpp"
 #include "scheduler.hpp"
 
 #include <game/game.hpp>
@@ -27,25 +28,22 @@ game::EngineDependentDvar cl_yaw_speed;
 game::EngineDependentDvar cl_pitch_speed;
 
 void stop_intro_if_needed() {
-  if (game::com::Com_SessionMode_GetMode() != game::eModes::ZOMBIES &&
-      game::com::Com_SessionMode_GetMode() != game::eModes::CAMPAIGN) {
-    return;
-  }
-
-  scheduler::once(
-      [] {
-        scheduler::schedule(
-            [] {
-              if (!game::sys::Sys_IsDatabaseReady()) {
+  if (game::com::Com_SessionMode_GetMode() == game::eModes::ZOMBIES ||
+      game::com::Com_SessionMode_GetMode() == game::eModes::CAMPAIGN) {
+    scheduler::once(
+        [] {
+          scheduler::schedule(
+              [] {
+                if (game::sys::Sys_IsDatabaseReady()) {
+                  game::cinematic::Cinematic_StopPlayback(0, true);
+                  return scheduler::cond_end;
+                }
                 return scheduler::cond_continue;
-              }
-
-              game::cinematic::Cinematic_StopPlayback(0, true);
-              return scheduler::cond_end;
-            },
-            scheduler::main);
-      },
-      scheduler::main, 15s);
+              },
+              scheduler::main);
+        },
+        scheduler::main, 15s);
+  }
 }
 
 void preload_map_stub(game::LocalClientNum_t local_client_num,
@@ -75,8 +73,6 @@ void fix_amd_cpu_stuttering() {
       },
       scheduler::pipeline::main);
 }
-
-MMRESULT mixer_open_stub() { return MMSYSERR_NODRIVER; }
 
 bool is_mod_loaded_stub() { return false; }
 
@@ -184,8 +180,6 @@ void live_delayed_com_error_stub(const char *comErrorString, int32_t code) {
   live_delayed_com_error_hook.invoke(comErrorString, code);
 }
 
-utils::hook::detour CL_CheckForResendHook;
-
 utils::hook::detour CG_SightTrace_Safe_hook;
 bool CG_SightTrace_Safe(int32_t *hitNum, const game::vec3_t *start,
                         const game::vec3_t *end, game::contents_t mask,
@@ -277,7 +271,7 @@ void Hunk_UserFree_ResetGlobal([[maybe_unused]] game::hunk::HunkUser *user,
   de/encryption, we cannot feasibly access these globals in boiii.
 
   To circumvent this, rather than allocate these pools at a varying address on
-  the heap, we can instead statically allocate these pool and return the address
+  the heap, we can instead statically allocate each pool and return the address
   to our allocation where the pool would be dynamically allocated in the base
   game.
 
@@ -355,14 +349,14 @@ int32_t Dvar_GetInt_NonZero(game::EngineDependentDvar dvar) {
   return val ? val : NonZeroVal;
 }
 
-utils::hook::detour TaskManager2_ProcessDemonwareTask_Safe_hook;
+utils::hook::detour TaskManager2_ProcessDemonwareTask_hook;
 void TaskManager2_ProcessDemonwareTask_Safe(game::dw::TaskRecord *task) {
   if (task != nullptr &&
       (task->state != game::dw::TaskState::INPROGRESS ||
        (task->remoteTask.m_ptr != nullptr &&
         task->remoteTask.m_ptr->vtbl != nullptr &&
         task->remoteTask.m_ptr->vtbl->checkTimeout != nullptr))) {
-    TaskManager2_ProcessDemonwareTask_Safe_hook.invoke(task);
+    TaskManager2_ProcessDemonwareTask_hook.invoke(task);
   }
 }
 
@@ -389,7 +383,7 @@ void fix_mapswitch_crashes() {
       reinterpret_cast<void *>(
           Dvar_GetInt_NonZero<NETCHAN_EMERGENCYFREEPERCENT_DEFAULT_VAL>));
 
-  TaskManager2_ProcessDemonwareTask_Safe_hook.create(
+  TaskManager2_ProcessDemonwareTask_hook.create(
       game::dw::task::TaskManager2_ProcessDemonwareTask.get(),
       TaskManager2_ProcessDemonwareTask_Safe);
 }
@@ -435,18 +429,24 @@ void SV_RestartCmd_RotateOrDefault() {
   }
 }
 
-template <const IntegralLike auto Val> decltype(Val) return_const() {
-  return Val;
-}
+template <const auto Val> decltype(Val) return_const() { return Val; }
 
 utils::hook::detour Com_FPSLimit_hook;
+
+game::EngineDependentDvarMut cl_log_config_strings;
+void register_config_string_print_stub(const game::consoleChannel_e channel,
+                                       const game::consoleLabel_e label,
+                                       const char *fmt, const int32_t index,
+                                       const char *data) {
+  if (cl_log_config_strings && cl_log_config_strings.get_bool()) {
+    game::com::Com_Printf(channel, label, fmt, index, data);
+  }
+}
 
 } // namespace
 
 class component final : public client_component {
-#ifndef NDEBUG
-  std::string name() override { return "client_patches"; }
-#endif
+  DEFINE_COMPONENT_NAME("client_patches");
 
 public:
   void post_unpack() override {
@@ -463,10 +463,6 @@ public:
 
     // Don't modify process priority
     utils::hook::nop(game::select(0x1422BBB28, 0x142334C98, 0x0), 6);
-
-    // Kill microphones for now
-    utils::hook::set(game::select(0x15AA6A29C, 0x15AAE9254, 0x0),
-                     mixer_open_stub);
 
     preload_map_hook.create(game::cl::CL_PreloadMap, preload_map_stub);
 
@@ -487,6 +483,30 @@ public:
 
     // Always get loadscreen gametype from s_gametype
     utils::hook::set<uint8_t>(game::select(0x142232ABC, 0x14228F5DC, 0x0),
+                              0xEB);
+
+    // Show bots' ranks on the scoreboard and next to their overhead names.
+    // Bots have no XUID, and custom games aren't public online games.
+    // XUID lookups, only checked for 0
+    utils::hook::call(
+        game::lua::cod::api::Lua_CoD_LuaCall_GetRankIconForClient.offset(0x82),
+        return_const<true>);
+    utils::hook::call(
+        game::lua::cod::api::Lua_CoD_LuaCall_GetRankStringForClient.offset(
+            0x8E),
+        return_const<true>);
+    // `Com_SessionMode_IsPublicOnlineGame` calls
+    utils::hook::call(
+        game::lua::cod::api::Lua_CoD_LuaCall_GetRankIconForClient.offset(0x61),
+        return_const<true>);
+    utils::hook::call(
+        game::lua::cod::api::Lua_CoD_LuaCall_GetRankStringForClient.offset(
+            0x65),
+        return_const<true>);
+    // Overhead names: `Com_SessionMode_IsPublicOnlineGame` call and XUID check
+    utils::hook::call(game::select(0x14069D8BB, 0x14069D8BB, 0x0),
+                      return_const<true>);
+    utils::hook::set<uint8_t>(game::select(0x14069D8D7, 0x14069D8D7, 0x0),
                               0xEB);
 
     cl_yaw_speed = game::register_dvar_float(
@@ -534,27 +554,9 @@ public:
       This crash, as well as a few other patches required to be made to
       CL_CheckForResend's internal logic, presented the need for total
       replacement of the function.
-
-      Total replacement of a function can usually be performed by `hook`ing
-      the function and instead executing another function which does not invoke
-      the hooked function. In this case, the crash-triggering instruction would
-      still be executed, as detour invocation executes the hooked function's
-      prologue.
-
-      To resolve this, we instead replace all known calls to the original
-      function with its replacement function. We also hook and replace the
-      original function in case of unknown, obfuscated callers.
     */
-    // CL_MapLoading call to CL_CheckForResend
-    // Note: crash inconsistently occurs when CL_CheckForResend is called here.
-    utils::hook::call(game::select(0x141359DD4, 0x141359DB4, 0x0),
+    utils::hook::jump(game::cl::CL_CheckForResend.get(),
                       game::cl::CL_CheckForResend_Impl);
-    // CL_Frame call to CL_CheckForResend
-    utils::hook::call(game::select(0x1413514DE, 0x1413514BE, 0x0),
-                      game::cl::CL_CheckForResend_Impl);
-
-    CL_CheckForResendHook.create(game::cl::CL_CheckForResend.get(),
-                                 game::cl::CL_CheckForResend_Impl);
     SV_MapRestart_f_hook.create(
         game::sv::SV_MapRestart_f.get(),
         SV_RestartCmd_RotateOrDefault<game::RestartMethod_t::FULL>);
@@ -565,6 +567,16 @@ public:
     Com_FPSLimit_hook.create(
         game::com::Com_FPSLimit.get(),
         return_const<std::numeric_limits<uint32_t>::max()>);
+
+    command::add("unmuteall", game::lobby::voice::UnMuteAllClients);
+    command::add("muteall", game::lobby::voice::MuteAllClients);
+
+    if (game::is_new_client()) {
+      utils::hook::call(0x1400AAB93_g, register_config_string_print_stub);
+      cl_log_config_strings = game::register_dvar_bool(
+          "cl_logConfigStrings", false, game::DVAR_NONE,
+          "Print every config string the client registers");
+    }
   }
 };
 } // namespace client_patches

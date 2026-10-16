@@ -41,6 +41,19 @@
     'Maintenance': 'Maintenance',
     'AlterCOD Team': 'AlterCOD Team',
 
+    // Stockage / sauvegardes (beta Ezz)
+    'Stockage': 'Storage',
+    'Espace utilisé par AlterBOIII': 'Disk space used by AlterBOIII',
+    'Rapports de crash, logs, sauvegardes et poids de chaque mod ou map installé. Un rapport de crash peut peser plusieurs centaines de Mo.': 'Crash reports, logs, backups and the size of each installed mod or map. A single crash report can take several hundred MB.',
+    'Analyser': 'Check',
+    'Purger les crashs > 7 jours': 'Delete crash reports > 7 days',
+    'Lance l\'analyse pour voir ce qui prend de la place.': 'Run the check to see what is using disk space.',
+    'Sauvegardes de profil': 'Profile backups',
+    'Sauvegarder boiii_players': 'Back up boiii_players',
+    'Stats, réglages, binds et amis, en zip dans le dossier backups. Restaurer une sauvegarde met d\'abord le profil actuel de côté.': 'Stats, settings, binds and friends, zipped into the backups folder. Restoring a backup saves the current profile first.',
+    'Sauvegarder': 'Back up',
+    'Aucune sauvegarde pour le moment.': 'No backups yet.',
+
     // Options de lancement
     'Options de lancement': 'Launch options',
     'Mode sans échec': 'Safe mode',
@@ -5104,6 +5117,169 @@ fetchReleases();
   }, 5000);
 
   setTimeout(function() { chargerIdentite(); chargerAmis(); }, 1200);
+})();
+
+/* ─────────────────────────────────────────────────────────────
+   STOCKAGE + SAUVEGARDES DE PROFIL
+   Port des sections "Storage" et "Profile Backups" du launcher de la
+   beta d'Ezz. Callbacks C++ : getStorageUsage, deleteOldCrashReports,
+   listProfileBackups, backUpProfile, restoreProfileBackup,
+   openBackupsFolder. ES5 uniquement.
+   ───────────────────────────────────────────────────────────── */
+(function initStockage() {
+  var resultats = document.getElementById('storageResults');
+  var listeSauv = document.getElementById('profileBackupList');
+  if (!resultats && !listeSauv) return;
+
+  function appel(nom, arg) {
+    var ex = getExternal();
+    if (!ex || typeof ex[nom] !== 'function') return null;
+    return arg === undefined ? ex[nom]() : ex[nom](arg);
+  }
+
+  function ligne(conteneur, nom, taille, bouton) {
+    var l = document.createElement('div');
+    l.className = 'stockage-ligne';
+    var n = document.createElement('div');
+    n.className = 'stockage-nom';
+    n.textContent = nom;
+    n.title = nom;
+    l.appendChild(n);
+    var t = document.createElement('div');
+    t.className = 'stockage-taille';
+    t.textContent = taille || '';
+    l.appendChild(t);
+    if (bouton) l.appendChild(bouton);
+    conteneur.appendChild(l);
+  }
+
+  function vide(conteneur, texte) {
+    conteneur.innerHTML = '';
+    var v = document.createElement('div');
+    v.className = 'stockage-vide';
+    v.textContent = texte;
+    conteneur.appendChild(v);
+  }
+
+  /* ── Stockage ── */
+  function analyser() {
+    if (!resultats) return;
+    vide(resultats, 'Analyse en cours…');
+    setTimeout(function() {
+      var brut = null;
+      try { brut = appel('getStorageUsage'); } catch (e) { brut = null; }
+      var u = null;
+      try { u = brut ? JSON.parse(brut) : null; } catch (e) { u = null; }
+      if (!u) { vide(resultats, 'Impossible d\'analyser le stockage.'); return; }
+
+      resultats.innerHTML = '';
+      ligne(resultats, 'Rapports de crash',
+        (u.crashCount || 0) + ' fichier' + ((u.crashCount || 0) > 1 ? 's' : '') +
+        ', ' + (u.crashSize || '0 B') +
+        ' (' + (u.oldCrashCount || 0) + ' de plus de 7 jours, ' + (u.oldCrashSize || '0 B') + ')');
+      ligne(resultats, 'Logs', u.logsSize || '0 B');
+      ligne(resultats, 'Sauvegardes de profil', u.backupsSize || '0 B');
+      var items = u.items || [];
+      for (var i = 0; i < items.length; i++) {
+        ligne(resultats, items[i].name || '?', items[i].size || '');
+      }
+      if (!items.length) {
+        ligne(resultats, 'Mods et maps installés', 'aucun');
+      }
+    }, 0);
+  }
+
+  var btnAnalyser = document.getElementById('storageCheckBtn');
+  if (btnAnalyser) btnAnalyser.onclick = analyser;
+
+  var btnPurger = document.getElementById('storageCleanBtn');
+  if (btnPurger) {
+    btnPurger.onclick = function() {
+      showConfirm('Purger les rapports de crash',
+        'Supprimer les rapports de crash de plus de 7 jours ? Les récents sont conservés au cas où tu devrais encore les envoyer.',
+        function() {
+          var res = '';
+          try { res = appel('deleteOldCrashReports') || '0'; } catch (e) { res = ''; }
+          if (res === '') {
+            showMessage('Purger les rapports de crash', 'Les rapports n\'ont pas pu être supprimés.');
+            return;
+          }
+          var parts = String(res).split(' ');
+          var n = parseInt(parts[0], 10) || 0;
+          showMessage('Purger les rapports de crash',
+            n ? n + ' rapport' + (n > 1 ? 's' : '') + ' supprimé' + (n > 1 ? 's' : '') +
+                ', ' + parts.slice(1).join(' ') + ' libérés.'
+              : 'Aucun rapport de crash de plus de 7 jours.');
+          analyser();
+        });
+    };
+  }
+
+  /* ── Sauvegardes de profil ── */
+  function chargerSauvegardes() {
+    if (!listeSauv) return;
+    var sauv = [];
+    try { sauv = JSON.parse(appel('listProfileBackups') || '[]'); } catch (e) { sauv = []; }
+    if (!sauv || typeof sauv.length !== 'number' || !sauv.length) {
+      vide(listeSauv, 'Aucune sauvegarde pour le moment.');
+      return;
+    }
+    listeSauv.innerHTML = '';
+    for (var i = 0; i < sauv.length; i++) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = 'Restaurer';
+      btn.onclick = (function(fichier) {
+        return function() {
+          showConfirm('Restaurer le profil',
+            'Remplacer boiii_players par <b>' + String(fichier).replace(/</g, '&lt;') +
+            '</b> ? Le profil actuel est d\'abord sauvegardé.',
+            function() {
+              var r = 'error';
+              try { r = appel('restoreProfileBackup', fichier) || 'error'; } catch (e) { r = 'error'; }
+              if (r === 'game_running') {
+                showMessage('Restaurer le profil', 'Ferme le jeu avant de restaurer un profil.');
+              } else if (r === 'ok') {
+                try { if (typeof loadBinds === 'function') loadBinds(); } catch (e) {}
+                showMessage('Restaurer le profil', 'Profil restauré.');
+              } else {
+                showMessage('Restaurer le profil', 'Le profil n\'a pas pu être restauré depuis cette sauvegarde.');
+              }
+              chargerSauvegardes();
+            });
+        };
+      })(sauv[i].file);
+      ligne(listeSauv, sauv[i].file || '?', sauv[i].size || '', btn);
+    }
+  }
+
+  var btnSauver = document.getElementById('profileBackupBtn');
+  if (btnSauver) {
+    btnSauver.onclick = function() {
+      var fichier = '';
+      try { fichier = appel('backUpProfile') || ''; } catch (e) { fichier = ''; }
+      showMessage('Sauvegarder le profil',
+        fichier ? 'Profil sauvegardé dans ' + fichier + '.'
+                : 'Il n\'y a pas encore de profil à sauvegarder.');
+      chargerSauvegardes();
+    };
+  }
+
+  var btnDossier = document.getElementById('profileBackupsFolderBtn');
+  if (btnDossier) {
+    btnDossier.onclick = function() {
+      try { appel('openBackupsFolder'); } catch (e) {}
+    };
+  }
+
+  // Liste chargee en entrant sur la page Reglages.
+  var setPageOrigStockage = setPage;
+  setPage = function(cible) {
+    setPageOrigStockage(cible);
+    if (cible === 'settings') chargerSauvegardes();
+  };
+  setTimeout(chargerSauvegardes, 1500);
 })();
 
 /* ─────────────────────────────────────────────────────────────

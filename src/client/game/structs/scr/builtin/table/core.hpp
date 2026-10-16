@@ -24,7 +24,7 @@ union ActorInterfaceMethodTable {
   static inline constexpr size_t COUNT = 8;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -180,7 +180,7 @@ union ActorMethodTable {
   static inline constexpr size_t COUNT = 141;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -263,7 +263,7 @@ union BotMethodTable {
   static inline constexpr size_t COUNT = 69;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -679,7 +679,7 @@ union PlayerMethodTable {
   static inline constexpr size_t COUNT = 402;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -980,7 +980,7 @@ union CommonFunctionTable {
   static inline constexpr size_t COUNT = 287;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -1212,7 +1212,7 @@ union CommonMethodTable {
   static inline constexpr size_t COUNT = 218;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1233,7 +1233,7 @@ union HelicopterMethodTable {
   static inline constexpr size_t COUNT = 7;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1275,7 +1275,7 @@ union HudElemMethodTable {
   static inline constexpr size_t COUNT = 28;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1293,7 +1293,7 @@ union MathFunctionTable {
   static inline constexpr size_t COUNT = 4;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -1324,7 +1324,7 @@ union ScriptEntMethodTable {
   static inline constexpr size_t COUNT = 17;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1462,10 +1462,10 @@ union ScriptVehicleMethodTable {
     BuiltinMethodDef GetVehDamageMultiplier;
   };
 
-  static inline constexpr size_t COUNT = 127;
+  static inline constexpr size_t COUNT = 0x7F;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1485,10 +1485,10 @@ union SentientFunctionTable {
     BuiltinFunctionDef ResetVisibilityCacheWithinRadius;
   };
 
-  static inline constexpr size_t COUNT = 8;
+  static inline constexpr size_t COUNT = 0x8;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);
@@ -1530,10 +1530,10 @@ union SentientMethodTable {
     BuiltinMethodDef GetMotionAngle;
   };
 
-  static inline constexpr size_t COUNT = 31;
+  static inline constexpr size_t COUNT = 0x1F;
   BuiltinMethodDef methods[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(methods);
@@ -1547,10 +1547,10 @@ union UtilFunctionTable {
     BuiltinFunctionDef SetJumpHeight;
   };
 
-  static inline constexpr size_t COUNT = 3;
+  static inline constexpr size_t COUNT = 0x3;
   BuiltinFunctionDef functions[COUNT];
 
-  static const std::array<const char *, COUNT> names;
+  static const std::array<std::string_view, COUNT> names;
 
   DECLARE_NAME_MAP(names, hashes);
   IMPL_TABLE_OPERATORS(functions);

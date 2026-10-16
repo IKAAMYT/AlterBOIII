@@ -4,7 +4,7 @@
 #include <game/structs/quake/core.hpp>
 #include <structs/array.hpp>
 
-#include <macros.hpp>
+#include <macros/macros.hpp>
 
 #include <charconv>
 
@@ -16,6 +16,30 @@ enum class connectionType_e : uint32_t {
   WIRED = 0x1,
   WIRELESS = 0x2,
 };
+
+enum class NetChanMsgType_e : int32_t {
+  INVALID_CHANNEL = -1,
+  SNAPSHOT = 0x0,
+  CLIENTMSG = 0x1,
+  VOICE = 0x2,
+  LOBBY_VOICE = 0x3,
+  LOBBYPRIVATE_STATE = 0x4,
+  LOBBYPRIVATE_HEARTBEAT = 0x5,
+  LOBBYPRIVATE_RELIABLE = 0x6,
+  LOBBYPRIVATE_UNRELIABLE = 0x7,
+  LOBBYPRIVATE_MIGRATE = 0x8,
+  LOBBYGAME_STATE = 0x9,
+  LOBBYGAME_HEARTBEAT = 0xA,
+  LOBBYGAME_RELIABLE = 0xB,
+  LOBBYGAME_UNRELIABLE = 0xC,
+  LOBBYGAME_MIGRATE = 0xD,
+  LOBBY_JOIN = 0xE,
+  PTP = 0xF,
+  CLIENT_CONTENT = 0x10,
+  TEST = 0x11,
+  MAX_CHANNELS = 0x12,
+};
+IMPL_ENUM_OPERATORS(NetChanMsgType_e);
 
 constexpr size_t UINT8_STR_BUF_LEN = 3; // Decimal; 0 - 255
 constexpr size_t UINT16_STR_BUF_LEN = sizeof(uint16_t) * UINT8_STR_BUF_LEN;
@@ -67,7 +91,26 @@ enum netadrtype_t : int32_t {
   NA_LOOPBACK = 0x2,
   NA_RAWIP = 0x3,
   NA_IP = 0x4,
+  // Does not exist in engine
+  NA_INVALID = -1
 };
+
+inline constexpr const char *serialize(netadrtype_t type) {
+  switch (type) {
+  case NA_BOT:
+    return "NA_BOT";
+  case NA_BAD:
+    return "NA_BAD";
+  case NA_LOOPBACK:
+    return "NA_LOOPBACK";
+  case NA_RAWIP:
+    return "NA_RAWIP";
+  case NA_IP:
+    return "NA_IP";
+  default:
+    return "NA_INVALID";
+  }
+}
 
 enum netsrc_t : int32_t {
   NS_NULL = -1,
@@ -79,6 +122,25 @@ enum netsrc_t : int32_t {
   NS_MAXCLIENTS = 0x4,
   NS_PACKET = 0x5,
 };
+
+inline constexpr const char *serialize(netsrc_t src) {
+  switch (src) {
+  case NS_CLIENT1:
+    return "NS_CLIENT1";
+  case NS_CLIENT2:
+    return "NS_CLIENT2";
+  case NS_CLIENT3:
+    return "NS_CLIENT3";
+  case NS_CLIENT4:
+    return "NS_CLIENT4";
+  case NS_SERVER:
+    return "NS_SERVER";
+  case NS_PACKET:
+    return "NS_PACKET";
+  default:
+    return "NS_NULL";
+  }
+}
 
 constexpr size_t NETADR_STR_BUF_LEN =
     NET_IPV4_STR_BUF_LEN + sizeof(char) /*colon*/ +
@@ -98,6 +160,10 @@ struct netadr_t {
   netsrc_t localNetID;
 
   inline std::string toString() const noexcept {
+    return std::format("{}:{}", ipv4.toString(), port);
+  }
+
+  inline std::string serialize() const noexcept {
     return std::format("{}:{}", ipv4.toString(), port);
   }
 
@@ -200,6 +266,24 @@ enum class clientState_t : int32_t {
   PRIMED = 0x4,    // gamestate has been sent, but client hasn't sent a usercmd
   ACTIVE = 0x5,    // client is fully in game
 };
+inline constexpr const char *serialize(const clientState_t state) {
+  switch (state) {
+  case clientState_t::FREE:
+    return "CLIENT_STATE_FREE";
+  case clientState_t::ZOMBIE:
+    return "CLIENT_STATE_ZOMBIE";
+  case clientState_t::RECONNECTING:
+    return "CLIENT_STATE_RECONNECTING";
+  case clientState_t::CONNECTED:
+    return "CLIENT_STATE_CONNECTED";
+  case clientState_t::PRIMED:
+    return "CLIENT_STATE_PRIMED";
+  case clientState_t::ACTIVE:
+    return "CLIENT_STATE_ACTIVE";
+  default:
+    return "CLIENT_STATE_INVALID";
+  }
+}
 IMPL_ENUM_OPERATORS(clientState_t);
 
 struct netProfilePacket_t {
@@ -256,8 +340,7 @@ struct netchanMsgConfig_s {
 
 typedef netchanMsgConfig_s netchanMsgConfig_t;
 
-#pragma pack(push, 1)
-struct netchan_t {
+PACKED(struct netchan_t {
   int32_t outgoingSequence;
   netsrc_t sock;
   int32_t incomingSequence;
@@ -267,13 +350,11 @@ struct netchan_t {
   qboolean waitingForAcks;
   netProfileInfo_t prof;
   uint8_t _padding[4];
-};
+});
 ASSERT_SIZE(netchan_t, 0x618);
-#pragma pack(pop)
 
 // Unverified
-#pragma pack(push, 1)
-struct serverInfo_t {
+PACKED(struct serverInfo_t {
   XNADDR xnaddr;
   XNKEY xnkey;
   XNKID xnkid;
@@ -303,9 +384,8 @@ struct serverInfo_t {
   str16_t gameType;
   bool isInGame;
   uint8_t _padding0E1[7];
-};
+});
 ASSERT_SIZE(serverInfo_t, 0xE8);
-#pragma pack(pop)
 
 } // namespace net
 } // namespace game

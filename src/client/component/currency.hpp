@@ -9,6 +9,7 @@ std::optional<uint32_t> item_quantity(game::ControllerIndex_t controller,
                                       uint32_t inventory_id);
 std::optional<uint32_t> add_cod_points(game::ControllerIndex_t controller,
                                        uint32_t amount);
+bool set_store_price(uint32_t sku, uint32_t cost);
 bool purchase_vials(game::ControllerIndex_t controller, uint32_t cost,
                     uint32_t amount);
 bool purchase_distills(game::ControllerIndex_t controller,
@@ -18,7 +19,9 @@ bool cook_recipe(game::ControllerIndex_t controller, uint32_t recipe,
 uint32_t distill_balance(bool free);
 uint32_t free_distill_cooldown();
 bool reset_gobblegums(game::ControllerIndex_t controller);
-bool set_currencies_maxed(game::ControllerIndex_t controller, bool maxed);
+bool is_currency_maxed(game::ControllerIndex_t controller, int32_t kind);
+bool set_currency_maxed(game::ControllerIndex_t controller, int32_t kind,
+                        bool maxed);
 
 namespace accounting {
 /*

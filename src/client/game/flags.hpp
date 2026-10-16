@@ -14,13 +14,20 @@ std::filesystem::path asset_output();
 #ifndef NDEBUG
 std::filesystem::path tracing_logfile_path();
 std::ofstream &tracing_logfile();
+bool voice_trace();
 #endif
 
-bool ultrawide();
-bool cheats();
 bool disable_loadlib();
 
 bool alias();
 bool quiet_crash();
 bool is_headless();
+bool scr_debug();
+bool allow_unsafe_lua();
+
+#ifdef NDEBUG
+inline bool vm_trace() { return false; }
+#else
+bool vm_trace();
+#endif
 } // namespace game

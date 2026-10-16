@@ -11,6 +11,19 @@ if type(GoBackAndOpenOverlayOnParent) == "function" then
   end
 end
 
+local function guarded(owner, name, fallback)
+  local original = owner and owner[name]
+  if original then
+    owner[name] = function(...)
+      local ok, result = pcall(original, ...)
+      if ok and result ~= nil then
+        return result
+      end
+      return fallback
+    end
+  end
+end
+
 -- XP bar pcall fix
 pcall(function()
   if DataSources and DataSources.XPProgressionBar then
@@ -72,54 +85,130 @@ pcall(function()
         end)
       end
     end
-    local origGetMatch = CoD.AARUtilityZM.GetMatchStat
-    if origGetMatch then
-      CoD.AARUtilityZM.GetMatchStat = function(a, b)
-        local ok, r = pcall(origGetMatch, a, b)
-        if ok and r then
-          return r
-        end
-        return 0
-      end
-    end
-    local origGetXP = CoD.AARUtilityZM.GetXPEarnedDuringMatch
-    if origGetXP then
-      CoD.AARUtilityZM.GetXPEarnedDuringMatch = function(a, b)
-        local ok, r = pcall(origGetXP, a, b)
-        if ok and r then
-          return r
-        end
-        return 0
-      end
-    end
+    guarded(CoD.AARUtilityZM, "GetMatchStat", 0)
+    guarded(CoD.AARUtilityZM, "GetXPEarnedDuringMatch", 0)
   end
 end)
 
-pcall(function()
-  if CoD.AARUtility then
-    local origSetCurr = CoD.AARUtility.SetCurrLevelModels
-    if origSetCurr then
-      CoD.AARUtility.SetCurrLevelModels = function(...)
-        local ok, err = pcall(origSetCurr, ...)
-        if not ok then
-        end
-      end
-    end
-    local origSetNext = CoD.AARUtility.SetNextLevelModels
-    if origSetNext then
-      CoD.AARUtility.SetNextLevelModels = function(...)
-        local ok, err = pcall(origSetNext, ...)
-        if not ok then
-        end
-      end
-    end
-    local origDoXP = CoD.AARUtility.DoXPBarAnimation
-    if origDoXP then
-      CoD.AARUtility.DoXPBarAnimation = function(...)
-        local ok, err = pcall(origDoXP, ...)
-        if not ok then
-        end
-      end
-    end
+guarded(CoD.AARUtility, "SetCurrLevelModels")
+guarded(CoD.AARUtility, "SetNextLevelModels")
+guarded(CoD.AARUtility, "DoXPBarAnimation")
+
+DataSources.OptionPCVoiceInputDevice = DataSourceHelpers.ListSetup("PC.OptionPCVoiceInputDevice", function()
+  local devices = {
+    {
+      models = {
+        value = "",
+        valueDisplay = "Default",
+      },
+    },
+  }
+  for _, name in ipairs(game.getvoiceinputdevices()) do
+    table.insert(devices, {
+      models = {
+        value = name,
+        valueDisplay = #name > 26 and name:sub(1, 23) .. "..." or name,
+      },
+    })
   end
-end)
+  return devices
+end, true)
+
+if DataSources.OptionVoiceVoice then
+  local widgetTypeForItem = DataSources.OptionVoiceVoice.getWidgetTypeForItem
+  local function option(models, properties)
+    return { models = models, properties = properties }
+  end
+  DataSources.OptionVoiceVoice = DataSourceHelpers.ListSetup("PC.OptionVoiceVoice", function()
+    return {
+      option({
+        label = "PLATFORM_VOICE_CHAT",
+        description = "PLATFORM_VOICECHAT_DESC",
+        profileVarName = "cl_voice",
+        widgetType = "checkbox",
+      }, CoD.PCUtil.OptionsGenericCheckboxProperties),
+      option({
+        label = "PLATFORM_VOICECHAT_VOLUME",
+        description = "PLATFORM_VOICECHAT_VOLUME_DESC",
+        profileVarName = "snd_voicechat_volume",
+        profileType = "user",
+        lowValue = 0,
+        highValue = 1,
+        widgetType = "slider",
+      }, CoD.PCUtil.OptionsGenericSliderProperties),
+      option({
+        label = "PLATFORM_VOICECHAT_RECORD_LEVEL",
+        description = "PLATFORM_VOICECHAT_RECORD_LEVEL_DESC",
+        profileVarName = "snd_voicechat_record_level",
+        profileType = "user",
+        lowValue = 0,
+        highValue = 1,
+        widgetType = "slider",
+      }, CoD.PCUtil.OptionsGenericSliderProperties),
+      option({ widgetType = "spacer", height = 32 }),
+      option({
+        label = "PLATFORM_PUSH_TO_TALK",
+        description = "PLATFORM_PUSH_TO_TALK_DESC",
+        profileVarName = "snd_voicechat_open_mic",
+        profileType = "user",
+        lowValue = 1,
+        highValue = 0,
+        widgetType = "checkbox",
+      }, CoD.PCUtil.OptionsGenericCheckboxProperties),
+      option({
+        label = "Input Device",
+        description = "Microphone used for voice chat.",
+        profileVarName = "voice_input_device",
+        profileType = "function",
+        getFunction = function()
+          return Dvar.voice_input_device:get()
+        end,
+        setFunction = function(_, value)
+          Engine.SetDvar("voice_input_device", value)
+        end,
+        datasource = "OptionPCVoiceInputDevice",
+        widgetType = "dropdown",
+      }, CoD.PCUtil.OptionsGenericDropdownProperties),
+      option({
+        label = "MENU_MUTE_ALL_EXCEPT_PARTY_OPTION",
+        description = "MENU_MUTE_ALL_EXCEPT_PARTY_DESC",
+        profileVarName = "mute_all_except_party",
+        profileType = "user",
+        datasource = "OptionPCVoiceMuteAllExceptParty",
+        widgetType = "dropdown",
+      }, CoD.PCUtil.OptionsGenericDropdownProperties),
+    }
+  end, true)
+  DataSources.OptionVoiceVoice.getWidgetTypeForItem = widgetTypeForItem
+end
+
+if CoD.LobbyBase and CoD.LobbyBase.ShouldBeginLAN then
+  local shouldBeginLAN = CoD.LobbyBase.ShouldBeginLAN
+  CoD.LobbyBase.ShouldBeginLAN = function(controller)
+    if
+      not Engine.IsSignedInToLive(controller)
+      and not Dvar.lobby_forceOffline:get()
+      and not CoD.LobbyBase.FailedDWConnection
+      and not CoD.LobbyBase.ChunkAllDownloading()
+    then
+      return false
+    end
+    return shouldBeginLAN(controller)
+  end
+end
+
+if ScoreboardMuteButtonPromptHidden then
+  local muteButtonPromptHidden = ScoreboardMuteButtonPromptHidden
+  ScoreboardMuteButtonPromptHidden = function(element, controller)
+    local hidden = muteButtonPromptHidden(element, controller)
+    if not hidden or not Engine.IsInGame() or not ScoreboardVisible(controller) or CoD.IsShoutcaster(controller) then
+      return hidden
+    end
+    local clientNum = CoD.SafeGetModelValue(element:getModel(), "clientNum")
+    return clientNum == nil
+      or clientNum < 0
+      or clientNum == Engine.GetClientNum(controller)
+      or CoD.SafeGetModelValue(Engine.GetModelForController(controller), "scoreboardInfo.muteButtonPromptVisible")
+        ~= true
+  end
+end

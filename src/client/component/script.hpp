@@ -8,4 +8,23 @@ void load_rawfiles();
 
 ScriptParseTree *get_loaded_script(const std::string &name);
 RawFile *get_loaded_rawfile(const std::string &name);
+
+void for_each_loaded_script(
+    const std::function<void(const ScriptParseTree &)> &callback);
+
+std::string resolve_hash(ScrVarCanonicalName_t hash);
+std::string get_source_line(const std::string &file, int32_t line_num);
+struct script_frame {
+  std::string file;
+  int32_t line{-1};
+  std::string source;
+};
+
+uint8_t *find_export_address(const std::string &script_name,
+                             const std::string &func_name,
+                             int expected_params = -1);
+std::vector<script_frame> get_script_frames(scriptInstance_t inst,
+                                            const uint8_t *pos = nullptr);
+std::vector<std::string> get_script_callstack(scriptInstance_t inst,
+                                              const uint8_t *pos = nullptr);
 } // namespace script

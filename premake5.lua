@@ -20,7 +20,7 @@ end
 -- Converts tags in "vX.X.X" format and given revision number Y to an array of numbers {X,X,X,Y}.
 -- In the case where the format does not work fall back to padding with zeroes and just ending with the revision number.
 -- partscount can be either 3 or 4.
-function vertonumarr(value, vernumber, partscount)
+local function vertonumarr(value, vernumber, partscount)
   local vernum = {}
   for num in string.gmatch(value or "", "%d+") do
     if #vernum < 3 then
@@ -140,7 +140,7 @@ newaction({
     if oldVersion ~= gitDescribeOutputQuoted then
       -- get current git hash and write to version.txt (used by the preliminary updater)
       -- TODO - remove once proper updater and release versioning exists
-      local proc = assert(io.popen("git rev-parse HEAD", "r"))
+      proc = assert(io.popen("git rev-parse HEAD", "r"))
       local gitCommitHash = assert(proc:read("*a")):gsub("%s+", "")
       proc:close()
 
@@ -159,9 +159,9 @@ newaction({
 
       -- AlterBO3 (IKAAM): force the displayed product version. The auto-generated
       -- version came from the latest git tag. We override it here so the launcher
-      -- and in-game branding always read "2.1.0". To change the shown version
+      -- and in-game branding always read "2.2.0". To change the shown version
       -- later, edit the value below.
-      tagName = "2.1.0"
+      tagName = "2.2.0"
 
       -- get current branch name
       proc = assert(io.popen("git branch --show-current"))
@@ -288,6 +288,7 @@ staticruntime("On")
 editandcontinue("Off")
 warnings("Extra")
 characterset("ASCII")
+manifest("Off")
 
 if _OPTIONS["dev-build"] then
   defines({ "DEV_BUILD" })
@@ -326,6 +327,7 @@ buildoptions({
   "-Wno-format",
   "-Wno-sign-compare",
   "/clang:-march=x86-64",
+  "/clang:-fbracket-depth=1024",
   -- Only used after positive test for support at runtime.
   -- We need to compile with these CPU features regardless of end-user
   -- support to ensure that SSE4.2 and AES ISA extension ASM instructions
@@ -375,6 +377,7 @@ filter({ "configurations:Debug", "toolset:msc*" })
 buildoptions({
   "/MDd",
   "/clang:-march=x86-64",
+  "/clang:-fbracket-depth=1024",
   -- Only used after positive test for support at runtime.
   -- We need to compile with these CPU features regardless of end-user
   -- support to ensure that SSE4.2 and AES ISA extension ASM instructions

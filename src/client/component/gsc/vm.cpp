@@ -1,13 +1,21 @@
 #include <std_include.hpp>
 
-#include "gsc_funcs.hpp"
-#include "loader/component_loader.hpp"
 #include "vm.hpp"
+
+#include "loader/component_loader.hpp"
+
 #include <game/impl/scr/vm/op.hpp>
+
+#include "func/replacefunc.hpp"
+
 #include <utils/string.hpp>
 
 namespace gsc {
 namespace vm {
+
+using namespace game;
+using namespace game::scr;
+using namespace game::scr::var;
 
 inline void flush_stack(scriptInstance_t inst,
                         volatile vm::function_stack_t *fs,
@@ -66,7 +74,7 @@ inline void __attribute__((optnone))
 invoke_opcode_err(scriptInstance_t inst, volatile vm::function_stack_t *fs,
                   volatile vm::ScrVmContext_t *vmc, volatile bool *terminate) {
 #ifndef NDEBUG
-  game::trace("[Scr][VM] Entered VM_{}_ErrRecovery\n", vm::op::serialize(Op));
+  game::trace("[Scr][VM] Entered VM_{}_ErrRecovery", vm::op::serialize(Op));
 #endif
   HOOKED_OPCODE_ERR_HANDLERS[+Op](inst, fs, vmc, terminate);
 }
@@ -75,9 +83,19 @@ template <const game::scr::vm::op::Opcode Op>
 __attribute__((optnone)) void
 flush_exec(scriptInstance_t inst, volatile vm::function_stack_t *fs,
            volatile vm::ScrVmContext_t *vmc, volatile bool *terminate) {
-
+#ifndef NDEBUG
+  if (game::vm_trace()) {
+    game::trace("[Scr][VM] Entered VM_{}_Handler", vm::op::serialize(Op));
+  }
+#endif
   flush_stack(inst, fs, vmc, terminate);
   invoke_opcode<Op>(inst, fs, vmc, terminate);
+#ifndef NDEBUG
+  if (game::vm_trace()) {
+    game::trace("[Scr][VM] Completed execution of VM_{}_Handler",
+                vm::op::serialize(Op));
+  }
+#endif
   flush_stack(inst, fs, vmc, terminate);
 }
 
@@ -93,13 +111,15 @@ flush_exec_err(scriptInstance_t inst, volatile vm::function_stack_t *fs,
 
 inline bool try_redirect(scriptInstance_t inst,
                          volatile vm::function_stack_t *fs) {
-  if (gsc::detours_enabled.load(std::memory_order_acquire) &&
-      inst == SCRIPTINSTANCE_SERVER) {
+  if (inst == SCRIPTINSTANCE_SERVER &&
+      gsc::func::replacefunc::detours_enabled.load(std::memory_order_acquire)) {
     // Step behind the opcode in bytecode. Bytecode position increments past the
     // opcode just prior to execution in `VM_Execute`.
-    uint8_t *redirected = fs->pos - sizeof(op::OP_TYPE);
-    if (gsc::function_replacements.contains(redirected)) {
-      fs->pos = gsc::function_replacements[redirected];
+    const uintptr_t redirected =
+        reinterpret_cast<uintptr_t>(fs->pos) - sizeof(op::OP_TYPE);
+    if (gsc::func::replacefunc::function_replacements.contains(redirected)) {
+      fs->pos = reinterpret_cast<uint8_t *>(
+          gsc::func::replacefunc::function_replacements[redirected]);
       return true;
     }
   }
@@ -120,35 +140,36 @@ void hook_opcode(vm::op::Opcode opcode, const vm::op::VM_OP_FUNC_PTR hook,
                  vm::op::VM_OP_FUNC_PTR *out_orig) {
   if (vm::op::OPCODE_BYTECODE_MAP.contains(opcode)) [[likely]] {
     if (!*out_orig) {
-      *out_orig =
-          *vm::op::op_handler(vm::op::OPCODE_BYTECODE_MAP.at(opcode)[0]);
+      *out_orig = *vm::op::handler(vm::op::OPCODE_BYTECODE_MAP.at(opcode)[0]);
     }
 
-    for (const vm::op::OP_TYPE bytecode :
-         vm::op::OPCODE_BYTECODE_MAP.at(opcode)) {
-      if (bytecode == 0x0000) {
-        break;
-      }
-      vm::op::VM_OP_FUNC_PTR *handler = vm::op::op_handler(bytecode);
-      if (*handler == *out_orig) [[likely]] {
-        *handler = hook;
-      } else [[unlikely]] {
-        fprintf(
-            stderr,
-            "Warning: Opcode handler for opcode 0x%02X with jumptable index "
-            "0x%04X at 0x%p did not match expected function pointer. Expected: "
-            "0x%p, "
-            "got: 0x%p. Skipping hook application.\n",
-            +opcode, bytecode, game::derelocate(handler),
-            game::derelocate(*out_orig), game::derelocate(*handler));
-        fflush(stderr);
+    for (const vm::op::OP_TYPE bytecode : op::OPCODE_BYTECODE_MAP.at(opcode)) {
+      if (bytecode != 0x0000) {
+        vm::op::VM_OP_FUNC_PTR *handler = vm::op::handler(bytecode);
+        if (*handler == *out_orig) [[likely]] {
+          *handler = hook;
+        } else [[unlikely]] {
+          const char *err_msg = utils::string::va(
+              "Warning: Opcode handler for opcode %s with jumptable index "
+              "0x%04X "
+              "at 0x%p did not match expected function pointer. Expected: "
+              "0x%p, "
+              "got: 0x%p. Skipping hook application.",
+              op::serialize(opcode), bytecode, game::derelocate(handler),
+              game::derelocate(*out_orig), game::derelocate(*handler));
+          game::trace("{}", err_msg);
+          fprintf(stderr, "%s\n", err_msg);
+          fflush(stderr);
+        }
       }
     }
   } else [[unlikely]] {
-    fprintf(stderr,
-            "Warning: could not find valid bytecode value for opcode: "
-            "0x%02X. Hook will not be applied.\n",
-            static_cast<uint8_t>(opcode));
+    const char *err_msg = utils::string::va(
+        "Warning: could not find valid bytecode value for opcode: "
+        "%s. Hook will not be applied.",
+        op::serialize(opcode));
+    game::trace("{}", err_msg);
+    fprintf(stderr, "%s\n", err_msg);
     fflush(stderr);
   }
 }
@@ -156,37 +177,38 @@ void hook_opcode(vm::op::Opcode opcode, const vm::op::VM_OP_FUNC_PTR hook,
 void hook_opcode_err(vm::op::Opcode opcode, const vm::op::VM_OP_FUNC_PTR hook,
                      vm::op::VM_OP_FUNC_PTR *out_orig) {
   if (vm::op::OPCODE_BYTECODE_MAP.contains(opcode)) [[likely]] {
-
     if (!*out_orig) {
       *out_orig =
-          *vm::op::op_err_handler(vm::op::OPCODE_BYTECODE_MAP.at(opcode)[0]);
+          *vm::op::error_recovery(vm::op::OPCODE_BYTECODE_MAP.at(opcode)[0]);
     }
 
     for (const vm::op::OP_TYPE bytecode :
          vm::op::OPCODE_BYTECODE_MAP.at(opcode)) {
-      if (bytecode == 0x0000) {
-        break;
-      }
-      vm::op::VM_OP_FUNC_PTR *handler = vm::op::op_err_handler(bytecode);
-      if (*handler == *out_orig) [[likely]] {
-        *handler = hook;
-      } else [[unlikely]] {
-        fprintf(stderr,
-                "Warning: Opcode error recovery handler for opcode 0x%02X with "
-                "jumptable index "
-                "0x%04X at 0x%p did not match expected function pointer. "
-                "Expected: 0x%p, "
-                "got: 0x%p. Skipping hook application.\n",
-                +opcode, bytecode, game::derelocate(handler),
-                game::derelocate(*out_orig), game::derelocate(*handler));
-        fflush(stderr);
+      if (bytecode != 0x0000) {
+        vm::op::VM_OP_FUNC_PTR *handler = vm::op::error_recovery(bytecode);
+        if (*handler == *out_orig) [[likely]] {
+          *handler = hook;
+        } else [[unlikely]] {
+          const char *err_msg = utils::string::va(
+              "[Scr][VM] Warning: Opcode error recovery handler for opcode %s "
+              "with jumptable index 0x%04X at 0x%p did not match expected "
+              "function pointer. Expected: 0x%p, got: 0x%p. Skipping hook "
+              "application.",
+              op::serialize(opcode), bytecode, game::derelocate(handler),
+              game::derelocate(*out_orig), game::derelocate(*handler));
+          game::trace("{}", err_msg);
+          fprintf(stderr, "%s\n", err_msg);
+          fflush(stderr);
+        }
       }
     }
   } else [[unlikely]] {
-    fprintf(stderr,
-            "Warning: could not find valid bytecode value for opcode: "
-            "0x%02X. Hook will not be applied.\n",
-            static_cast<uint8_t>(opcode));
+    const char *err_msg = utils::string::va(
+        "[Scr][VM] Warning: could not find valid bytecode value for opcode: "
+        "%s. Hook will not be applied.",
+        op::serialize(opcode));
+    game::trace("{}", err_msg);
+    fprintf(stderr, "%s\n", err_msg);
     fflush(stderr);
   }
 }
@@ -215,6 +237,123 @@ void hook_opcode_err(vm::op::Opcode opcode, const vm::op::VM_OP_FUNC_PTR hook,
 #endif
 
 inline void flush_exec_all() {
+#ifndef NDEBUG
+  if (game::vm_trace()) {
+    HOOK_FLUSH_EXEC(Bit_And);
+    HOOK_FLUSH_EXEC(Bit_Or);
+    HOOK_FLUSH_EXEC(Bit_Xor);
+    HOOK_FLUSH_EXEC(BoolComplement);
+    HOOK_FLUSH_EXEC(BoolNot);
+    HOOK_FLUSH_EXEC(CallBuiltin);
+    HOOK_FLUSH_EXEC(CallBuiltinMethod);
+    HOOK_FLUSH_EXEC(CastBool);
+    HOOK_FLUSH_EXEC(CastFieldObject);
+    HOOK_FLUSH_EXEC(ClearArray);
+    HOOK_FLUSH_EXEC(ClearFieldVariable);
+    HOOK_FLUSH_EXEC(ClearParams);
+    HOOK_FLUSH_EXEC(Dec);
+    HOOK_FLUSH_EXEC(DecTop);
+    HOOK_FLUSH_EXEC(DevblockBegin);
+    HOOK_FLUSH_EXEC(Divide);
+    HOOK_FLUSH_EXEC(End);
+    HOOK_FLUSH_EXEC(EndOn);
+    HOOK_FLUSH_EXEC(EndSwitch);
+    HOOK_FLUSH_EXEC(Equal);
+    HOOK_FLUSH_EXEC(EvalArray);
+    HOOK_FLUSH_EXEC(EvalArrayRef);
+    HOOK_FLUSH_EXEC(EvalFieldVariable);
+    HOOK_FLUSH_EXEC(EvalFieldVariableRef);
+    HOOK_FLUSH_EXEC(EvalLevelFieldVariable);
+    HOOK_FLUSH_EXEC(EvalLevelFieldVariableRef);
+    HOOK_FLUSH_EXEC(EvalLocalVariableCached);
+    HOOK_FLUSH_EXEC(EvalLocalVariableCachedDebug);
+    HOOK_FLUSH_EXEC(EvalLocalVariableRefCached);
+    HOOK_FLUSH_EXEC(EvalLocalVariableRefCachedDebug);
+    HOOK_FLUSH_EXEC(EvalSelfFieldVariable);
+    HOOK_FLUSH_EXEC(EvalSelfFieldVariableRef);
+    HOOK_FLUSH_EXEC(FirstArrayKey);
+    HOOK_FLUSH_EXEC(GetAnim);
+    HOOK_FLUSH_EXEC(GetAnimation);
+    HOOK_FLUSH_EXEC(GetAnimObject);
+    HOOK_FLUSH_EXEC(GetAPIFunction);
+    HOOK_FLUSH_EXEC(GetByte);
+    HOOK_FLUSH_EXEC(GetClasses);
+    HOOK_FLUSH_EXEC(GetClassesObject);
+    HOOK_FLUSH_EXEC(GetEmptyArray);
+    HOOK_FLUSH_EXEC(GetFloat);
+    HOOK_FLUSH_EXEC(GetFunction);
+    HOOK_FLUSH_EXEC(GetGame);
+    HOOK_FLUSH_EXEC(GetGameRef);
+    HOOK_FLUSH_EXEC(GetHash);
+    HOOK_FLUSH_EXEC(GetInteger);
+    HOOK_FLUSH_EXEC(GetIString);
+    HOOK_FLUSH_EXEC(GetLevel);
+    HOOK_FLUSH_EXEC(GetLevelObject);
+    HOOK_FLUSH_EXEC(GetNegByte);
+    HOOK_FLUSH_EXEC(GetNegUnsignedShort);
+    HOOK_FLUSH_EXEC(GetSelf);
+    HOOK_FLUSH_EXEC(GetSelfObject);
+    HOOK_FLUSH_EXEC(GetUintptr);
+    HOOK_FLUSH_EXEC(GetUndefined);
+    HOOK_FLUSH_EXEC(GetUnsignedShort);
+    HOOK_FLUSH_EXEC(GetVector);
+    HOOK_FLUSH_EXEC(GetWorld);
+    HOOK_FLUSH_EXEC(GetWorldObject);
+    HOOK_FLUSH_EXEC(GetZero);
+    HOOK_FLUSH_EXEC(GreaterThan);
+    HOOK_FLUSH_EXEC(GreaterThanOrEqualTo);
+    HOOK_FLUSH_EXEC(Inc);
+    HOOK_FLUSH_EXEC(IsDefined);
+    HOOK_FLUSH_EXEC(Jump);
+    HOOK_FLUSH_EXEC(JumpOnFalse);
+    HOOK_FLUSH_EXEC(JumpOnFalseExpr);
+    HOOK_FLUSH_EXEC(JumpOnTrue);
+    HOOK_FLUSH_EXEC(JumpOnTrueExpr);
+    HOOK_FLUSH_EXEC(LessThan);
+    HOOK_FLUSH_EXEC(LessThanOrEqualTo);
+    HOOK_FLUSH_EXEC(Minus);
+    HOOK_FLUSH_EXEC(Modulus);
+    HOOK_FLUSH_EXEC(Multiply);
+    HOOK_FLUSH_EXEC(New);
+    HOOK_FLUSH_EXEC(NextArrayKey);
+    HOOK_FLUSH_EXEC(NotEqual);
+    HOOK_FLUSH_EXEC(Notify);
+    HOOK_FLUSH_EXEC(Plus);
+    HOOK_FLUSH_EXEC(PreScriptCall);
+    HOOK_FLUSH_EXEC(ProfileStart);
+    HOOK_FLUSH_EXEC(ProfileStop);
+    HOOK_FLUSH_EXEC(Return);
+    HOOK_FLUSH_EXEC(SafeDecTop);
+    HOOK_FLUSH_EXEC(SafeSetVariableFieldCached);
+    HOOK_FLUSH_EXEC(SafeSetWaittillVariableFieldCached);
+    HOOK_FLUSH_EXEC(ScriptFunctionCall);
+    HOOK_FLUSH_EXEC(ScriptFunctionCallClass);
+    HOOK_FLUSH_EXEC(ScriptFunctionCallPointer);
+    HOOK_FLUSH_EXEC(ScriptMethodCall);
+    HOOK_FLUSH_EXEC(ScriptMethodCallPointer);
+    HOOK_FLUSH_EXEC(ScriptMethodThreadCall);
+    HOOK_FLUSH_EXEC(ScriptMethodThreadCallPointer);
+    HOOK_FLUSH_EXEC(ScriptThreadCall);
+    HOOK_FLUSH_EXEC(ScriptThreadCallClass);
+    HOOK_FLUSH_EXEC(ScriptThreadCallPointer);
+    HOOK_FLUSH_EXEC(SetVariableField);
+    HOOK_FLUSH_EXEC(ShiftLeft);
+    HOOK_FLUSH_EXEC(ShiftRight);
+    HOOK_FLUSH_EXEC(SizeOf);
+    HOOK_FLUSH_EXEC(SuperEqual);
+    HOOK_FLUSH_EXEC(SuperNotEqual);
+    HOOK_FLUSH_EXEC(Switch);
+    HOOK_FLUSH_EXEC(Vector);
+    HOOK_FLUSH_EXEC(VectorConstant);
+    HOOK_FLUSH_EXEC(VectorScale);
+    HOOK_FLUSH_EXEC(Wait);
+    HOOK_FLUSH_EXEC(WaitRealTime);
+    HOOK_FLUSH_EXEC(WaitTill);
+    HOOK_FLUSH_EXEC(WaitTillFrameEnd);
+    HOOK_FLUSH_EXEC(WaitTillMatch);
+  }
+#endif
+
   // Uses TAC encryption when accessing the `cgArray` in client. Hangs forever
   // if original implementation is called from outside the BO3 engine address
   // space.
@@ -348,9 +487,7 @@ inline void flush_exec_all() {
 }
 
 struct component final : generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "vm"; }
-#endif
+  DEFINE_COMPONENT_NAME("gsc/vm");
 
   void post_unpack() override { flush_exec_all(); }
 };

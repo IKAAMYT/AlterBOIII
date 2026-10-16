@@ -2,12 +2,14 @@ if Engine.GetCurrentMap() ~= "core_frontend" then
   return
 end
 
-if
-  type(Engine.IsUsingMods) == "function"
-  and Engine.IsUsingMods()
-  and (type(Engine.UsingModsUgcName) ~= "function" or Engine.UsingModsUgcName() ~= "usermaps")
-then
-  return
+for _, file in ipairs({
+  "ui/uieditor/widgets/Store/Store_NonFeaturedFrame.lua",
+  "ui/uieditor/menus/ZM/MegaChewFactory.lua",
+  "ui/uieditor/menus/ZM/GobbleGumCookbook.lua",
+}) do
+  if game.ismodrawfile(file) then
+    return
+  end
 end
 
 require("ui.uieditor.widgets.Store.Store_NonFeaturedFrame")
@@ -126,6 +128,30 @@ PurchaseProduct = function(menu, element, controller)
     nil,
     "uie_t7_icon_codpoints"
   )
+end
+
+-- Outfits, contracts, camo packs and extra slots bought with COD Points: the
+-- client charges the price shown in the store's purchase confirmation.
+local confirmedPrice
+local originalCreateOverlay = CoD.OverlayUtility.CreateOverlay
+CoD.OverlayUtility.CreateOverlay = function(...)
+  confirmedPrice = nil
+  for i = 1, select("#", ...) do
+    local data = select(i, ...)
+    if type(data) == "table" and data.purchaseSource then
+      confirmedPrice = tonumber(data.itemCODPointCost)
+    end
+  end
+  return originalCreateOverlay(...)
+end
+
+local originalPurchaseDWSKU = Engine.PurchaseDWSKU
+Engine.PurchaseDWSKU = function(controller, sku, ...)
+  if confirmedPrice and tonumber(sku) and type(game.setstoreprice) == "function" then
+    game.setstoreprice(tonumber(sku), confirmedPrice)
+  end
+  confirmedPrice = nil
+  return originalPurchaseDWSKU(controller, sku, ...)
 end
 
 local purchaseVialsOverlay = CoD.OverlayUtility.Overlays.PurchaseVialsConfirmation

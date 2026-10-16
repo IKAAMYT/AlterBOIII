@@ -2,11 +2,13 @@
 
 #include "script.hpp"
 
-#include "structs/concurrent.hpp"
+#include <structs/concurrent.hpp>
 
 #include <component/dump.hpp>
 #include <component/game_event.hpp>
-#include <component/gsc/gsc_compiler.hpp>
+#include <component/gsc/compiler/compiler.hpp>
+#include <component/gsc/func/replacefunc.hpp>
+#include <component/mod_previews.hpp>
 #include <component/scheduler.hpp>
 #include <loader/component_loader.hpp>
 
@@ -55,10 +57,6 @@ template <> struct hash<TreeDirectory> {
 };
 } // namespace std
 
-namespace gsc_funcs {
-void add_detour(uint8_t *target_addr, uint8_t *replacement_addr);
-}
-
 namespace script {
 
 struct hash_info {
@@ -101,6 +99,32 @@ std::string normalize_script_name(std::string script_name) {
       c = '/';
   }
   return script_name;
+}
+
+// Sources are stored with their line breaks overwritten by NUL bytes once the
+// script is loaded, so both separators end a line
+std::string source_line_at(const std::string_view source,
+                           const int32_t line_num) {
+  constexpr std::string_view line_breaks("\n\0", 2);
+  if (line_num <= 0) {
+    return {};
+  }
+
+  size_t start = 0;
+  for (int32_t current = 1; current < line_num; ++current) {
+    start = source.find_first_of(line_breaks, start);
+    if (start == std::string_view::npos) {
+      return {};
+    }
+    ++start;
+  }
+
+  const size_t end = source.find_first_of(line_breaks, start);
+  std::string_view line = source.substr(start, end - start);
+  if (!line.empty() && line.back() == '\r') {
+    line.remove_suffix(1);
+  }
+  return std::string(line);
 }
 
 struct pending_detour {
@@ -330,7 +354,7 @@ void apply_pending_detours() {
           d.replace_script, d.replace_func_hash, d.replace_params);
 
       if (target.address && replace.address) {
-        gsc_funcs::add_detour(target.address, replace.address);
+        gsc::func::replacefunc::add_detour(target.address, replace.address);
       } else {
         if (!target.script_loaded || !replace.script_loaded) {
           remaining_detours.push_back(d);
@@ -397,6 +421,26 @@ ScriptParseTree *get_loaded_script(const std::string &name) {
   return result;
 }
 
+void for_each_loaded_script(
+    const std::function<void(const ScriptParseTree &)> &callback) {
+  loaded_scripts.for_each(
+      [&](const concurrent_hash_map<std::string, ScriptParseTree *>::value_type
+              &v) {
+        if (v.second && v.second->buffer) {
+          callback(*v.second);
+        }
+      });
+}
+
+std::mutex script_paths_mutex;
+std::unordered_map<std::string, std::string> script_paths;
+
+std::string script_path(const std::string &name) {
+  std::scoped_lock lock(script_paths_mutex);
+  const auto it = script_paths.find(name);
+  return it == script_paths.end() ? name : it->second;
+}
+
 void print_loading_script(const std::string &name) {
   const char *type = nullptr;
   if (name.ends_with(".lua")) {
@@ -408,8 +452,8 @@ void print_loading_script(const std::string &name) {
   } else {
     type = "";
   }
-  const char *log = utils::string::va("Loading %s%s'%s'", type,
-                                      type[0] ? " " : "", name.data());
+  const char *log = utils::string::va(
+      "Loading %s%s'%s'", type, type[0] ? " " : "", script_path(name).c_str());
   print_script_log(log);
 }
 
@@ -447,8 +491,9 @@ void load_script(const std::string &name, const std::string &data) {
         [&](concurrent_hash_map<std::string, ScriptParseTree *>::value_type
                 &v) { v.second = parse_tree; })) {
     }
-    const char *log = utils::string::va("Loaded script '%s' (size %llu bytes)",
-                                        name.data(), parse_tree->len);
+    const char *log =
+        utils::string::va("Loaded script '%s' (size %llu bytes)",
+                          script_path(name).c_str(), parse_tree->len);
     print_script_log(log);
   }
 }
@@ -475,13 +520,13 @@ void load_script_file(std::string &data,
         // Strip devblocks before compilation
         const std::string cleaned_source = strip_devblocks(data);
 
-        const char *log = utils::string::va("Compiling %s script '%s'",
-                                            script_type, name.c_str());
+        const char *log = utils::string::va(
+            "Compiling %s script '%s'", script_type, script_path(name).c_str());
         print_script_log(log);
         const scriptInstance_t inst =
             is_csc ? SCRIPTINSTANCE_CLIENT : SCRIPTINSTANCE_SERVER;
-        gsc_compiler::compile_result result =
-            gsc_compiler::compile(inst, cleaned_source, name);
+        gsc::compiler::compile_result result =
+            gsc::compiler::compile(inst, cleaned_source, name);
         if (result.success) {
 
           // Store hash-to-name+line map from this compilation
@@ -529,7 +574,7 @@ void load_script_file(std::string &data,
                 utils::string::ends_with(replace_base, ".csc"))
               replace_base = replace_base.substr(0, replace_base.size() - 4);
 
-            for (gsc_compiler::replacefunc_entry &rf : result.replacefuncs) {
+            for (gsc::compiler::replacefunc_entry &rf : result.replacefuncs) {
               const std::string replace_script =
                   rf.replace_script.empty() ? replace_base : rf.replace_script;
               pending_detours.access(
@@ -543,33 +588,11 @@ void load_script_file(std::string &data,
             }
           }
         } else {
-          const auto get_source_line = [](const std::string &src,
-                                          int32_t line_num) -> std::string {
-            if (line_num <= 0)
-              return "";
-            int32_t current = 1;
-            size_t start = 0;
-            while (current < line_num && start < src.size()) {
-              if (src[start] == '\n')
-                current++;
-              start++;
-            }
-            if (current != line_num)
-              return "";
-            size_t end = src.find('\n', start);
-            if (end == std::string::npos)
-              end = src.size();
-            std::string line = src.substr(start, end - start);
-            if (!line.empty() && line.back() == '\r')
-              line.pop_back();
-            return line;
-          };
-
           const char *err_header = utils::string::va(
               "^1*********************%s COMPILE ERROR*********************",
               script_type);
           print_script_log(err_header);
-          for (const gsc_compiler::compile_error &err : result.errors) {
+          for (const gsc::compiler::compile_error &err : result.errors) {
             const char *file_log =
                 utils::string::va("^1  File:    ^5%s", err.file.data());
             print_script_log(file_log);
@@ -577,7 +600,7 @@ void load_script_file(std::string &data,
               const char *line_column_log = utils::string::va(
                   "^1  Line:    ^2%d^7, ^1Column: ^2%d", err.line, err.column);
               print_script_log(line_column_log);
-              std::string src_line = get_source_line(data, err.line);
+              std::string src_line = source_line_at(data, err.line);
               if (!src_line.empty()) {
                 const char *src_log =
                     utils::string::va("^1  Source:  ^7%s", src_line.data());
@@ -592,6 +615,11 @@ void load_script_file(std::string &data,
                                   "------------------");
             print_script_log(footer_p1_log);
           }
+          print_script_log(utils::string::va(
+              "^1  Result:  ^7%s",
+              name.starts_with("scripts/")
+                  ? "script not loaded, the game's original script is used"
+                  : "script not loaded, the map continues without it"));
           const char *footer_p2_log = utils::string::va(
               "^1************************************************************");
           print_script_log(footer_p2_log);
@@ -601,31 +629,73 @@ void load_script_file(std::string &data,
   }
 }
 
-void execute_loaded_script(const std::string &name) {
-  const bool is_csc = utils::string::ends_with(name, ".csc");
-  const bool is_gsc = utils::string::ends_with(name, ".gsc");
-  if ((!is_gsc && !is_csc) || (is_csc && !is_client()) ||
-      !get_loaded_script(name)) {
+struct queued_script {
+  std::string name;
+  std::string base_name;
+  scriptInstance_t inst;
+};
+
+static std::vector<queued_script> execution_queue;
+
+bool is_script_file_name(const std::string_view &name) {
+  return name.ends_with(".gsc") || name.ends_with(".csc");
+}
+
+void queue_script_execution(const std::string &name) {
+  const bool is_csc = name.ends_with(".csc");
+  if (!is_script_file_name(name) || (is_csc && !is_client()) ||
+      name.size() <= 4 || !get_loaded_script(name)) {
     return;
   }
 
-  const std::string base_name = name.substr(0, name.size() - 4);
-  if (base_name.empty()) {
+  execution_queue.push_back(
+      {name, name.substr(0, name.size() - 4),
+       is_csc ? SCRIPTINSTANCE_CLIENT : SCRIPTINSTANCE_SERVER});
+}
+
+std::optional<std::string> find_missing_include(const queued_script &script) {
+  const ScriptParseTree *tree = get_loaded_script(script.name);
+  if (!tree || !tree->buffer) {
+    return std::nullopt;
+  }
+
+  const char *extension =
+      script.inst == SCRIPTINSTANCE_CLIENT ? ".csc" : ".gsc";
+  const auto *base = reinterpret_cast<const char *>(tree->buffer);
+  for (const uint32_t offset : tree->buffer->includes()) {
+    if (offset >= tree->len) {
+      continue;
+    }
+    const std::string name(base + offset,
+                           strnlen(base + offset, tree->len - offset));
+    if (!name.empty() &&
+        !db::xasset::DB_FindXAssetHeader(XAssetType::SCRIPTPARSETREE,
+                                         (name + extension).c_str(), false, 0)
+             .scriptParseTree) {
+      return name;
+    }
+  }
+  return std::nullopt;
+}
+
+void execute_queued_script(const queued_script &script) {
+  if (const std::optional<std::string> missing = find_missing_include(script)) {
+    print_script_log(utils::string::va(
+        "Skipped script '%s' because it needs '%s', which this game mode does "
+        "not have",
+        script_path(script.name).c_str(), missing->c_str()));
     return;
   }
 
-  const scriptInstance_t inst =
-      is_csc ? SCRIPTINSTANCE_CLIENT : SCRIPTINSTANCE_SERVER;
-  scr::Scr_LoadScript(inst, base_name.data());
+  scr::Scr_LoadScript(script.inst, script.base_name.data());
 
-  const char *log =
-      utils::string::va("Loaded script '%s' into the VM", name.data());
-  print_script_log(log);
+  print_script_log(utils::string::va("Loaded script '%s' into the VM",
+                                     script_path(script.name).c_str()));
 
-  objFileInfo_t *obj = get_obj_by_name(inst, name);
+  objFileInfo_t *obj = get_obj_by_name(script.inst, script.name);
   if (obj) {
     script_sources.modify_if(
-        name,
+        script.name,
         [&](concurrent_hash_map<std::string, std::string>::value_type &v) {
           char *src = v.second.data();
           obj->debugInfo.source = src;
@@ -673,51 +743,64 @@ void load_scripts_directory(
             is_map_override_directory_name(relative.begin()->string()))
           return;
       }
+      if (!is_script_file_name(script.generic_string()) ||
+          std::filesystem::is_directory(script)) {
+        return;
+      }
+
+      std::string name = script.generic_string();
+      const std::string appdata_path =
+          (get_appdata_path() / "data/").generic_string();
+      const std::string host_path =
+          (utils::nt::library{}.get_folder() / "boiii/").generic_string();
+
+      size_t i = name.find(appdata_path);
+      if (i != std::string::npos) {
+        name.erase(0, i + appdata_path.length());
+      }
+
+      i = name.find(host_path);
+      if (i != std::string::npos) {
+        name.erase(0, i + host_path.length());
+      }
+      const std::string path = name;
+      if (strip_base.has_value()) {
+        std::vector<std::string_view> name_parts =
+            utils::string::split(std::string_view(name), '/');
+        const std::vector<std::string_view> strip_parts =
+            utils::string::split(std::string_view(strip_base.value()), '/');
+        bool matches = name_parts.size() > strip_parts.size();
+        for (size_t part = 0; matches && part < strip_parts.size(); ++part) {
+          matches = name_parts[part + 1] == strip_parts[part];
+        }
+        if (matches) {
+          name_parts.erase(name_parts.begin() + 1,
+                           name_parts.begin() + 1 + strip_parts.size());
+          name = utils::string::join(name_parts, "/");
+        }
+      }
+
+      const std::string key = utils::string::to_lower(name);
+      if (processed_scripts) {
+        std::scoped_lock lock(*processed_scripts_mutex);
+        if (!processed_scripts->insert(key).second) {
+          return;
+        }
+      }
+
+      if (path != name) {
+        std::scoped_lock lock(script_paths_mutex);
+        script_paths.insert_or_assign(name, path);
+      }
+
+      if (load) {
+        queue_script_execution(name);
+        return;
+      }
+
       std::string data;
-      if (!std::filesystem::is_directory(script) &&
-          utils::io::read_file(script, &data)) {
-
-        std::string name = script.generic_string();
-        const std::string appdata_path =
-            (get_appdata_path() / "data/").generic_string();
-        const std::string host_path =
-            (utils::nt::library{}.get_folder() / "boiii/").generic_string();
-
-        size_t i = name.find(appdata_path);
-        if (i != std::string::npos) {
-          name.erase(0, i + appdata_path.length());
-        }
-
-        i = name.find(host_path);
-        if (i != std::string::npos) {
-          name.erase(0, i + host_path.length());
-        }
-        if (strip_base.has_value()) {
-          std::vector<std::string_view> name_parts =
-              utils::string::split(std::string_view(name), '/');
-          const std::vector<std::string_view> strip_parts =
-              utils::string::split(std::string_view(strip_base.value()), '/');
-          bool matches = name_parts.size() > strip_parts.size();
-          for (size_t part = 0; matches && part < strip_parts.size(); ++part) {
-            matches = name_parts[part + 1] == strip_parts[part];
-          }
-          if (matches) {
-            name_parts.erase(name_parts.begin() + 1,
-                             name_parts.begin() + 1 + strip_parts.size());
-            name = utils::string::join(name_parts, "/");
-          }
-        }
-
-        const std::string key = utils::string::to_lower(name);
-        if (processed_scripts) {
-          std::scoped_lock lock(*processed_scripts_mutex);
-          if (!processed_scripts->insert(key).second) {
-            return;
-          }
-        }
-
-        load ? execute_loaded_script(name)
-             : load_script_file(data, script, name);
+      if (utils::io::read_file(script, &data)) {
+        load_script_file(data, script, name);
       }
     };
     if (load) {
@@ -800,7 +883,7 @@ shared_tree_directories(const std::filesystem::path (&roots)[N],
   return root_entries;
 }
 
-void load_tree(std::filesystem::path tree, bool execImmediate = false) {
+void load_tree(std::filesystem::path tree, bool queue_execution = false) {
   const utils::nt::library host{};
 
   const std::filesystem::path data_directory = get_appdata_path() / "data";
@@ -875,8 +958,7 @@ void load_tree(std::filesystem::path tree, bool execImmediate = false) {
                        dir.exclude_map_subtrees);
                 });
 
-  if (execImmediate) {
-    // Now, load the scripts into the VM.
+  if (queue_execution) {
     std::for_each(std::execution::seq, applicable_tree_dirs.begin(),
                   applicable_tree_dirs.end(), [load](const TreeDirectory &dir) {
                     load(dir.path, true, dir.load_recursively, dir.strip_base,
@@ -886,6 +968,10 @@ void load_tree(std::filesystem::path tree, bool execImmediate = false) {
 }
 
 void load_scripts() {
+  {
+    std::scoped_lock lock(script_paths_mutex);
+    script_paths.clear();
+  }
   // The "scripts" tree is for overriding stock scripts the game uses
   load_tree("scripts", false);
   // The "custom_scripts" tree is for new scripts we must execute
@@ -1149,6 +1235,10 @@ XAssetHeader DB_FindXAssetHeader_TryOverride(const XAssetType type,
       result.rawfile = get_loaded_rawfile(name);
       break;
     }
+    case XAssetType::IMAGE: {
+      result.image = mod_previews::find_image(name);
+      break;
+    }
     default:
       break;
     }
@@ -1169,6 +1259,7 @@ XAssetHeader DB_FindXAssetHeader_TryOverride(const XAssetType type,
 void clear_script_memory() {
   std::scoped_lock lock(script_load_mutex);
 
+  execution_queue.clear();
   loaded_scripts.clear();
   script_gdbs.clear();
   script_hash_names.clear();
@@ -1248,20 +1339,29 @@ void load_global_hash_table() {
 }
 
 void begin_load_scripts_stub(scriptInstance_t inst, int32_t user) {
-  std::scoped_lock lock(script_load_mutex);
   load_global_hash_table();
 
   scr::Scr_BeginLoadScripts(inst, user);
 
-  if (com::Com_IsInGame() && !com::Com_IsRunningUILevel()) {
+  if (!com::Com_IsInGame() || com::Com_IsRunningUILevel()) {
+    return;
+  }
+
+  {
+    std::scoped_lock lock(script_load_mutex);
+    execution_queue.clear();
     load_scripts();
-
-    if (!pending_detours.access<bool>(
-            [](auto &pending_detours) { return pending_detours.empty(); })) {
-      apply_pending_detours();
-    }
-
     rebuild_script_gdb();
+  }
+
+  for (const queued_script &script : execution_queue) {
+    execute_queued_script(script);
+  }
+
+  std::scoped_lock lock(script_load_mutex);
+  if (!pending_detours.access<bool>(
+          [](auto &pending_detours) { return pending_detours.empty(); })) {
+    apply_pending_detours();
   }
 }
 
@@ -1310,157 +1410,188 @@ int32_t resolve_hash_line(ScrVarCanonicalName_t hash, int32_t num_params) {
 }
 
 std::string get_source_line(const std::string &file, int32_t line_num) {
-  std::optional<std::string> result = std::nullopt;
-  // Try to find source by matching file path suffix
+  const std::string wanted =
+      utils::string::to_lower(normalize_script_name(file));
+  std::string result;
   script_sources.for_each(
-      [&result, file, line_num](
-          const concurrent_hash_map<std::string, std::string>::value_type &v) {
-        if (!result.has_value()) {
-          const std::string path = v.first;
-          const std::string src = v.second;
-          if (file.find(path) != std::string::npos ||
-              path.find(file) != std::string::npos ||
-              file.find(std::filesystem::path(path).filename().string()) !=
-                  std::string::npos) {
-            if (line_num > 0) {
-              int32_t current = 1;
-              size_t start = 0;
-              while (current < line_num && start < src.size()) {
-                if (src[start] == '\n')
-                  current++;
-                start++;
-              }
-              if (current == line_num) {
-                size_t end = src.find('\n', start);
-                if (end == std::string::npos) {
-                  end = src.size();
-                }
-                std::string line = src.substr(start, end - start);
-                if (!line.empty() && line.back() == '\r') {
-                  line.pop_back();
-                }
-                result = std::optional(line);
-              }
-            }
-          }
+      [&](const concurrent_hash_map<std::string, std::string>::value_type &v) {
+        if (result.empty() &&
+            utils::string::to_lower(normalize_script_name(v.first)) == wanted) {
+          result = source_line_at(v.second, line_num);
         }
       });
-  return result.value_or("");
+
+  const size_t first = result.find_first_not_of(" \t");
+  return first == std::string::npos ? std::string() : result.substr(first);
 }
 
-const char *Scr_PrevCodePos(scriptInstance_t inst, volatile uint8_t *codePos) {
-  char *filename = nullptr;
-  int32_t lineNum = 0;
-  char *sourceLine = nullptr;
-
-  if (codePos != nullptr &&
-      codePos != reinterpret_cast<uint8_t *>(vm::g_endPos.get())) {
-    Scr_GetFileAndLineNum_Impl(inst, const_cast<uint8_t *>(codePos) - 1,
-                               const_cast<const char **>(&filename), &lineNum,
-                               const_cast<const char **>(&sourceLine));
-    if (lineNum < 0) {
-      return utils::string::va("\tfile '%s' - missing line information\n",
-                               filename);
-    } else {
-      if (sourceLine) {
-        for (; *sourceLine == ' ' || *sourceLine == '\t'; ++sourceLine) {
-        }
-      }
-      return utils::string::va("\tfile '%s', line %d :: %s\n", filename,
-                               lineNum + 1, sourceLine ? sourceLine : "");
-    }
+namespace {
+const uint8_t *containing_function(const scriptInstance_t inst,
+                                   const uint8_t *pos) {
+  if (!pos) {
+    return nullptr;
+  }
+  const objFileInfo_t *info =
+      Scr_FindObjFileInfo_Impl(inst, const_cast<uint8_t *>(pos - 1));
+  if (!info) {
+    return nullptr;
   }
 
-  return "Missing file and line information - not currently executing script "
-         "bytecode or reached end of executed script bytecode.";
+  const GSC_OBJ *obj = info->activeVersion;
+  const auto *base = reinterpret_cast<const uint8_t *>(obj);
+  const auto offset = static_cast<uint32_t>(pos - 1 - base);
+  const uint8_t *start = nullptr;
+  for (const GSC_EXPORT_ITEM &item : obj->exports()) {
+    if (item.address <= offset && (!start || base + item.address > start)) {
+      start = base + item.address;
+    }
+  }
+  return start;
 }
+} // namespace
 
-utils::hook::detour Scr_Error_hook;
-void Scr_Error_LogAll(scriptInstance_t inst, const char *error, bool terminal) {
-  void *callerAddr = _ReturnAddress();
+std::vector<script_frame> get_script_frames(scriptInstance_t inst,
+                                            const uint8_t *pos) {
   if (is_server()) {
     sv_detailedScriptErrors->set(true);
   }
-  if (terminal) {
-    vm::gScrVarPub->instance[inst].developer = true;
-    vm::gScrVmPub->instance[inst].debugCode = true;
-  }
 
-  std::string prevCodePositionsString = std::format(
-      "[{}] {}", 0, Scr_PrevCodePos(inst, vm::gFs->instance[inst].pos));
-  int32_t callIdx = 1;
+  std::vector<uint8_t *> positions;
+  positions.emplace_back(pos ? const_cast<uint8_t *>(pos)
+                             : vm::gFs->instance[inst].pos);
   for (int32_t stackIdx = vm::gScrVmPub->instance[inst].function_count - 1;
-       stackIdx > -1; --stackIdx, ++callIdx) {
-    prevCodePositionsString +=
-        std::format("\n[{}] {}", callIdx,
-                    Scr_PrevCodePos(inst, vm::gScrVmPub->instance[inst]
-                                              .function_frame_start[stackIdx]
-                                              .fs.pos));
+       stackIdx > -1; --stackIdx) {
+    positions.emplace_back(
+        vm::gScrVmPub->instance[inst].function_frame_start[stackIdx].fs.pos);
   }
 
-  const char *error_log = utils::string::va(
-      "Scr_Error called from 0x%p with inst: %s, "
-#ifndef NDEBUG
-      "gFs.pos: 0x%p, gFs.top: 0x%p, gFs.startTop: 0x%p, gFs.threadId: "
-      "0x%08X, "
-      "gFs.localVarCount: %lu, "
-#endif
-      "error: \"%s\", terminal: %s, callstack:\n%s",
-      derelocate(callerAddr), serialize(inst),
-#ifndef NDEBUG
-      vm::gFs->instance[inst].pos, vm::gFs->instance[inst].top,
-      vm::gFs->instance[inst].startTop, vm::gFs->instance[inst].threadId,
-      vm::gFs->instance[inst].localVarCount,
-#endif
-      error ? error : "NULL", terminal ? "true" : "false",
-      prevCodePositionsString.c_str());
+  if (positions.size() > 1) {
+    const uint8_t *root = containing_function(inst, positions.back());
+    if (root &&
+        root == containing_function(inst, positions[positions.size() - 2])) {
+      positions.pop_back();
+    }
+  }
 
-  print_script_log(error_log);
+  std::vector<script_frame> frames;
+  for (uint8_t *position : positions) {
+    script_frame &frame = frames.emplace_back();
+    if (!position ||
+        position == reinterpret_cast<uint8_t *>(vm::g_endPos.get())) {
+      continue;
+    }
+    const char *file = nullptr;
+    const char *source = nullptr;
+    Scr_GetFileAndLineNum_Impl(inst, position - 1, &file, &frame.line, &source);
+    frame.file = file ? file : "";
+    if (frame.line >= 0) {
+      ++frame.line;
+      for (; source && (*source == ' ' || *source == '\t'); ++source) {
+      }
+      frame.source = source ? source : "";
+    }
+  }
+  return frames;
+}
 
+std::vector<std::string> get_script_callstack(scriptInstance_t inst,
+                                              const uint8_t *pos) {
+  std::vector<std::string> callstack;
+  for (const script_frame &frame : get_script_frames(inst, pos)) {
+    if (frame.file.empty()) {
+      callstack.emplace_back(
+          "Missing file and line information - not currently executing "
+          "script bytecode or reached end of executed script bytecode.");
+    } else if (frame.line < 0) {
+      callstack.push_back(
+          std::format("\tfile '{}' - missing line information\n", frame.file));
+    } else {
+      callstack.push_back(std::format("\tfile '{}', line {} :: {}\n",
+                                      frame.file, frame.line, frame.source));
+    }
+  }
+  return callstack;
+}
+
+utils::hook::detour Scr_Error_hook;
+
+void Scr_Error_LogAll(scriptInstance_t inst, const char *error, bool terminal) {
+  if (game::log_script_errors()) {
+    void *callerAddr = _ReturnAddress();
+    if (is_server()) {
+      sv_detailedScriptErrors->set(true);
+    }
+    if (terminal) {
+      vm::gScrVarPub->instance[inst].developer = true;
+      vm::gScrVmPub->instance[inst].debugCode = true;
+    }
+
+    std::string prevCodePositionsString;
+    const std::vector<std::string> callstack = get_script_callstack(inst);
+    for (size_t i = 0; i < callstack.size(); ++i) {
+      prevCodePositionsString +=
+          std::format("{}[{}] {}", i ? "\n" : "", i, callstack[i]);
+    }
+
+    const char *error_log = utils::string::va(
+        "Scr_Error called from 0x%p with inst: %s, "
+#ifndef NDEBUG
+        "gFs.pos: 0x%p, gFs.top: 0x%p, gFs.startTop: 0x%p, gFs.threadId: "
+        "0x%08X, "
+        "gFs.localVarCount: %lu, "
+#endif
+        "error: \"%s\", terminal: %s, callstack:\n%s",
+        derelocate(callerAddr), serialize(inst),
+#ifndef NDEBUG
+        vm::gFs->instance[inst].pos,
+        game::derelocate(vm::gFs->instance[inst].top),
+        game::derelocate(vm::gFs->instance[inst].startTop),
+        vm::gFs->instance[inst].threadId, vm::gFs->instance[inst].localVarCount,
+#endif
+        error ? error : "NULL", terminal ? "true" : "false",
+        prevCodePositionsString.c_str());
+
+    print_script_log(error_log);
+  }
   return Scr_Error_hook.invoke(inst, error, terminal);
 }
 
 utils::hook::detour Hunk_UserFree_hook;
 void Hunk_UserFree_NotScriptPoolAlloc(hunk::HunkUser *user, void *ptr) {
-  if (allocator.find(ptr)) {
-    return;
-  }
+  if (!allocator.find(ptr)) {
+    bool should_skip = false;
 
-  bool should_skip = false;
+    script_gdbs.for_each(
+        [&should_skip,
+         ptr](const concurrent_hash_map<std::string,
+                                        std::vector<uint8_t>>::value_type &v) {
+          if (!should_skip && contains(v.second.data(), v.second.size(), ptr)) {
+            should_skip = true;
+          }
+        });
 
-  script_gdbs.for_each(
-      [&should_skip,
-       ptr](const concurrent_hash_map<std::string,
-                                      std::vector<uint8_t>>::value_type &v) {
-        if (!should_skip && contains(v.second.data(), v.second.size(), ptr)) {
-          should_skip = true;
+    if (!should_skip) {
+      script_sources.for_each(
+          [&should_skip,
+           ptr](const concurrent_hash_map<std::string, std::string>::value_type
+                    &v) {
+            if (!should_skip &&
+                contains(v.second.data(), v.second.size(), ptr)) {
+              should_skip = true;
+            }
+          });
+
+      if (!should_skip) {
+        if (user == *hunk::g_scriptDebugHunk) {
+          if (ptr) {
+            free(ptr);
+          }
+        } else {
+          return Hunk_UserFree_hook.invoke(user, ptr);
         }
-      });
-
-  if (should_skip) {
-    return;
-  }
-
-  script_sources.for_each(
-      [&should_skip, ptr](
-          const concurrent_hash_map<std::string, std::string>::value_type &v) {
-        if (!should_skip && contains(v.second.data(), v.second.size(), ptr)) {
-          should_skip = true;
-        }
-      });
-
-  if (should_skip) {
-    return;
-  }
-
-  if (user == *hunk::g_scriptDebugHunk) {
-    if (ptr) {
-      free(ptr);
+      }
     }
-    return;
   }
-
-  return Hunk_UserFree_hook.invoke(user, ptr);
 }
 
 utils::hook::detour CG_TestServerScriptChecksum_hook;
@@ -1469,13 +1600,9 @@ utils::hook::detour LoadScriptGDB2_hook;
 utils::hook::detour LoadScriptGDB_hook;
 utils::hook::detour Scr_FindObjFileInfo_hook;
 utils::hook::detour Scr_GetFileAndLineNum_hook;
-utils::hook::detour ReportObjLinkError_hook;
-utils::hook::detour ReportObjLinkError2_hook;
 
 struct component final : generic_component {
-#ifndef NDEBUG
-  std::string name() override { return "script"; }
-#endif
+  DEFINE_COMPONENT_NAME("script");
 
   void post_unpack() override {
     // Return custom or overrided scripts if found
@@ -1494,21 +1621,12 @@ struct component final : generic_component {
         game::cg::CG_TestServerScriptChecksum,
         CG_TestServerScriptChecksum_AlwaysMatch);
 
-    if (utils::flags::has_flag("log-script-errors")) {
-      // Log all script errors, even when non-fatal and/or `developer` is
-      // disabled
-      Scr_Error_hook.create(Scr_Error, Scr_Error_LogAll);
-    }
+    Scr_Error_hook.create(Scr_Error, Scr_Error_LogAll);
 
     LoadScriptGDB_hook.create(LoadScriptGDB, LoadScriptGDB_Impl);
     Hunk_UserFree_hook.create(hunk::Hunk_UserFree,
                               Hunk_UserFree_NotScriptPoolAlloc);
-    ReportObjLinkError_hook.create(ReportObjLinkError, ReportObjLinkError_Impl);
     LoadScriptGDB2_hook.create(LoadScriptGDB2, LoadScriptGDB2_Impl);
-    if (is_client()) {
-      ReportObjLinkError2_hook.create(ReportObjLinkError2,
-                                      ReportObjLinkError_Impl);
-    }
 
     Scr_FindObjFileInfo_hook.create(Scr_FindObjFileInfo,
                                     Scr_FindObjFileInfo_Impl);

@@ -5,14 +5,16 @@
 #include <loader/component_loader.hpp>
 
 #include "auth.hpp"
+#include "command.hpp"
 #include "friends.hpp"
+#include "nat.hpp"
 #include "network.hpp"
 #include "network_password.hpp"
 #include "party.hpp"
 #include "profile_infos.hpp"
 #include "scheduler.hpp"
 #include "toast.hpp"
-#include "workshop.hpp"
+#include "workshop/workshop.hpp"
 
 #include <game/utils.hpp>
 #include <utils/concurrency.hpp>
@@ -101,9 +103,110 @@ void connect_to_lobby(const game::ControllerIndex_t controllerIndex,
 void launch_mode(const game::eModes mode) {
   scheduler::once(
       [=] {
-        const game::LocalClientNum_t local_client = game::INVALID_LOCAL_CLIENT;
-        const game::eModes current_mode = game::com::Com_SessionMode_GetMode();
-        game::com::Com_SwitchMode(local_client, current_mode, mode, 6);
+        game::com::Com_SwitchMode(game::LOCAL_CLIENT_0,
+                                  game::com::Com_SessionMode_GetMode(), mode,
+                                  6);
+      },
+      scheduler::main);
+}
+
+struct map_mode {
+  game::eModes mode;
+  const char *name;
+  const char *gametype;
+};
+
+std::optional<map_mode> get_map_mode(const std::string_view mapname) {
+  if (mapname.starts_with("zm_")) {
+    return map_mode{game::eModes::ZOMBIES, "zm", "zclassic"};
+  }
+  if (mapname.starts_with("mp_")) {
+    return map_mode{game::eModes::MULTIPLAYER, "mp", "tdm"};
+  }
+  if (mapname.starts_with("cp_")) {
+    return map_mode{game::eModes::CAMPAIGN, "cp", "coop"};
+  }
+  return std::nullopt;
+}
+
+bool is_frontend_ready() {
+  return game::com::Com_IsRunningUILevel() && !workshop::are_xzones_loading() &&
+         game::live::Live_IsDemonwareFetchingDone(game::CONTROLLER_INDEX_FIRST);
+}
+
+bool is_mode_ready(const map_mode &mode) {
+  return game::com::Com_SessionMode_IsMode(mode.mode) &&
+         workshop::is_xzone_loaded(utils::string::va("%s_common", mode.name));
+}
+
+void leave_frontend_gametype(const map_mode &mode) {
+  for (auto *dvar : {&game::g_gametype, &game::sv_gametype}) {
+    if (**dvar && (*dvar)->get_string().value_or("") == "frontend") {
+      (*dvar)->set(mode.gametype);
+    }
+  }
+}
+
+utils::hook::detour sv_map_hook;
+utils::hook::detour sv_devmap_hook;
+
+std::atomic_bool map_launching;
+
+void run_when(const std::function<bool()> &ready, const std::string &text) {
+  scheduler::schedule(
+      [=] {
+        if (!ready()) {
+          return scheduler::cond_continue;
+        }
+        scheduler::once(
+            [=] {
+              game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, text.c_str());
+            },
+            scheduler::main, 4s);
+        return scheduler::cond_end;
+      },
+      scheduler::main, 1s);
+}
+
+template <utils::hook::detour *Hook> void sv_map_in_mode_stub() {
+  std::optional<map_mode> mode;
+  std::string mapname;
+  std::string text;
+  {
+    const command::params_sv params{};
+    if (params.size() > 1 && game::is_new_client() &&
+        !game::com::Com_IsInGame()) {
+      mode = get_map_mode(params[1]);
+      mapname = params[1];
+      text = params.join(0) + "\n";
+    }
+  }
+
+  if (map_launching.exchange(false) || !mode) {
+    Hook->invoke<void>();
+    return;
+  }
+
+  if (!is_frontend_ready()) {
+    run_when(is_frontend_ready, text);
+    return;
+  }
+
+  if (!is_mode_ready(*mode)) {
+    launch_mode(mode->mode);
+    run_when([=] { return is_frontend_ready() && is_mode_ready(*mode); }, text);
+    return;
+  }
+
+  scheduler::once(
+      [=] {
+        game::com::Com_ShutdownUILevel();
+        if (!*game::cl::clientConnections) {
+          game::cl::CL_AllocatePerLocalClientMemory(mapname.c_str(), {});
+        }
+        leave_frontend_gametype(*mode);
+        map_launching = true;
+        game::cbuf::Cbuf_AddText(game::LOCAL_CLIENT_0, text.c_str());
       },
       scheduler::main);
 }
@@ -129,36 +232,52 @@ bool ensure_networkmode_online() {
   return false;
 }
 
-void connect_to_lobby_with_mode_internal(const game::net::netadr_t &addr,
-                                         const game::eModes mode,
-                                         const std::string &mapname,
-                                         const std::string &gametype,
-                                         const std::string &usermap_id,
-                                         const std::string &mod_id,
-                                         const bool was_retried = false) {
-
-  const bool was_online = ensure_networkmode_online();
-  if (was_online && game::com::Com_SessionMode_IsMode(mode)) {
+void connect_in_mode(const game::net::netadr_t &addr, const game::eModes mode,
+                     const std::string &mapname, const std::string &gametype,
+                     const std::string &usermap_id, const std::string &mod_id,
+                     const std::string &lobby) {
+  const auto connect = [=] {
     game::com::Com_SessionMode_SetGameMode(
         game::eGameModes::MATCHMAKING_PLAYLIST);
+    const auto connect_direct = [=] {
+      connect_to_lobby(
+          game::com::Com_LocalClient_GetControllerIndex(game::LOCAL_CLIENT_0),
+          addr, mapname, gametype, usermap_id, mod_id);
+    };
+    if (lobby.empty()) {
+      connect_direct();
+      return;
+    }
+    nat::join_match_lobby(addr, lobby == "party" ? [] {
+      printf("Connect failed: Could not join their party.\n");
+      toast::show("Connect failed", "Could not join their party",
+                  "t7_icon_connect_overlays");
+    } : std::function<void()>(connect_direct));
+  };
 
-    connect_to_lobby(
-        game::com::Com_LocalClient_GetControllerIndex(game::LOCAL_CLIENT_0),
-        addr, mapname, gametype, usermap_id, mod_id);
-
+  if (ensure_networkmode_online() && game::com::Com_SessionMode_IsMode(mode)) {
+    connect();
     return;
   }
 
-  if (!was_retried) {
-    scheduler::once(
-        [=] {
-          connect_to_lobby_with_mode_internal(addr, mode, mapname, gametype,
-                                              usermap_id, mod_id, true);
-        },
-        scheduler::main, 5s);
-
-    launch_mode(mode);
-  }
+  launch_mode(mode);
+  const auto deadline = std::chrono::steady_clock::now() + 15s;
+  scheduler::schedule(
+      [=] {
+        if (ensure_networkmode_online() &&
+            game::com::Com_SessionMode_IsMode(mode)) {
+          connect();
+          return scheduler::cond_end;
+        }
+        if (std::chrono::steady_clock::now() < deadline) {
+          return scheduler::cond_continue;
+        }
+        printf("Connect failed: Could not switch to the server's game mode.\n");
+        toast::show("Connect failed", "Could not switch to the server's mode",
+                    "t7_icon_connect_overlays");
+        return scheduler::cond_end;
+      },
+      scheduler::main, 250ms);
 }
 
 void handle_connect_query_response(const bool success,
@@ -170,7 +289,10 @@ void handle_connect_query_response(const bool success,
         "No response from server %u.%u.%u.%u:%hu", target.ipv4.a, target.ipv4.b,
         target.ipv4.c, target.ipv4.d, target.port);
     printf("Connect failed: %s\n", msg.c_str());
-    toast::show("Connect failed", "No response from server",
+    toast::show("Connect failed",
+                utils::string::va("No response. The match may have ended, or "
+                                  "a firewall is blocking UDP port %hu.",
+                                  target.port),
                 "t7_icon_connect_overlays");
     return;
   }
@@ -233,6 +355,15 @@ void handle_connect_query_response(const bool success,
   }
 
   const std::string mapname = info.get("mapname");
+  const std::string lobby = info.get("lobby");
+  if (mapname == "core_frontend" && lobby != "party") {
+    printf("Connect failed: The host is in the menus, not in a match.\n");
+    toast::show("Friend in menus",
+                "They are not in a match. Ask them to open their party, then "
+                "join from your friends list.",
+                "t7_icon_connect_overlays");
+    return;
+  }
   if (mapname.empty()) {
     const char *msg = "Invalid map.";
     printf("Connect failed: %s\n", msg);
@@ -278,8 +409,8 @@ void handle_connect_query_response(const bool success,
         if (workshop::check_valid_usermap_id(mapname, usermap_id, workshop_id,
                                              base_uri) &&
             workshop::check_valid_mod_id(mod_id, workshop_id)) {
-          connect_to_lobby_with_mode_internal(target, mode, mapname, gametype,
-                                              usermap_id, mod_id);
+          connect_in_mode(target, mode, mapname, gametype, usermap_id, mod_id,
+                          lobby);
         } else {
           const char *msg = utils::string::va(
               "Missing or invalid workshop/map dependencies for server %s.",
@@ -294,36 +425,10 @@ void handle_connect_query_response(const bool success,
       scheduler::main);
 }
 
-void connect_finish(const game::net::netadr_t &target, const char *address) {
+void connect_finish(const game::net::netadr_t &target) {
   connect_host = target;
 
   profile_infos::clear_profile_infos();
-
-  if (address) {
-    std::string game_info = friends::get_friend_game_info_by_address(target);
-    if (!game_info.empty()) {
-      std::vector<std::string> parts = utils::string::split(game_info, '|');
-      if (parts.size() >= 4) {
-        std::string mapname = parts[1];
-        std::string gametype = parts[2];
-        game::eModes mode =
-            static_cast<game::eModes>(std::atoi(parts[3].c_str()));
-        std::string mod_id = parts.size() >= 5 ? parts[4] : "";
-
-        if (!mapname.empty() && !gametype.empty()) {
-          scheduler::once(
-              [=]() {
-                std::string usermap_id =
-                    workshop::get_usermap_publisher_id(mapname);
-                connect_to_lobby_with_mode_internal(
-                    connect_host, mode, mapname, gametype, usermap_id, mod_id);
-              },
-              scheduler::pipeline::main);
-          return;
-        }
-      }
-    }
-  }
 
   query_server(connect_host, handle_connect_query_response);
 }
@@ -332,17 +437,21 @@ void connect_stub(const char *address) {
   if (address) {
     const std::string address_copy = normalize_connect_address(address);
 
-    if (const auto friend_id = friends::find_browser_route(address_copy)) {
+    const auto friend_unavailable = [](const char *reason) {
+      printf("Connect failed: %s\n", reason);
+      toast::show("Friend unavailable", reason, "t7_icon_connect_overlays");
+    };
+
+    const bool is_loopback = address_copy.starts_with("127.");
+    if (const auto friend_id =
+            is_loopback ? 0 : friends::find_browser_route(address_copy)) {
       if (!friends::connect_to_friend(friend_id))
-        toast::show("Friend unavailable", "No joinable match was found",
-                    "t7_icon_connect_overlays");
+        friend_unavailable("No joinable match was found");
       return;
     }
 
     if (address_copy == "0.0.0.0" || address_copy.starts_with("0.0.0.0:")) {
-      toast::show("Friend unavailable",
-                  "Friend is offline or their party is closed",
-                  "t7_icon_connect_overlays");
+      friend_unavailable("Friend is offline or their party is closed");
       return;
     }
 
@@ -362,20 +471,22 @@ void connect_stub(const char *address) {
 
             if (network::is_ip_address(target) &&
                 (target.addr == 0 || target.port == 0)) {
+              printf("Connect failed: Friend is offline or their party is "
+                     "closed\n");
               toast::show("Friend unavailable",
                           "Friend is offline or their party is closed",
                           "t7_icon_connect_overlays");
               return;
             }
 
-            connect_finish(target, address_copy.c_str());
+            connect_finish(target);
           },
           scheduler::main);
     };
     // Resolve the address on a background thread.
     network::address_from_string_async(address_copy, resolveCb);
   } else {
-    connect_finish(connect_host, nullptr);
+    connect_finish(connect_host);
   }
 }
 
@@ -456,9 +567,7 @@ void cleanup_queried_servers() {
 }
 } // namespace
 
-void connect(const game::net::netadr_t &target) {
-  connect_finish(target, nullptr);
-}
+void connect(const game::net::netadr_t &target) { connect_finish(target); }
 
 void query_server(const game::net::netadr_t &host, query_callback callback) {
   server_query query{};
@@ -469,16 +578,6 @@ void query_server(const game::net::netadr_t &host, query_callback callback) {
   get_server_queries().access([&](std::vector<server_query> &server_queries) {
     server_queries.emplace_back(std::move(query));
   });
-}
-
-void connect_to_lobby_with_mode(const game::net::netadr_t &addr,
-                                const game::eModes mode,
-                                const std::string &mapname,
-                                const std::string &gametype,
-                                const std::string &usermap_id,
-                                const std::string &mod_id) {
-  connect_to_lobby_with_mode_internal(addr, mode, mapname, gametype, usermap_id,
-                                      mod_id, false);
 }
 
 game::net::netadr_t
@@ -492,7 +591,10 @@ bool is_host(const game::net::netadr_t &addr) {
   return get_connected_server() == addr || connect_host == addr;
 }
 
-uint16_t get_local_port() { return game::port(); }
+uint16_t get_local_port() {
+  const uint16_t port = network::get_bound_port();
+  return port ? port : game::port();
+}
 
 std::string get_server_hostname() {
   std::lock_guard lock(hostname_mutex);
@@ -511,9 +613,7 @@ void clear_server_info() {
 }
 
 struct component final : client_component {
-#ifndef NDEBUG
-  std::string name() override { return "party"; }
-#endif
+  DEFINE_COMPONENT_NAME("party");
 
   void post_unpack() override {
     cl_connected_to_dedi =
@@ -526,6 +626,11 @@ struct component final : client_component {
     network::on("infoResponse", handle_info_response);
 
     scheduler::loop(cleanup_queried_servers, scheduler::async, 100ms);
+
+    sv_map_hook.create(game::sv::SV_Map_f.get(),
+                       sv_map_in_mode_stub<&sv_map_hook>);
+    sv_devmap_hook.create(game::sv::SV_DevMap_f.get(),
+                          sv_map_in_mode_stub<&sv_devmap_hook>);
   }
 
   void pre_destroy() override {
