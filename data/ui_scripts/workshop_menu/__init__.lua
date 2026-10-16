@@ -688,21 +688,25 @@ DataSources.BoiiiWorkshopItems = ListHelper_SetupDataSource("BoiiiWorkshopItems"
     local search = getSearchQuery()
     local st = catalogStatus()
     local loading = st.loading and st.loading ~= 0 and st.loading ~= "false"
-    local msg = "NO ITEMS FOUND"
-    local hint = "Type a keyword and press START to search."
+    local msg = "AUCUN RÉSULTAT"
+    local hint = "Saisissez un mot-clé et appuyez sur START pour rechercher."
     if isQueue then
-      msg = "QUEUE IS EMPTY"
-      hint = "Items you download are added here and installed one after another."
+      msg = "LA FILE D'ATTENTE EST VIDE"
+      hint = "Les éléments que vous téléchargez sont ajoutés ici et installés les uns après les autres."
     elseif currentFilter == "installed" then
-      msg = "NO INSTALLED ITEMS"
-      hint = "Folders in usermaps/ and mods/ appear here."
+      msg = "AUCUN ÉLÉMENT INSTALLÉ"
+      hint = "Les dossiers présents dans usermaps/ et mods/ apparaissent ici."
     elseif loading then
-      msg = "LOADING WORKSHOP..."
-      hint = "Fetching Steam workshop page " .. tostring(currentPage) .. "."
+      msg = "CHARGEMENT DU WORKSHOP..."
+      hint = "Récupération de la page " .. tostring(currentPage) .. " du Workshop Steam."
     elseif search ~= "" then
-      msg = 'NO ITEMS FOUND FOR "' .. search .. '"'
+      msg = 'AUCUN RÉSULTAT POUR "' .. search .. '"'
+    elseif currentFilter == "map" then
+      msg = "AUCUNE MAP TROUVÉE"
+    elseif currentFilter == "mod" then
+      msg = "AUCUN MOD TROUVÉ"
     elseif currentFilter ~= "all" then
-      msg = "NO ITEMS FOUND IN " .. string.upper(currentFilter)
+      msg = "AUCUN RÉSULTAT DANS " .. string.upper(currentFilter)
     end
     table.insert(options, {
       models = {
@@ -890,9 +894,9 @@ updateDetails = function(menu, element)
     menu.DetailsId:setText(sel and ("ID  " .. sel.id) or "")
   end
   if not sel then
-    setDescription(menu, "Select an item from the list.")
+    setDescription(menu, "Sélectionnez un élément dans la liste.")
   elseif sel.desc == "" then
-    setDescription(menu, "No description.")
+    setDescription(menu, "Aucune description.")
   else
     setDescription(menu, sel.desc)
   end
@@ -1216,7 +1220,7 @@ updateProgressPanel = function(menu)
     end
     local eta = formatEta(st.eta_seconds)
     if eta ~= "" then
-      line = line .. "  ETA " .. eta
+      line = line .. "  Restant " .. eta
     end
     setInfo(menu, line, truncate(st.status_line or st.item_name or "", 52))
     return
@@ -1227,7 +1231,7 @@ updateProgressPanel = function(menu)
 
   local busyHint = ""
   if active then
-    busyHint = "Another item is downloading (see QUEUE)."
+    busyHint = "Un autre élément est en cours de téléchargement (voir FILE D'ATTENTE)."
   end
 
   if selId == "" then
@@ -1236,7 +1240,7 @@ updateProgressPanel = function(menu)
   end
 
   if menu.pendingDeleteId == selId then
-    setInfo(menu, "Click DELETE again to confirm.", "")
+    setInfo(menu, "Cliquez à nouveau sur SUPPRIMER pour confirmer.", "")
     return
   end
 
@@ -1247,14 +1251,14 @@ updateProgressPanel = function(menu)
 
   local pos = queuePosition(selId)
   if pos == 0 then
-    setInfo(menu, "Starting download...", "")
+    setInfo(menu, "Démarrage du téléchargement...", "")
     return
   end
   if pos > 0 then
     setInfo(
       menu,
-      "In queue: position " .. tostring(pos),
-      active and "Waits for the current download to finish." or "Starting soon..."
+      "En file d'attente : position " .. tostring(pos),
+      active and "En attente de la fin du téléchargement en cours." or "Démarrage imminent..."
     )
     return
   end
@@ -1262,11 +1266,11 @@ updateProgressPanel = function(menu)
   local history = queueHistoryState(selId)
   if history == "done" and (sel.installed or isInstalled(selId)) then
     setProgressBar(menu, 1)
-    setInfo(menu, "Download finished", "")
+    setInfo(menu, "Téléchargement terminé", "")
   elseif history == "failed" then
-    setInfo(menu, "Last download failed.", "Press DOWNLOAD to try again.")
+    setInfo(menu, "Le dernier téléchargement a échoué.", "Appuyez sur TÉLÉCHARGER pour réessayer.")
   elseif history == "cancelled" then
-    setInfo(menu, "Download cancelled.", busyHint)
+    setInfo(menu, "Téléchargement annulé.", busyHint)
   else
     setInfo(menu, "", busyHint)
   end
@@ -1499,11 +1503,11 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
 
   self.TabButtons = {}
   local tabDefs = {
-    { label = "ALL", filter = "all", x1 = 64, x2 = 148 },
+    { label = "TOUT", filter = "all", x1 = 64, x2 = 148 },
     { label = "MAPS", filter = "map", x1 = 152, x2 = 248 },
     { label = "MODS", filter = "mod", x1 = 252, x2 = 348 },
-    { label = "INSTALLED", filter = "installed", x1 = 352, x2 = 520 },
-    { label = "QUEUE", filter = "queue", x1 = 524, x2 = 640 },
+    { label = "INSTALLÉS", filter = "installed", x1 = 352, x2 = 520 },
+    { label = "FILE D'ATTENTE", filter = "queue", x1 = 524, x2 = 764 },
   }
   local function refreshTabs()
     local catalogTab = currentFilter ~= "installed" and currentFilter ~= "queue"
@@ -1563,7 +1567,7 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
   end
   refreshTabs()
 
-  local searchBtn = makeFrontendButton(self, controller, 64, 250, 128, 168, "SEARCH")
+  local searchBtn = makeFrontendButton(self, controller, 64, 250, 128, 168, "RECHERCHER")
   searchBtn:registerEventHandler("button_action", function()
     openSearchKeyboard(self, searchBtn, controller)
     return true
@@ -1607,9 +1611,9 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
   headerBg:setRGB(0.12, 0.12, 0.12)
   headerBg:setAlpha(0.9)
   header:addElement(headerBg)
-  header:addElement(makeNamedColumn(self, controller, 8, 420, "NAME", "name"))
+  header:addElement(makeNamedColumn(self, controller, 8, 420, "NOM", "name"))
   header:addElement(makeNamedColumn(self, controller, 428, 540, "TYPE", "kind"))
-  header:addElement(makeNamedColumn(self, controller, 548, 692, "SIZE", "size"))
+  header:addElement(makeNamedColumn(self, controller, 548, 692, "TAILLE", "size"))
   self:addElement(header)
   self.Header = header
 
@@ -1677,13 +1681,13 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
     self:addElement(btn)
     return btn
   end
-  local prevBtn = makePagerButton(64, 170, "PREV", -1)
-  local pageLabel = makeText(180, 390, 544, 580, "fonts/FoundryGridnik-Medium.ttf", { 1, 1, 1 })
+  local prevBtn = makePagerButton(64, 200, "PRÉCÉDENT", -1)
+  local pageLabel = makeText(204, 366, 544, 580, "fonts/FoundryGridnik-Medium.ttf", { 1, 1, 1 })
   pageLabel:setAlignment(Enum.LUIAlignment.LUI_ALIGNMENT_CENTER)
   pageLabel:setText("PAGE 1")
   self:addElement(pageLabel)
   self.PageLabel = pageLabel
-  local nextBtn = makePagerButton(400, 506, "NEXT", 1)
+  local nextBtn = makePagerButton(370, 506, "SUIVANT", 1)
   self.PagerWidgets = { prevBtn, pageLabel, nextBtn }
 
   self.QueueWidgets = {}
@@ -1730,13 +1734,13 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
       end)
     end
   end
-  makeQueueButton(516, 590, "UP", function()
+  makeQueueButton(516, 590, "HAUT", function()
     moveSelected(-1)
   end)
-  makeQueueButton(596, 676, "DOWN", function()
+  makeQueueButton(596, 676, "BAS", function()
     moveSelected(1)
   end)
-  makeQueueButton(682, 764, "CLEAR", function()
+  makeQueueButton(682, 764, "VIDER", function()
     if game.clearworkshopqueue then
       pcall(function()
         game.clearworkshopqueue()
@@ -1851,10 +1855,10 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
     scrollDescription(self, delta)
     return true
   end)
-  setDescription(self, "Select an item from the list.")
+  setDescription(self, "Sélectionnez un élément dans la liste.")
 
   local progressHeader = makeText(796, 1200, 404, 420, "fonts/FoundryGridnik-Medium.ttf", { 0.7, 0.7, 0.7 })
-  progressHeader:setText("DOWNLOAD")
+  progressHeader:setText("TÉLÉCHARGEMENT")
   self:addElement(progressHeader)
 
   local progressLabel = makeText(796, 1200, 422, 438, "fonts/default.ttf", { 0.95, 0.95, 0.95 })
@@ -1885,11 +1889,11 @@ LUI.createMenu.BoiiiWorkshopMenu = function(controller)
   self.ProgressFill = progressFill
 
   local progressStatus = makeText(796, 1200, 474, 490, "fonts/default.ttf", { 0.7, 0.7, 0.7 })
-  progressStatus:setText("Press ENTER or DOWNLOAD")
+  progressStatus:setText("Appuyez sur ENTRÉE ou TÉLÉCHARGER")
   self:addElement(progressStatus)
   self.ProgressStatus = progressStatus
 
-  local downloadBtn = makeFrontendButton(self, controller, 796, 1200, 498, 544, "DOWNLOAD")
+  local downloadBtn = makeFrontendButton(self, controller, 796, 1200, 498, 544, "TÉLÉCHARGER")
   downloadBtn:registerEventHandler("button_action", function()
     runSelectionAction(self)
     return true
