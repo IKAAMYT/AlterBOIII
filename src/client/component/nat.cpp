@@ -62,6 +62,7 @@ struct lobby_request {
   game::net::netadr_t host{};
   std::chrono::steady_clock::time_point expires;
   std::function<void()> fallback;
+  bool without_lobby{};
 };
 
 lobby_request lobby_joining;
@@ -303,6 +304,37 @@ bool can_host() {
          lobby_host_info(game::lobby::LobbyType::GAME);
 }
 
+bool is_private_address(const game::net::netadr_t &address) {
+  const uint8_t a = address.ipv4.a;
+  const uint8_t b = address.ipv4.b;
+  return a == 10 || a == 127 || (a == 172 && b >= 16 && b <= 31) ||
+         (a == 192 && b == 168) || (a == 169 && b == 254) ||
+         (a == 100 && b >= 64 && b <= 127);
+}
+
+// Address of the dedicated server this client is playing on, so friends can
+// be sent there directly: nobody hosts a lobby they could join.
+std::optional<game::net::netadr_t> dedicated_route() {
+  if (game::is_server() || getinfo::is_host() || !game::com::Com_IsInGame() ||
+      !game::get_dvar_bool("cl_connected_to_dedi").value_or(false))
+    return std::nullopt;
+  const game::net::netadr_t server = party::get_connected_server();
+  if (!network::is_ip_address(server) || !server.addr || server.port < 1024)
+    return std::nullopt;
+  return server;
+}
+
+// A server on the friend's own PC or LAN is reached through their public IP.
+game::net::netadr_t resolve_friend_server(game::net::netadr_t server,
+                                          const game::net::netadr_t &friend_) {
+  const bool loopback = server.ipv4.a == 127;
+  if ((loopback || is_private_address(server)) &&
+      (loopback || !is_private_address(friend_)) &&
+      network::is_connectable_address(friend_))
+    server.addr = friend_.addr;
+  return server;
+}
+
 void show_error(const std::string &message) {
   game::ui::UI_OpenErrorPopupWithMessage(game::LOCAL_CLIENT_0,
                                          game::errorCode::UI, message.c_str());
@@ -318,21 +350,23 @@ void connect_to(const game::net::netadr_t &endpoint) {
 void request_lobby(const game::net::netadr_t &host, const std::string &token,
                    std::function<void()> fallback = {}) {
   const game::lobby::session::HostInfo *own = lobby_host_info();
-  if (!own) {
-    if (fallback) {
-      fallback();
-      return;
-    }
-    show_error("Open the Multiplayer or Zombies menu first, then join your "
-               "friend again.");
+  if (!own && fallback) {
+    fallback();
     return;
   }
-  lobby_joining = {true, token, host, std::chrono::steady_clock::now() + 4s,
-                   std::move(fallback)};
+  // Without a lobby of our own we can still follow a friend who plays on a
+  // dedicated server; "-" tells them we cannot take a lobby invite.
+  lobby_joining = {true,
+                   token,
+                   host,
+                   std::chrono::steady_clock::now() + 4s,
+                   std::move(fallback),
+                   !own};
   network::send(host, "lobbyJoin",
                 token + " " +
-                    to_hex(own->serializedAdr.addrBuff,
-                           sizeof(own->serializedAdr.addrBuff)));
+                    (own ? to_hex(own->serializedAdr.addrBuff,
+                                  sizeof(own->serializedAdr.addrBuff))
+                         : std::string("-")));
 }
 
 void complete_join(const game::net::netadr_t &endpoint) {
@@ -454,8 +488,13 @@ void join_lobby(const game::net::netadr_t &host,
     }
   };
 
-  if (game::com::Com_IsInGame() || !lobby_host_info()) {
-    fail("Leave your current match to join your friend's lobby.");
+  if (game::com::Com_IsInGame()) {
+    fail("Quitte ta partie en cours pour rejoindre le salon de ton ami.");
+    return;
+  }
+  if (!lobby_host_info()) {
+    fail("Ouvre d'abord le menu Multijoueur ou Zombies, puis rejoins ton "
+         "ami a nouveau.");
     return;
   }
 
@@ -547,6 +586,9 @@ void update_punching() {
     if (const std::function<void()> fallback =
             std::exchange(lobby_joining.fallback, {})) {
       fallback();
+    } else if (lobby_joining.without_lobby) {
+      show_error("Ouvre d'abord le menu Multijoueur ou Zombies, puis rejoins "
+                 "ton ami a nouveau.");
     } else {
       printf("[Friends] Your friend's game did not answer\n");
       show_join_failure(lobby_joining.host.port);
@@ -589,13 +631,16 @@ void set_open(const bool enabled) {
 }
 
 void update_hosting() {
-  if (!open_to_friends) {
+  const bool on_server = dedicated_route().has_value();
+  if (!open_to_friends && !on_server) {
+    // The token survives map changes on the server; receive_lobby_join
+    // refuses it while we are neither open nor on a server.
     if (const game::XUID friend_code = auth::get_guid())
       send_rendezvous("friendPublish",
                       utils::string::va("1 %llu -", friend_code));
     return;
   }
-  if (!can_host())
+  if (!on_server && !can_host())
     return;
 
   if (hosting_token.empty()) {
@@ -617,6 +662,16 @@ void receive_lobby_join(const game::net::netadr_t &sender,
            : hosting_token.empty() || parts[0] != hosting_token) ||
       !is_lobby_address(sender))
     return;
+
+  if (parts[0] != "match") {
+    if (const std::optional<game::net::netadr_t> server = dedicated_route()) {
+      network::send(sender, "lobbyServer",
+                    parts[0] + " " + network::address_to_string(*server));
+      return;
+    }
+    if (!open_to_friends)
+      return;
+  }
 
   if (hosting_match() && !lobby_host_info(game::lobby::LobbyType::GAME)) {
     network::send(sender, "lobbyGame", hosting_token);
@@ -675,6 +730,34 @@ void receive_lobby_game(const game::net::netadr_t &sender,
         fallback ? fallback : [sender] { connect_to(sender); },
         scheduler::main);
   }
+}
+
+void receive_lobby_server(const game::net::netadr_t &sender,
+                          const network::data_view &data,
+                          game::LocalClientNum_t) {
+  const std::vector<std::string> parts = fields(payload_string(data));
+  if (parts.size() != 2 || !from_lobby_request(sender, parts[0]))
+    return;
+  game_join_fallback = {};
+
+  const game::net::netadr_t server =
+      resolve_friend_server(network::address_from_string(parts[1]), sender);
+  if (!network::is_connectable_address(server)) {
+    show_error("Ton ami joue sur un serveur local qui n'est pas accessible "
+               "depuis Internet.");
+    return;
+  }
+  if (game::com::Com_IsInGame() && party::get_connected_server() == server) {
+    toast::show("Amis", "Tu es deja sur le serveur de ton ami.",
+                "t7_icon_connect_overlays");
+    return;
+  }
+
+  printf("[Friends] Your friend plays on %s, connecting\n",
+         network::address_to_string(server).c_str());
+  toast::show("Amis", "Connexion au serveur de ton ami...",
+              "t7_icon_connect_overlays");
+  scheduler::once([server] { connect_to(server); }, scheduler::main);
 }
 
 void receive_register_ack(const game::net::netadr_t &sender,
@@ -844,8 +927,8 @@ std::string get_host_endpoint() {
 void begin_join(const std::string &token, const std::string &fallback_address,
                 const uint64_t friend_id) {
   if (!valid_token(token)) {
-    show_error(
-        "Your friend's party is closed. Ask them to open it to friends.");
+    show_error("Le groupe de ton ami est ferme. Demande-lui de l'ouvrir aux "
+               "amis.");
     return;
   }
 
@@ -863,7 +946,7 @@ void begin_join(const std::string &token, const std::string &fallback_address,
   joining.expires = std::chrono::steady_clock::now() + JOIN_TIMEOUT;
   joining.next_rendezvous = std::chrono::steady_clock::now() + 1s;
   send_rendezvous("privJoin", token);
-  toast::show("Friends", "Joining your friend...", "t7_icon_connect_overlays");
+  toast::show("Amis", "Connexion a ton ami...", "t7_icon_connect_overlays");
 }
 
 std::string joinable_lobby() {
@@ -918,7 +1001,7 @@ void send_invite(const uint64_t steam_id, const std::string &sender_name) {
 }
 
 bool set_open_to_friends(const bool enabled) {
-  if (enabled && !can_host())
+  if (enabled && !can_host() && !dedicated_route())
     return false;
   set_open(enabled);
   update_hosting();
@@ -990,6 +1073,7 @@ public:
     network::on("friendOnline", receive_friend_online);
     network::on("lobbyHost", receive_lobby_host);
     network::on("lobbyGame", receive_lobby_game);
+    network::on("lobbyServer", receive_lobby_server);
 
     scheduler::loop(update_punching, scheduler::main, 250ms);
     scheduler::loop(update_hosting, scheduler::main, REGISTER_INTERVAL);
