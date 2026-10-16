@@ -75,10 +75,21 @@ jobs:
           cd ..
           cp build/bin/x64/Release/boiii.exe AlterBOIII.exe
 
+      - name: Artifact name
+        id: artifact
+        shell: bash
+        run: |
+          # Sur une PR, github.ref_name vaut "3/merge" : le "/" est interdit
+          # dans un nom d'artefact. On prend la branche source et on remplace
+          # tout caractere interdit par "-".
+          ref="${{ github.head_ref || github.ref_name }}"
+          safe=$(printf '%s' "$ref" | tr '/\\:<>|*?"' '---------')
+          echo "name=AlterBO3-${safe}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AlterBO3-${{ github.ref_name }}-${{ github.sha }}
+          name: ${{ steps.artifact.outputs.name }}
           path: |
             AlterBO3.zip
             AlterBOIII.exe
